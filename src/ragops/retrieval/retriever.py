@@ -20,9 +20,9 @@ from ragops.core.types import (
     RetrievedContext,
     VectorSearchResult,
 )
-from ragops.retrieval.embeddings import SentenceTransformerEmbedding
-from ragops.retrieval.reranker import CrossEncoderReranker, NoOpReranker
-from ragops.retrieval.vector_store import ChromaVectorStore
+from ragops.retrieval.embeddings import EmbeddingProvider, SentenceTransformerEmbedding
+from ragops.retrieval.reranker import CrossEncoderReranker, NoOpReranker, Reranker
+from ragops.retrieval.vector_store import ChromaVectorStore, VectorStore
 
 logger = get_logger(__name__)
 
@@ -47,9 +47,9 @@ class RAGRetriever:
 
     def __init__(
         self,
-        embedding_provider: SentenceTransformerEmbedding | None = None,
-        vector_store: ChromaVectorStore | None = None,
-        reranker: CrossEncoderReranker | NoOpReranker | None = None,
+        embedding_provider: EmbeddingProvider | None = None,
+        vector_store: VectorStore | None = None,
+        reranker: Reranker | None = None,
         use_reranker: bool = True,
     ):
         settings = get_settings()

@@ -8,7 +8,7 @@ import pytest
 from ragops.ingestion.pipeline import IngestionPipeline
 
 
-def test_ingestion_pipeline_ingest_file():
+def test_ingestion_pipeline_ingest_file() -> None:
     pipeline = IngestionPipeline(chunk_size=120, chunk_overlap=20)
 
     with tempfile.NamedTemporaryFile("w", suffix=".md", delete=False, encoding="utf-8") as f:
@@ -26,7 +26,7 @@ def test_ingestion_pipeline_ingest_file():
         f_path.unlink()
 
 
-def test_ingestion_pipeline_ingest_directory():
+def test_ingestion_pipeline_ingest_directory() -> None:
     pipeline = IngestionPipeline(chunk_size=150, chunk_overlap=30)
 
     with tempfile.TemporaryDirectory() as tmp_dir:

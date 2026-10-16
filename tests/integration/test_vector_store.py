@@ -8,8 +8,8 @@ from ragops.core.types import DocumentChunk, EmbeddedChunk, QueryEmbedding
 from ragops.retrieval.vector_store import ChromaVectorStore
 
 
-def test_chroma_vector_store_lifecycle():
-    with tempfile.TemporaryDirectory() as tmp_dir:
+def test_chroma_vector_store_lifecycle() -> None:
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp_dir:
         store = ChromaVectorStore(collection_name="lifecycle_test_col", persist_dir=tmp_dir)
 
         # Create test embedded chunks

@@ -4,14 +4,15 @@ from __future__ import annotations
 
 import tempfile
 import pytest
+from ragops.core.types import DocumentChunk
 from ragops.retrieval.embeddings import MockEmbeddingProvider
 from ragops.retrieval.reranker import NoOpReranker
 from ragops.retrieval.retriever import RAGRetriever
 from ragops.retrieval.vector_store import ChromaVectorStore
 
 
-def test_retriever_index_and_retrieve(sample_chunks):
-    with tempfile.TemporaryDirectory() as tmp_dir:
+def test_retriever_index_and_retrieve(sample_chunks: list[DocumentChunk]) -> None:
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp_dir:
         store = ChromaVectorStore(collection_name="test_retriever_col", persist_dir=tmp_dir)
         provider = MockEmbeddingProvider(dimension=384)
         reranker = NoOpReranker()

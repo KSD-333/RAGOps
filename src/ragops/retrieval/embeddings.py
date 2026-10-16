@@ -33,6 +33,14 @@ class EmbeddingProvider(Protocol):
         """Embed multiple text strings."""
         ...
 
+    def embed_chunks(self, chunks: list[DocumentChunk]) -> list[EmbeddedChunk]:
+        """Embed a list of document chunks."""
+        ...
+
+    def embed_query(self, query: str) -> QueryEmbedding:
+        """Embed a query string."""
+        ...
+
     @property
     def model_name(self) -> str:
         """Name of the embedding model."""

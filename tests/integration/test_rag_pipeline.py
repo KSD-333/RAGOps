@@ -13,8 +13,8 @@ from ragops.retrieval.retriever import RAGRetriever
 from ragops.retrieval.vector_store import ChromaVectorStore
 
 
-def test_rag_pipeline_end_to_end_query():
-    with tempfile.TemporaryDirectory() as tmp_dir:
+def test_rag_pipeline_end_to_end_query() -> None:
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp_dir:
         # Build components
         store = ChromaVectorStore(collection_name="pipeline_test_col", persist_dir=tmp_dir)
         provider = MockEmbeddingProvider(dimension=64)
