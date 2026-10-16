@@ -303,8 +303,8 @@ ragops/
 ### 1. Installation
 ```bash
 # Clone the repository
-git clone https://github.com/ragops/ragops.git
-cd ragops
+git clone https://github.com/KSD-333/RAGOps.git
+cd RAGOps
 
 # Create virtual environment
 python -m venv .venv
