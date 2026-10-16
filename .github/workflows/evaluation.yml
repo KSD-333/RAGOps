@@ -1,0 +1,60 @@
+name: RAG Evaluation & Quality Gate
+
+on:
+  pull_request:
+    paths:
+      - 'src/ragops/**'
+      - 'configs/**'
+      - 'evaluation/**'
+  workflow_dispatch:
+    inputs:
+      dataset:
+        description: 'Path to evaluation dataset'
+        required: true
+        default: 'evaluation/datasets/golden.jsonl'
+      version_tag:
+        description: 'Candidate version tag'
+        required: true
+        default: 'candidate-pr'
+
+jobs:
+  evaluate-candidate:
+    name: Evaluate Candidate Pipeline
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install hatchling
+          pip install -e .
+
+      - name: Ingest Golden Knowledge Base
+        run: |
+          python scripts/ingest_documents.py --path data/raw --version candidate
+
+      - name: Execute Evaluation & Quality Gate
+        env:
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+        run: |
+          python scripts/run_evaluation.py \
+            --dataset evaluation/datasets/golden.jsonl \
+            --version candidate \
+            --output evaluation/reports/ci_evaluation.json \
+            --fail-on-gate
+
+      - name: Upload Evaluation Artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: evaluation-report
+          path: evaluation/reports/ci_evaluation.json

@@ -1,0 +1,10 @@
+# Development overrides
+environment: development
+
+observability:
+  log_level: DEBUG
+  trace_sample_rate: 1.0
+
+api:
+  host: "127.0.0.1"
+  port: 8000

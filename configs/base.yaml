@@ -1,0 +1,54 @@
+# --- Core Configuration ---
+environment: development
+app_name: RAGOps
+version: "0.1.0"
+
+# --- Ingestion ---
+ingestion:
+  chunk_size: 512
+  chunk_overlap: 50
+  supported_formats:
+    - pdf
+    - html
+    - markdown
+  max_file_size_mb: 100
+
+# --- Retrieval ---
+retrieval:
+  top_k: 10
+  rerank_top_n: 5
+  similarity_threshold: 0.3
+  search_type: similarity  # similarity | mmr
+
+# --- Generation ---
+generation:
+  temperature: 0.1
+  max_tokens: 2048
+  system_prompt: |
+    You are a helpful AI assistant. Answer the user's question based ONLY on the provided context.
+    If the context does not contain enough information to answer, say so clearly.
+    Always cite the source documents when possible.
+
+# --- Evaluation ---
+evaluation:
+  retrieval_recall_threshold: 0.85
+  faithfulness_threshold: 0.90
+  relevance_threshold: 0.85
+  latency_p95_threshold_ms: 3000
+  cost_per_1k_threshold: 5.0
+
+# --- Observability ---
+observability:
+  tracing_enabled: true
+  metrics_enabled: true
+  log_level: INFO
+  trace_sample_rate: 1.0
+
+# --- API ---
+api:
+  host: "0.0.0.0"
+  port: 8000
+  cors_origins:
+    - "http://localhost:3000"
+    - "http://localhost:8080"
+  rate_limit: 100  # requests per minute

@@ -1,0 +1,32 @@
+name: Production Deployment
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  build-and-deploy:
+    name: Build & Deploy Container
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: actions/setup-buildx-action@v3
+
+      - name: Build API Image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./docker/Dockerfile.api
+          push: false
+          tags: ragops/api:latest,ragops/api:${{ github.sha }}
+
+      - name: Deploy to Kubernetes Cluster
+        if: success()
+        run: |
+          echo "Deployment initiated for commit ${{ github.sha }}..."
+          # Deploy step via kubectl / helm
+          # helm upgrade --install ragops ./deploy/helm --values ./deploy/helm/values.yaml

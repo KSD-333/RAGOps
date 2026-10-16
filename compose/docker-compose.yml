@@ -1,0 +1,104 @@
+services:
+  # --- Main RAG API Service ---
+  ragops-api:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.api
+    container_name: ragops-api
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      - ENVIRONMENT=production
+      - GROQ_API_KEY=${GROQ_API_KEY}
+      - GROQ_MODEL=${GROQ_MODEL:-llama-3.1-70b-versatile}
+      - CHROMA_PERSIST_DIR=/app/data/chroma
+      - DATABASE_URL=sqlite+aiosqlite:////app/data/ragops.db
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4317
+    volumes:
+      - ragops-data:/app/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    networks:
+      - ragops-network
+
+  # --- Evaluation Service ---
+  ragops-eval:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.evaluation
+    container_name: ragops-eval
+    profiles: ["eval"]
+    environment:
+      - ENVIRONMENT=production
+      - GROQ_API_KEY=${GROQ_API_KEY}
+      - CHROMA_PERSIST_DIR=/app/data/chroma
+      - DATABASE_URL=sqlite+aiosqlite:////app/data/ragops.db
+    volumes:
+      - ragops-data:/app/data
+      - ../evaluation/reports:/app/evaluation/reports
+    networks:
+      - ragops-network
+    depends_on:
+      ragops-api:
+        condition: service_healthy
+
+  # --- Prometheus Metrics Scraper ---
+  prometheus:
+    image: prom/prometheus:v2.54.0
+    container_name: ragops-prometheus
+    restart: unless-stopped
+    ports:
+      - "9090:9090"
+    volumes:
+      - ../monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+    networks:
+      - ragops-network
+
+  # --- Grafana Dashboard ---
+  grafana:
+    image: grafana/grafana:11.1.0
+    container_name: ragops-grafana
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_USERS_ALLOW_SIGN_UP=false
+    volumes:
+      - ../monitoring/grafana/datasources:/etc/grafana/provisioning/datasources:ro
+      - ../monitoring/grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - grafana-data:/var/lib/grafana
+    networks:
+      - ragops-network
+    depends_on:
+      - prometheus
+
+  # --- Distributed Tracing (Jaeger) ---
+  jaeger:
+    image: jaegertracing/all-in-one:1.58
+    container_name: ragops-jaeger
+    restart: unless-stopped
+    ports:
+      - "16686:16686" # Web UI
+      - "4317:4317"   # OTLP gRPC receiver
+      - "4318:4318"   # OTLP HTTP receiver
+    networks:
+      - ragops-network
+
+volumes:
+  ragops-data:
+  prometheus-data:
+  grafana-data:
+
+networks:
+  ragops-network:
+    driver: bridge

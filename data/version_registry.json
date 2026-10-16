@@ -1,0 +1,39 @@
+{
+  "production_version": "v1.0.0",
+  "history": [
+    {
+      "version": "v1.0.0",
+      "from_version": "v1",
+      "reasons": [
+        "Baseline production release with verified golden benchmarks"
+      ],
+      "promoted_at": "2026-10-16T20:02:54.288510+00:00"
+    },
+    {
+      "version": "v1.0.0",
+      "from_version": "v1.0.0",
+      "reasons": [
+        "Baseline production release with verified golden benchmarks"
+      ],
+      "promoted_at": "2026-10-16T21:04:24.319638+00:00"
+    },
+    {
+      "version": "v1.0.0",
+      "from_version": "v1.0.0",
+      "reasons": [
+        "Baseline production release with verified golden benchmarks"
+      ],
+      "promoted_at": "2026-10-16T21:08:34.781452+00:00"
+    },
+    {
+      "version": "v1.0.0",
+      "from_version": "v1.0.0",
+      "reasons": [
+        "Baseline production release with verified golden benchmarks"
+      ],
+      "promoted_at": "2026-10-16T21:17:26.294154+00:00"
+    }
+  ],
+  "previous_version": "v1.0.0",
+  "promoted_at": "2026-10-16T21:17:26.294154+00:00"
+}

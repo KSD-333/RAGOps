@@ -1,0 +1,120 @@
+{
+  "annotations": { "list": [] },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 0,
+  "id": 1,
+  "links": [],
+  "liveNow": false,
+  "panels": [
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 },
+      "id": 100,
+      "title": "System Overview",
+      "type": "row"
+    },
+    {
+      "fieldConfig": { "defaults": { "unit": "reqps" }, "overrides": [] },
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 1 },
+      "id": 1,
+      "title": "RAG Request Rate",
+      "type": "timeseries",
+      "targets": [
+        {
+          "expr": "rate(ragops_requests_total[1m])",
+          "legendFormat": "Requests / sec",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "fieldConfig": { "defaults": { "unit": "ms" }, "overrides": [] },
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 1 },
+      "id": 2,
+      "title": "Query Latency (P50 & P95)",
+      "type": "timeseries",
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(ragops_request_duration_seconds_bucket[5m])) by (le)) * 1000",
+          "legendFormat": "P95 Latency (ms)",
+          "refId": "A"
+        },
+        {
+          "expr": "histogram_quantile(0.50, sum(rate(ragops_request_duration_seconds_bucket[5m])) by (le)) * 1000",
+          "legendFormat": "P50 Latency (ms)",
+          "refId": "B"
+        }
+      ]
+    },
+    {
+      "fieldConfig": { "defaults": { "unit": "percentunit" }, "overrides": [] },
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 1 },
+      "id": 3,
+      "title": "Error Rate",
+      "type": "timeseries",
+      "targets": [
+        {
+          "expr": "rate(ragops_errors_total[5m]) / rate(ragops_requests_total[5m])",
+          "legendFormat": "Error Rate",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 9 },
+      "id": 101,
+      "title": "RAG Quality & Tokens",
+      "type": "row"
+    },
+    {
+      "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 10 },
+      "id": 4,
+      "title": "LLM Token Usage (Prompt & Generation)",
+      "type": "timeseries",
+      "targets": [
+        {
+          "expr": "rate(ragops_tokens_total{type=\"input\"}[5m])",
+          "legendFormat": "Input Tokens/s",
+          "refId": "A"
+        },
+        {
+          "expr": "rate(ragops_tokens_total{type=\"output\"}[5m])",
+          "legendFormat": "Output Tokens/s",
+          "refId": "B"
+        }
+      ]
+    },
+    {
+      "fieldConfig": { "defaults": { "unit": "percentunit", "min": 0, "max": 1 }, "overrides": [] },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 10 },
+      "id": 5,
+      "title": "Evaluation Quality Scores",
+      "type": "gauge",
+      "targets": [
+        {
+          "expr": "ragops_evaluation_score{metric=\"faithfulness\"}",
+          "legendFormat": "Faithfulness",
+          "refId": "A"
+        },
+        {
+          "expr": "ragops_evaluation_score{metric=\"relevance\"}",
+          "legendFormat": "Relevance",
+          "refId": "B"
+        },
+        {
+          "expr": "ragops_evaluation_score{metric=\"recall\"}",
+          "legendFormat": "Recall@5",
+          "refId": "C"
+        }
+      ]
+    }
+  ],
+  "schemaVersion": 39,
+  "tags": ["ragops", "llmops", "rag"],
+  "time": { "from": "now-6h", "to": "now" },
+  "title": "RAGOps Production Dashboard",
+  "version": 1
+}

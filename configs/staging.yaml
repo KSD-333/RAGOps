@@ -1,0 +1,13 @@
+# Staging overrides
+environment: staging
+
+observability:
+  log_level: INFO
+  trace_sample_rate: 0.5
+
+generation:
+  temperature: 0.1
+
+api:
+  host: "0.0.0.0"
+  port: 8000

@@ -1,0 +1,8 @@
+apiVersion: v2
+name: ragops
+description: Helm chart for RAGOps — Production RAG Platform with Evaluation & Observability
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+maintainers:
+  - name: RAGOps Team

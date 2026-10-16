@@ -1,0 +1,13 @@
+# Production overrides
+environment: production
+
+observability:
+  log_level: WARNING
+  trace_sample_rate: 0.1
+
+generation:
+  temperature: 0.0
+
+api:
+  host: "0.0.0.0"
+  port: 8000

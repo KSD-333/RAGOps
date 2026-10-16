@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ragops-config
+  namespace: default
+  labels:
+    app.kubernetes.io/name: ragops
+data:
+  ENVIRONMENT: "production"
+  GROQ_MODEL: "llama-3.1-70b-versatile"
+  CHROMA_PERSIST_DIR: "/app/data/chroma"
+  DATABASE_URL: "sqlite+aiosqlite:////app/data/ragops.db"
+  OTEL_SERVICE_NAME: "ragops"
+  OTEL_EXPORTER_OTLP_ENDPOINT: "http://jaeger:4317"
+  LOG_LEVEL: "INFO"
