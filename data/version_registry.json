@@ -32,8 +32,16 @@
         "Baseline production release with verified golden benchmarks"
       ],
       "promoted_at": "2026-10-16T21:17:26.294154+00:00"
+    },
+    {
+      "version": "v1.0.0",
+      "from_version": "v1.0.0",
+      "reasons": [
+        "Baseline production release with verified golden benchmarks"
+      ],
+      "promoted_at": "2026-10-17T18:57:06.267903+00:00"
     }
   ],
   "previous_version": "v1.0.0",
-  "promoted_at": "2026-10-16T21:17:26.294154+00:00"
+  "promoted_at": "2026-10-17T18:57:06.267903+00:00"
 }

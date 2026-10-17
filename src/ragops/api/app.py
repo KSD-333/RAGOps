@@ -35,6 +35,21 @@ async def lifespan(app: FastAPI):
         environment=settings.environment,
         model=settings.groq.model,
     )
+
+    # Warm up embedding and reranker models at startup so first request has 0 cold start
+    try:
+        from ragops.api.dependencies import get_retriever
+        from ragops.core.types import VectorSearchResult
+        retriever = get_retriever()
+        retriever._embeddings.embed_text("warmup")
+        if hasattr(retriever._reranker, "_load_model"):
+            retriever._reranker._load_model()
+            dummy = [VectorSearchResult(chunk_id="w", text="warmup", score=1.0)]
+            retriever._reranker.rerank("warmup", dummy, top_n=1)
+        logger.info("retrieval_models_warmed_up")
+    except Exception as e:
+        logger.warning("models_warmup_failed", error=str(e))
+
     yield
     logger.info("ragops_shutting_down")
 

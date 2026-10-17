@@ -95,10 +95,15 @@ class RAGRetriever:
         logger.debug("retrieving", query=query[:80], top_k=effective_top_k)
 
         # 1. Embed the query
+        t_embed_start = time.perf_counter()
         query_embedding = self._embeddings.embed_query(query)
+        embed_ms = (time.perf_counter() - t_embed_start) * 1000
 
-        # 2. Vector search
-        search_results = self._vector_store.search(query_embedding, top_k=effective_top_k)
+        # 2. Vector search (fetch candidate pool)
+        t_search_start = time.perf_counter()
+        candidate_k = max(effective_top_k * 2, 10)
+        search_results = self._vector_store.search(query_embedding, top_k=candidate_k)
+        search_ms = (time.perf_counter() - t_search_start) * 1000
 
         if not search_results:
             elapsed = (time.perf_counter() - start_time) * 1000
@@ -106,14 +111,20 @@ class RAGRetriever:
                 query=query,
                 chunks=[],
                 retrieval_latency_ms=elapsed,
+                embed_latency_ms=round(embed_ms, 2),
+                search_latency_ms=round(search_ms, 2),
+                rerank_latency_ms=0.0,
             )
 
         # 3. Rerank
+        t_rerank_start = time.perf_counter()
+        rerank_top_n = min(effective_top_k, self._rerank_top_n)
         reranked = self._reranker.rerank(
             query=query,
             results=search_results,
-            top_n=self._rerank_top_n,
+            top_n=rerank_top_n,
         )
+        rerank_ms = (time.perf_counter() - t_rerank_start) * 1000
 
         # 4. Convert to RetrievedChunk
         chunks = [
@@ -135,12 +146,18 @@ class RAGRetriever:
             query=query[:50],
             results=len(chunks),
             latency_ms=round(elapsed, 2),
+            embed_ms=round(embed_ms, 2),
+            search_ms=round(search_ms, 2),
+            rerank_ms=round(rerank_ms, 2),
         )
 
         return RetrievedContext(
             query=query,
             chunks=chunks,
             retrieval_latency_ms=elapsed,
+            embed_latency_ms=round(embed_ms, 2),
+            search_latency_ms=round(search_ms, 2),
+            rerank_latency_ms=round(rerank_ms, 2),
         )
 
     @property

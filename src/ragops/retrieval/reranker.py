@@ -66,9 +66,6 @@ class CrossEncoderReranker:
         if not results:
             return []
 
-        if len(results) <= top_n:
-            return results
-
         self._load_model()
         if self._mock:
             return sorted(results, key=lambda r: r.score, reverse=True)[:top_n]

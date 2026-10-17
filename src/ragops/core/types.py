@@ -120,6 +120,10 @@ class RetrievedContext(BaseModel):
     query: str
     chunks: list[RetrievedChunk] = Field(default_factory=list)
     retrieval_latency_ms: float = 0.0
+    embed_latency_ms: float = 0.0
+    search_latency_ms: float = 0.0
+    rerank_latency_ms: float = 0.0
+
 
 
 # =============================================================================

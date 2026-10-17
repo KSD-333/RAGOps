@@ -113,9 +113,37 @@ def query(query_text: str, top_k: int):
         border_style="cyan",
     ))
 
-    pipeline = RAGPipeline()
-    request = QueryRequest(query=query_text, top_k=top_k)
-    response = pipeline.query(request)
+    server_url = "http://127.0.0.1:8000"
+    response = None
+    via_server = False
+
+    try:
+        import json
+        import urllib.request
+        req = urllib.request.Request(
+            f"{server_url}/api/v1/query",
+            data=json.dumps({"query": query_text, "top_k": top_k}).encode("utf-8"),
+            headers={"Content-Type": "application/json"},
+        )
+        with urllib.request.urlopen(req, timeout=15) as http_resp:
+            if http_resp.status == 200:
+                data = json.loads(http_resp.read().decode("utf-8"))
+                from ragops.core.types import RAGResponse, Source
+                sources = [Source(**s) for s in data.get("sources", [])]
+                response = RAGResponse(
+                    answer=data.get("answer", ""),
+                    sources=sources,
+                    trace_id=data.get("trace_id", ""),
+                    metadata=data.get("metadata", {}),
+                )
+                via_server = True
+    except Exception:
+        pass
+
+    if response is None:
+        pipeline = RAGPipeline()
+        request = QueryRequest(query=query_text, top_k=top_k)
+        response = pipeline.query(request)
 
     # Display answer
     console.print(f"\n[bold green]Answer:[/bold green]\n{response.answer}\n")
@@ -135,11 +163,20 @@ def query(query_text: str, top_k: int):
             )
         console.print(table)
 
-    # Display metadata
+    # Display metadata with stage breakdown
     meta = response.metadata
+    stage_breakdown = ""
+    if "embed_latency_ms" in meta and "generation_latency_ms" in meta:
+        stage_breakdown = (
+            f" [Embed: {meta.get('embed_latency_ms', 0):.0f}ms | "
+            f"Search: {meta.get('search_latency_ms', 0):.0f}ms | "
+            f"Rerank: {meta.get('rerank_latency_ms', 0):.0f}ms | "
+            f"LLM: {meta.get('generation_latency_ms', 0):.0f}ms]"
+        )
+    server_tag = " | [cyan]via live server[/cyan]" if via_server else ""
     console.print(f"\n[dim]Trace: {response.trace_id} | "
                   f"Model: {meta.get('model', 'N/A')} | "
-                  f"Latency: {meta.get('total_latency_ms', 0):.0f}ms | "
+                  f"Latency: {meta.get('total_latency_ms', 0):.0f}ms{stage_breakdown}{server_tag} | "
                   f"Tokens: {meta.get('input_tokens', 0)}+{meta.get('output_tokens', 0)}[/dim]")
 
 
