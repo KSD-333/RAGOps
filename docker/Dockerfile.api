@@ -12,7 +12,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
-COPY pyproject.toml ./
+COPY pyproject.toml README.md ./
+COPY src/ ./src/
 RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir hatchling && \
     pip install --no-cache-dir .
@@ -35,10 +36,10 @@ COPY --from=builder /usr/local/bin /usr/local/bin
 
 COPY --chown=ragops:ragops src /app/src
 COPY --chown=ragops:ragops configs /app/configs
-COPY --chown=ragops:ragops pyproject.toml /app/
+COPY --chown=ragops:ragops pyproject.toml README.md /app/
 
 # Install the local package in editable mode or ensure PYTHONPATH includes src
-ENV PYTHONPATH="/app/src:${PYTHONPATH}"
+ENV PYTHONPATH="/app/src"
 ENV PYTHONUNBUFFERED=1
 ENV ENVIRONMENT=production
 
