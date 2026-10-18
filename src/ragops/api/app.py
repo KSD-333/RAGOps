@@ -11,7 +11,7 @@ All business logic goes through the RAG pipeline.
 """
 
 from __future__ import annotations
-
+import asyncio
 from pathlib import Path
 from contextlib import asynccontextmanager
 
@@ -27,6 +27,27 @@ from ragops.core.logging import setup_logging, get_logger
 logger = get_logger(__name__)
 
 
+async def _async_warmup():
+    """Background warmup for embedding and reranker models so server port binds immediately."""
+    try:
+        import asyncio
+        from ragops.api.dependencies import get_retriever
+        from ragops.core.types import VectorSearchResult
+
+        def _warm():
+            retriever = get_retriever()
+            retriever._embeddings.embed_text("warmup")
+            if hasattr(retriever._reranker, "_load_model"):
+                retriever._reranker._load_model()
+                dummy = [VectorSearchResult(chunk_id="w", text="warmup", score=1.0)]
+                retriever._reranker.rerank("warmup", dummy, top_n=1)
+
+        await asyncio.to_thread(_warm)
+        logger.info("retrieval_models_warmed_up")
+    except Exception as e:
+        logger.warning("models_warmup_failed", error=str(e))
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifecycle — startup and shutdown."""
@@ -38,19 +59,8 @@ async def lifespan(app: FastAPI):
         model=settings.groq.model,
     )
 
-    # Warm up embedding and reranker models at startup so first request has 0 cold start
-    try:
-        from ragops.api.dependencies import get_retriever
-        from ragops.core.types import VectorSearchResult
-        retriever = get_retriever()
-        retriever._embeddings.embed_text("warmup")
-        if hasattr(retriever._reranker, "_load_model"):
-            retriever._reranker._load_model()
-            dummy = [VectorSearchResult(chunk_id="w", text="warmup", score=1.0)]
-            retriever._reranker.rerank("warmup", dummy, top_n=1)
-        logger.info("retrieval_models_warmed_up")
-    except Exception as e:
-        logger.warning("models_warmup_failed", error=str(e))
+    # Launch model warmup in background task so Uvicorn opens listening port in <1 second
+    asyncio.create_task(_async_warmup())
 
     yield
     logger.info("ragops_shutting_down")
