@@ -2,20 +2,26 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, Response
-from fastapi.responses import RedirectResponse
+from fastapi.responses import FileResponse, RedirectResponse
 
 from ragops.core.config import get_settings
 from ragops.observability.metrics import get_metrics
 
 router = APIRouter(tags=["health"])
 
+STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
+
 
 @router.get("/", include_in_schema=False)
-async def root() -> RedirectResponse:
-    """Redirect root to API documentation."""
+async def root() -> Response:
+    """Serve the interactive RAGOps Web UI, fallback to API docs."""
+    index_file = STATIC_DIR / "index.html"
+    if index_file.exists():
+        return FileResponse(index_file)
     return RedirectResponse(url="/docs")
 
 

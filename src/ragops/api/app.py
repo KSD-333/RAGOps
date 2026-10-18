@@ -12,10 +12,12 @@ All business logic goes through the RAG pipeline.
 
 from __future__ import annotations
 
+from pathlib import Path
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
 from ragops.api.middleware import RequestLoggingMiddleware
 from ragops.api.routes import health, query, feedback
@@ -84,6 +86,11 @@ def create_app() -> FastAPI:
     app.include_router(health.router, prefix="")
     app.include_router(query.router, prefix="/api/v1")
     app.include_router(feedback.router, prefix="/api/v1")
+
+    # --- Static Assets (Web UI) ---
+    static_dir = Path(__file__).resolve().parent / "static"
+    if static_dir.exists():
+        app.mount("/static", StaticFiles(directory=static_dir), name="static")
 
     return app
 
