@@ -105,6 +105,18 @@ class RAGPipeline:
             trace_id=trace_id,
         )
 
+        try:
+            from ragops.observability.metrics import get_metrics
+            metrics = get_metrics()
+            metrics.increment("ragops_queries_total")
+            metrics.increment("ragops_tokens_input_total", value=float(llm_response.input_tokens))
+            metrics.increment("ragops_tokens_output_total", value=float(llm_response.output_tokens))
+            total_lat = rag_response.metadata.get("total_latency_ms", 0.0)
+            if total_lat > 0:
+                metrics.observe("ragops_query_latency_ms", total_lat)
+        except Exception:
+            pass
+
         logger.info(
             "rag_pipeline_complete",
             trace_id=trace_id,

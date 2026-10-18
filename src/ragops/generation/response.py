@@ -95,6 +95,8 @@ class ResponseBuilder:
                         chunk_id=chunk.chunk_id,
                         page=chunk.metadata.get("page_number"),
                         section=chunk.metadata.get("section"),
+                        text=getattr(chunk, "text", ""),
+                        score=round(float(getattr(chunk, "score", 0.0)), 4),
                     )
                 )
 
@@ -114,6 +116,7 @@ class ResponseBuilder:
         sources = self._select_sources(llm_response.text, retrieved_context.chunks)
 
         response = RAGResponse(
+            query=getattr(retrieved_context, "query", ""),
             answer=llm_response.text,
             sources=sources,
             trace_id=trace_id,

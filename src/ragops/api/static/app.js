@@ -1,9 +1,17 @@
 /**
  * RAGOps Production Web UI — Client Logic
+ * Handles Markdown rendering via Marked.js, Chunk Inspector Dialog,
+ * and RAGOps Feedback & Telemetry Triage Dashboard.
  */
 
 document.addEventListener('DOMContentLoaded', () => {
-  // DOM Elements
+  // Navigation Tabs
+  const navBtnSearch = document.getElementById('nav-btn-search');
+  const navBtnDashboard = document.getElementById('nav-btn-dashboard');
+  const viewSearch = document.getElementById('view-search');
+  const viewDashboard = document.getElementById('view-dashboard');
+
+  // Search View Elements
   const systemStatus = document.getElementById('system-status');
   const queryForm = document.getElementById('query-form');
   const queryInput = document.getElementById('query-input');
@@ -11,7 +19,9 @@ document.addEventListener('DOMContentLoaded', () => {
   const btnSubmit = document.getElementById('btn-submit');
   const btnText = btnSubmit.querySelector('.btn-text');
   const btnSpinner = btnSubmit.querySelector('.btn-spinner');
-  
+  const docCountBadge = document.getElementById('doc-count-badge');
+
+  // Results View Elements
   const resultsSection = document.getElementById('results-section');
   const totalLatencyText = document.getElementById('total-latency-text');
   const tokensText = document.getElementById('tokens-text');
@@ -19,9 +29,8 @@ document.addEventListener('DOMContentLoaded', () => {
   const answerBody = document.getElementById('answer-body');
   const sourcesGrid = document.getElementById('sources-grid');
   const sourceCount = document.getElementById('source-count');
-  const docCountBadge = document.getElementById('doc-count-badge');
 
-  // Timeline Segments
+  // Stage Latency Timeline Elements
   const stageEmbedBar = document.getElementById('stage-embed-bar');
   const stageEmbedVal = document.getElementById('stage-embed-val');
   const stageSearchBar = document.getElementById('stage-search-bar');
@@ -36,18 +45,63 @@ document.addEventListener('DOMContentLoaded', () => {
   const btnFeedbackNeg = document.getElementById('btn-feedback-neg');
   const feedbackToast = document.getElementById('feedback-toast');
 
-  // Metrics Modal
-  const btnMetrics = document.getElementById('btn-metrics');
-  const metricsModal = document.getElementById('metrics-modal');
-  const btnCloseModal = document.getElementById('btn-close-modal');
-  const metricModel = document.getElementById('metric-model');
-  const metricDocs = document.getElementById('metric-docs');
-  const metricsRawOutput = document.getElementById('metrics-raw-output');
+  // Chunk Modal Elements
+  const chunkModal = document.getElementById('chunk-modal');
+  const btnCloseChunkModal = document.getElementById('btn-close-chunk-modal');
+  const chunkModalDoc = document.getElementById('chunk-modal-doc');
+  const chunkModalTitle = document.getElementById('chunk-modal-title');
+  const chunkModalId = document.getElementById('chunk-modal-id');
+  const chunkModalScore = document.getElementById('chunk-modal-score');
+  const chunkModalSection = document.getElementById('chunk-modal-section');
+  const chunkModalContent = document.getElementById('chunk-modal-content');
+  const btnCopyChunk = document.getElementById('btn-copy-chunk');
+
+  // Dashboard View Elements
+  const btnRefreshDashboard = document.getElementById('btn-refresh-dashboard');
+  const kpiTotalQueries = document.getElementById('kpi-total-queries');
+  const kpiTotalTokens = document.getElementById('kpi-total-tokens');
+  const kpiTokensSub = document.getElementById('kpi-tokens-sub');
+  const kpiSatisfaction = document.getElementById('kpi-satisfaction');
+  const kpiFeedbackCounts = document.getElementById('kpi-feedback-counts');
+  const kpiP95Latency = document.getElementById('kpi-p95-latency');
+  const kpiLatencySub = document.getElementById('kpi-latency-sub');
+  const dislikedCountBadge = document.getElementById('disliked-count-badge');
+  const dislikedTableBody = document.getElementById('disliked-table-body');
 
   // State
   let currentResponse = null;
+  let activeModalChunkText = '';
 
-  // 1. Initial Health & Doc Count Check
+  // Configure Marked.js
+  if (window.marked) {
+    marked.setOptions({
+      gfm: true,
+      breaks: true,
+      sanitize: false,
+    });
+  }
+
+  // =========================================================================
+  // 1. Navigation Tab Switching
+  // =========================================================================
+  navBtnSearch.addEventListener('click', () => {
+    navBtnSearch.classList.add('active');
+    navBtnDashboard.classList.remove('active');
+    viewSearch.style.display = 'block';
+    viewDashboard.style.display = 'none';
+  });
+
+  navBtnDashboard.addEventListener('click', () => {
+    navBtnDashboard.classList.add('active');
+    navBtnSearch.classList.remove('active');
+    viewSearch.style.display = 'none';
+    viewDashboard.style.display = 'block';
+    fetchDashboardData();
+  });
+
+  // =========================================================================
+  // 2. Health & Document Count Status Check
+  // =========================================================================
   async function checkSystemHealth() {
     try {
       const [readyRes, countRes] = await Promise.all([
@@ -59,18 +113,12 @@ document.addEventListener('DOMContentLoaded', () => {
         const readyData = await readyRes.json();
         systemStatus.classList.add('healthy');
         systemStatus.querySelector('.status-text').textContent = `Online • ${readyData.model || 'Groq Llama-3'}`;
-        if (metricModel && readyData.model) {
-          metricModel.textContent = readyData.model;
-        }
       }
 
       if (countRes.ok) {
         const countData = await countRes.json();
         const count = countData.count ?? 0;
         docCountBadge.textContent = `📚 Indexed Chunks: ${count}`;
-        if (metricDocs) {
-          metricDocs.textContent = `${count} Chunks`;
-        }
       }
     } catch (err) {
       systemStatus.querySelector('.status-text').textContent = 'Connecting... (Local Dev)';
@@ -79,7 +127,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
   checkSystemHealth();
 
-  // 2. Chip Click Handler
+  // =========================================================================
+  // 3. Suggestion Chips Handler
+  // =========================================================================
   document.querySelectorAll('.chip').forEach(chip => {
     chip.addEventListener('click', () => {
       const queryText = chip.getAttribute('data-query');
@@ -90,7 +140,9 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   });
 
-  // 3. Search Form Submit
+  // =========================================================================
+  // 4. Search Form Submission
+  // =========================================================================
   queryForm.addEventListener('submit', (e) => {
     e.preventDefault();
     const query = queryInput.value.trim();
@@ -99,7 +151,6 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
-  // 4. Execute Search
   async function executeSearch(query) {
     btnSubmit.disabled = true;
     btnText.style.display = 'none';
@@ -113,7 +164,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const topK = parseInt(topKSelect.value, 10) || 5;
 
     try {
-      const t0 = performance.now();
       const response = await fetch('/api/v1/query', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -136,7 +186,9 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
-  // 5. Render Results
+  // =========================================================================
+  // 5. Render Search Results & Telemetry
+  // =========================================================================
   function renderResults(data) {
     resultsSection.style.display = 'block';
     resultsSection.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
@@ -186,10 +238,18 @@ document.addEventListener('DOMContentLoaded', () => {
       abstentionIndicator.style.display = 'none';
     }
 
-    // Format Markdown in Answer
-    answerBody.innerHTML = formatMarkdown(answer);
+    // Render Answer Markdown using Marked.js (Prevents All-Blue Code bug)
+    if (window.marked) {
+      let rawHtml = marked.parse(answer);
+      // Transform citation markers 【Document X】 or [Document X] into clickable tags
+      rawHtml = rawHtml.replace(/【(.*?)】/g, '<span class="citation-mark">【$1】</span>');
+      rawHtml = rawHtml.replace(/\[(Document \d+)\]/g, '<span class="citation-mark">[$1]</span>');
+      answerBody.innerHTML = rawHtml;
+    } else {
+      answerBody.textContent = answer;
+    }
 
-    // Render Sources
+    // Render Supporting Sources Grid
     const sources = data.sources || [];
     sourceCount.textContent = sources.length;
     sourcesGrid.innerHTML = '';
@@ -205,19 +265,40 @@ document.addEventListener('DOMContentLoaded', () => {
         const card = document.createElement('div');
         card.className = 'source-item';
         const docName = s.document || `Document ${idx + 1}`;
-        const score = s.score !== undefined ? `${Math.round(s.score * 100)}% Match` : `Chunk #${idx + 1}`;
-        const text = s.text || '';
+        let scorePct;
+        if (typeof s.score === 'number') {
+          if (s.score >= 0 && s.score <= 1) {
+            scorePct = Math.round(s.score * 100);
+          } else {
+            scorePct = Math.round(100 / (1 + Math.exp(-s.score)));
+          }
+        } else {
+          scorePct = 90;
+        }
+        const scoreLabel = `${scorePct}% Match`;
+        const chunkText = s.text || (s.metadata && s.metadata.text) || 'Chunk text retrieved from knowledge base.';
+        const snippet = chunkText.length > 140 ? chunkText.slice(0, 140) + '...' : chunkText;
 
         card.innerHTML = `
           <div class="source-top">
             <span class="source-doc-name" title="${docName}">${docName}</span>
-            <span class="source-score-pill">${score}</span>
+            <span class="source-score-pill">${scoreLabel}</span>
           </div>
-          <div class="source-excerpt">${escapeHtml(text)}</div>
+          <div class="source-excerpt">${escapeHtml(snippet)}</div>
+          <div class="source-click-hint">
+            <span>🔍 Click to inspect full chunk dialog</span>
+          </div>
         `;
 
+        // Click to open Chunk Inspector Dialog
         card.addEventListener('click', () => {
-          card.classList.toggle('expanded');
+          openChunkModal({
+            document: docName,
+            chunk_id: s.chunk_id || `chunk_${idx + 1}`,
+            score: scoreLabel,
+            section: s.section || 'General',
+            text: chunkText,
+          });
         });
 
         sourcesGrid.appendChild(card);
@@ -225,52 +306,59 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
-  // 6. Simple Markdown Formatter
-  function formatMarkdown(text) {
-    if (!text) return '';
-
-    let formatted = escapeHtml(text);
-
-    // Bold **text**
-    formatted = formatted.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
-
-    // Inline code `code`
-    formatted = formatted.replace(/`([^`]+)`/g, '<code>$1</code>');
-
-    // Citation markers 【Document X】 or [Document X]
-    formatted = formatted.replace(/【(.*?)】/g, '<span class="citation-mark">【$1】</span>');
-    formatted = formatted.replace(/\[(Document \d+)\]/g, '<span class="citation-mark">[$1]</span>');
-
-    // Convert newlines to paragraphs
-    const paragraphs = formatted.split(/\n\s*\n/);
-    return paragraphs.map(p => `<p>${p.replace(/\n/g, '<br>')}</p>`).join('');
+  // =========================================================================
+  // 6. Chunk Inspector Modal Dialog
+  // =========================================================================
+  function openChunkModal(chunkData) {
+    chunkModalDoc.textContent = chunkData.document;
+    chunkModalTitle.textContent = `Retrieved Chunk (${chunkData.chunk_id})`;
+    chunkModalId.textContent = chunkData.chunk_id;
+    chunkModalScore.textContent = chunkData.score;
+    chunkModalSection.textContent = chunkData.section;
+    chunkModalContent.textContent = chunkData.text;
+    activeModalChunkText = chunkData.text;
+    chunkModal.style.display = 'flex';
   }
 
-  function escapeHtml(str) {
-    return str
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;')
-      .replace(/'/g, '&#039;');
-  }
+  btnCloseChunkModal.addEventListener('click', () => {
+    chunkModal.style.display = 'none';
+  });
 
-  // 7. Feedback Submission
-  btnFeedbackPos.addEventListener('click', () => handleFeedback(1, true));
-  btnFeedbackNeg.addEventListener('click', () => handleFeedback(-1, false));
+  chunkModal.addEventListener('click', (e) => {
+    if (e.target === chunkModal) {
+      chunkModal.style.display = 'none';
+    }
+  });
 
-  async function handleFeedback(rating, isRelevant) {
+  btnCopyChunk.addEventListener('click', () => {
+    if (activeModalChunkText) {
+      navigator.clipboard.writeText(activeModalChunkText).then(() => {
+        btnCopyChunk.textContent = '✅ Copied!';
+        setTimeout(() => { btnCopyChunk.textContent = '📋 Copy Chunk Text'; }, 2000);
+      });
+    }
+  });
+
+  // =========================================================================
+  // 7. User Feedback Loop
+  // =========================================================================
+  btnFeedbackPos.addEventListener('click', () => handleFeedback('positive', 'Accurate grounded answer'));
+  btnFeedbackNeg.addEventListener('click', () => handleFeedback('negative', 'Inaccurate or ungrounded answer'));
+
+  async function handleFeedback(rating, defaultComment) {
     if (!currentResponse) return;
 
-    btnFeedbackPos.className = rating > 0 ? 'btn-feedback active-pos' : 'btn-feedback';
-    btnFeedbackNeg.className = rating < 0 ? 'btn-feedback active-neg' : 'btn-feedback';
+    btnFeedbackPos.className = rating === 'positive' ? 'btn-feedback active-pos' : 'btn-feedback';
+    btnFeedbackNeg.className = rating === 'negative' ? 'btn-feedback active-neg' : 'btn-feedback';
+
+    const queryText = currentResponse.query || queryInput.value.trim();
 
     try {
       const payload = {
-        query_id: currentResponse.query_id || `q_${Date.now()}`,
+        trace_id: currentResponse.trace_id || `trace_${Date.now()}`,
+        query: queryText,
         rating: rating,
-        is_relevant: isRelevant,
-        comment: rating > 0 ? 'Accurate grounded answer' : 'Inaccurate or ungrounded'
+        comment: defaultComment
       };
 
       const res = await fetch('/api/v1/feedback', {
@@ -280,7 +368,7 @@ document.addEventListener('DOMContentLoaded', () => {
       });
 
       if (res.ok) {
-        feedbackToast.textContent = 'Feedback recorded in telemetry loop!';
+        feedbackToast.textContent = rating === 'positive' ? 'Recorded as Accurate!' : 'Logged for Quality Triage!';
         feedbackToast.style.display = 'inline-block';
       }
     } catch (err) {
@@ -288,31 +376,77 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
-  // 8. Telemetry Modal Handlers
-  btnMetrics.addEventListener('click', async () => {
-    metricsModal.style.display = 'flex';
-    metricsRawOutput.textContent = 'Fetching live Prometheus metrics...';
+  // =========================================================================
+  // 8. RAGOps Operations & Feedback Triage Dashboard Data
+  // =========================================================================
+  btnRefreshDashboard.addEventListener('click', fetchDashboardData);
 
+  async function fetchDashboardData() {
     try {
-      const res = await fetch('/metrics');
-      if (res.ok) {
-        const metrics = await res.json();
-        metricsRawOutput.textContent = JSON.stringify(metrics, null, 2);
+      const res = await fetch('/api/v1/feedback/dashboard');
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+      const data = await res.json();
+
+      // Total Queries
+      kpiTotalQueries.textContent = (data.total_queries || 0).toLocaleString();
+
+      // Total Tokens
+      const tokensTotal = data.total_tokens || 0;
+      kpiTotalTokens.textContent = tokensTotal >= 1000 ? `${(tokensTotal / 1000).toFixed(1)}k` : tokensTotal;
+      kpiTokensSub.textContent = `In: ${data.tokens_input || 0} | Out: ${data.tokens_output || 0} (~$${(data.estimated_cost_usd || 0).toFixed(4)})`;
+
+      // Satisfaction Rate
+      const posRate = data.positive_rate !== undefined ? Math.round(data.positive_rate * 100) : 100;
+      kpiSatisfaction.textContent = `${posRate}%`;
+      kpiFeedbackCounts.textContent = `${data.positive || 0} 👍 Positive / ${data.negative || 0} 👎 Negative`;
+
+      // Latency P95
+      const latStats = data.latency_stats || {};
+      const p95 = Math.round(latStats.p95 || 0);
+      const p50 = Math.round(latStats.p50 || 0);
+      kpiP95Latency.textContent = `${p95} ms`;
+      kpiLatencySub.textContent = `Median P50: ${p50} ms (Mean: ${Math.round(latStats.mean || 0)} ms)`;
+
+      // Disliked Queries Triage Table
+      const disliked = data.disliked_queries || [];
+      dislikedCountBadge.textContent = `${disliked.length} Flagged Queries`;
+
+      if (disliked.length === 0) {
+        dislikedTableBody.innerHTML = `
+          <tr>
+            <td colspan="5" class="empty-table-cell">
+              ✨ No disliked queries recorded yet! All evaluated queries have satisfied quality criteria.
+            </td>
+          </tr>
+        `;
       } else {
-        metricsRawOutput.textContent = `Metrics endpoint returned HTTP ${res.status}`;
+        dislikedTableBody.innerHTML = '';
+        disliked.forEach(item => {
+          const tr = document.createElement('tr');
+          tr.innerHTML = `
+            <td style="font-weight: 500; color: #f8fafc;">${escapeHtml(item.query)}</td>
+            <td style="color: var(--accent-rose);">${escapeHtml(item.comment)}</td>
+            <td style="font-family: var(--font-mono); font-size: 0.8rem; color: var(--text-muted);">${escapeHtml(item.created_at)}</td>
+            <td style="font-family: var(--font-mono); font-size: 0.78rem; color: var(--accent-indigo);">${escapeHtml(item.trace_id)}</td>
+            <td><span class="badge-triage-pending">⚠️ Needs Triage</span></td>
+          `;
+          dislikedTableBody.appendChild(tr);
+        });
       }
-    } catch (e) {
-      metricsRawOutput.textContent = `Failed to load metrics: ${e.message}`;
+    } catch (err) {
+      console.error('Failed to load dashboard data:', err);
     }
-  });
+  }
 
-  btnCloseModal.addEventListener('click', () => {
-    metricsModal.style.display = 'none';
-  });
-
-  metricsModal.addEventListener('click', (e) => {
-    if (e.target === metricsModal) {
-      metricsModal.style.display = 'none';
-    }
-  });
+  // Utilities
+  function escapeHtml(str) {
+    if (!str) return '';
+    return str
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#039;');
+  }
 });

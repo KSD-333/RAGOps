@@ -10,6 +10,7 @@ from ragops.core.types import FeedbackRating
 class FeedbackRequest(BaseModel):
     """API request to submit feedback on a RAG response."""
     trace_id: str
+    query: str = ""
     rating: FeedbackRating
     comment: str = ""
 

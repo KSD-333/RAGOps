@@ -178,10 +178,13 @@ class Source(BaseModel):
     chunk_id: str
     page: int | None = None
     section: str | None = None
+    text: str = ""
+    score: float = 0.0
 
 
 class RAGResponse(BaseModel):
     """The complete RAG response — returned to the user."""
+    query: str = ""
     answer: str
     sources: list[Source] = Field(default_factory=list)
     trace_id: str = Field(default_factory=lambda: f"trace_{uuid.uuid4().hex[:12]}")
@@ -265,6 +268,7 @@ class FeedbackRecord(BaseModel):
     """User feedback on a RAG response."""
     feedback_id: str = Field(default_factory=lambda: f"fb_{uuid.uuid4().hex[:12]}")
     trace_id: str
+    query: str = ""
     rating: FeedbackRating
     comment: str = ""
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))

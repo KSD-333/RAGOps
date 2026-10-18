@@ -23,6 +23,7 @@ class FeedbackService:
         """Submit user feedback for a RAG response."""
         record = FeedbackRecord(
             trace_id=request.trace_id,
+            query=request.query,
             rating=request.rating,
             comment=request.comment,
         )
@@ -49,3 +50,23 @@ class FeedbackService:
         """Get all negative feedback for improvement analysis."""
         all_records = self._repository.get_all()
         return [r for r in all_records if r.rating == FeedbackRating.NEGATIVE]
+
+    def get_dashboard_summary(self) -> dict:
+        """Get feedback summary including recent disliked queries for RAGOps triage."""
+        all_records = self._repository.get_all()
+        stats = self._repository.get_stats()
+        disliked = [
+            {
+                "feedback_id": r.feedback_id,
+                "trace_id": r.trace_id,
+                "query": r.query or "(Query text unrecorded)",
+                "comment": r.comment or "Marked as inaccurate by user",
+                "created_at": r.created_at.strftime("%Y-%m-%d %H:%M:%S") if hasattr(r.created_at, "strftime") else str(r.created_at),
+            }
+            for r in reversed(all_records)
+            if r.rating == FeedbackRating.NEGATIVE
+        ]
+        return {
+            **stats,
+            "disliked_queries": disliked[:20],
+        }
