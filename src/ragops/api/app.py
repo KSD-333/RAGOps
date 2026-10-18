@@ -60,16 +60,51 @@ def create_app() -> FastAPI:
     """Create and configure the FastAPI application."""
     settings = get_settings()
 
+    tags_metadata = [
+        {
+            "name": "query",
+            "description": (
+                "**Core RAG Inference Subsystem**. Encapsulates end-to-end question answering: "
+                "query embedding via SentenceTransformers (`all-MiniLM-L6-v2`), vector similarity "
+                "search in ChromaDB, cross-encoder neural reranking (`ms-marco-MiniLM-L-6-v2`), "
+                "and citation-grounded LLM inference via Groq LPUs (`llama-3.1-70b-versatile`)."
+            ),
+        },
+        {
+            "name": "feedback",
+            "description": (
+                "**Continuous Improvement & Evaluation Loop**. Records real-world user feedback "
+                "(thumbs up/down) to persistent JSONL audit trails, aggregates live telemetry, "
+                "and exposes metrics for hallucination triage and token spend tracking."
+            ),
+        },
+        {
+            "name": "health",
+            "description": (
+                "**Orchestration & Liveness Probes**. Cloud-native endpoints for Kubernetes and container "
+                "runners: liveness (`/health`), readiness with warmed model verification (`/health/ready`), "
+                "and Prometheus telemetry (`/metrics`)."
+            ),
+        },
+    ]
+
     app = FastAPI(
-        title="RAGOps — Production RAG Platform",
+        title="RAGOps — Production Enterprise RAG Platform",
         description=(
-            "Production-grade RAG platform with evaluation, observability, "
-            "feedback loops, and quality gates."
+            "### Enterprise AI Retrieval-Augmented Generation & Operations Engine\n\n"
+            "RAGOps is an end-to-end production RAG platform engineered with:\n"
+            "- **Hybrid Neural Retrieval**: SentenceTransformers (`all-MiniLM-L6-v2`) 384d dense embeddings.\n"
+            "- **Precision Reranking**: Cross-Encoder (`ms-marco-MiniLM-L-6-v2`) candidate filtering.\n"
+            "- **Vector Store**: ChromaDB persistent HNSW indexing.\n"
+            "- **Ultra-Low-Latency Inference**: Groq LPUs running LLaMA 3.1 70B with strict citation provenance and zero-hallucination abstention.\n"
+            "- **Observability & Triage**: Latency tracking, token spend computation, and user feedback triage.\n\n"
+            "Use this interactive OpenAPI specification to test endpoints, view request/response schemas, and integrate client applications."
         ),
         version="0.1.0",
         lifespan=lifespan,
         docs_url="/docs",
         redoc_url="/redoc",
+        openapi_tags=tags_metadata,
     )
 
     # --- Middleware ---
@@ -87,10 +122,15 @@ def create_app() -> FastAPI:
     app.include_router(query.router, prefix="/api/v1")
     app.include_router(feedback.router, prefix="/api/v1")
 
-    # --- Static Assets (Web UI) ---
+    # --- Static Assets (Preserved Original Web UI) ---
     static_dir = Path(__file__).resolve().parent / "static"
     if static_dir.exists():
         app.mount("/static", StaticFiles(directory=static_dir), name="static")
+
+    # --- Modern React UI Assets ---
+    react_assets = Path(__file__).resolve().parents[3] / "react" / "dist" / "assets"
+    if react_assets.exists():
+        app.mount("/assets", StaticFiles(directory=react_assets), name="react_assets")
 
     return app
 

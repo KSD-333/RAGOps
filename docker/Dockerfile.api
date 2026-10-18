@@ -1,10 +1,24 @@
 # ==============================================================================
-# RAGOps API Service Dockerfile
-# Multi-stage build for lightweight, secure production deployment
+# RAGOps Full-Stack Production Container
+# Multi-stage build: React Frontend + FastAPI Backend + ChromaDB Data
 # ==============================================================================
 
-FROM python:3.11-slim AS builder
+# ------------------------------------------------------------------------------
+# Stage 1: Build Modern React + Tailwind Frontend
+# ------------------------------------------------------------------------------
+FROM node:20-slim AS frontend-builder
+WORKDIR /app/react
 
+COPY react/package*.json ./
+RUN npm install
+
+COPY react/ ./
+RUN npm run build
+
+# ------------------------------------------------------------------------------
+# Stage 2: Python Wheels & Dependencies Builder
+# ------------------------------------------------------------------------------
+FROM python:3.11-slim AS builder
 WORKDIR /app
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -19,26 +33,37 @@ RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir .
 
 # ------------------------------------------------------------------------------
-# Final Runtime Stage
+# Stage 3: Final Production Runtime Stage
 # ------------------------------------------------------------------------------
 FROM python:3.11-slim AS runner
-
 WORKDIR /app
+
+# Install curl for container health check
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
 
 # Create non-root system user for security
 RUN groupadd -g 1001 ragops && \
     useradd -u 1001 -g ragops -s /bin/sh ragops && \
-    mkdir -p /app/data /app/data/chroma /app/logs && \
+    mkdir -p /app/data /app/data/chroma /app/logs /app/react/dist && \
     chown -R ragops:ragops /app
 
+# Copy python dependencies from builder
 COPY --from=builder /usr/local/lib/python3.11/site-packages /usr/local/lib/python3.11/site-packages
 COPY --from=builder /usr/local/bin /usr/local/bin
 
+# Copy backend source code & configurations
 COPY --chown=ragops:ragops src /app/src
 COPY --chown=ragops:ragops configs /app/configs
 COPY --chown=ragops:ragops pyproject.toml README.md /app/
 
-# Install the local package in editable mode or ensure PYTHONPATH includes src
+# Copy pre-indexed data if available
+COPY --chown=ragops:ragops data /app/data
+
+# Copy built React frontend bundle from frontend-builder
+COPY --from=frontend-builder --chown=ragops:ragops /app/react/dist /app/react/dist
+
 ENV PYTHONPATH="/app/src"
 ENV PYTHONUNBUFFERED=1
 ENV ENVIRONMENT=production
@@ -47,7 +72,7 @@ USER ragops
 
 EXPOSE 8000
 
-HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
     CMD curl -f http://localhost:8000/health || exit 1
 
 ENTRYPOINT ["uvicorn", "ragops.api.app:app", "--host", "0.0.0.0", "--port", "8000"]

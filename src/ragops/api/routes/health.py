@@ -14,11 +14,14 @@ from ragops.observability.metrics import get_metrics
 router = APIRouter(tags=["health"])
 
 STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
+REACT_DIST_INDEX = Path(__file__).resolve().parents[4] / "react" / "dist" / "index.html"
 
 
 @router.get("/", include_in_schema=False)
 async def root() -> Response:
-    """Serve the interactive RAGOps Web UI, fallback to API docs."""
+    """Serve the interactive modern React UI, fallback to static UI or API docs."""
+    if REACT_DIST_INDEX.exists():
+        return FileResponse(REACT_DIST_INDEX)
     index_file = STATIC_DIR / "index.html"
     if index_file.exists():
         return FileResponse(index_file)

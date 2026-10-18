@@ -404,11 +404,47 @@ RAGOps comes with a unified command-line tool `ragops`:
 
 ---
 
-## 8. REST API Endpoints
+## 8. Enterprise Web Console & Observability Dashboard
+
+RAGOps includes a modern **React 19 + Tailwind v4** enterprise console built inside the [react/](file:///d:/Projects/RAGOps/react) directory.
+
+### Key Features:
+- **Navigation Bar**: Instant switching between **Search & Chat** and the **Enterprise Dashboard**, real-time backend connection status, and Swagger docs link.
+- **Search & Grounded Inference**:
+  - Live query execution with suggestion chips.
+  - Per-stage latency breakdown bar: `Embed` | `Search` | `Rerank` | `Groq LLM`.
+  - Rich Markdown rendering with safe abstention badges for unanswerable/out-of-domain questions.
+  - Supporting source cards with **"Inspect Raw Payload"** modal dialog displaying exact context chunks sent to LLM.
+  - One-click feedback loop (👍 Accurate / 👎 Inaccurate) logging to database.
+- **Enterprise Dashboard**:
+  - **4 Top KPIs**: Total Queries, Cumulative Tokens (Input + Output), Grounding Satisfaction %, P95 System Latency.
+  - **Enterprise Token Billing & Quota Calculator**:
+    - Real-time spend tracker with configurable contract plans (default: 5,000,000 tokens at ₹2,000 / $25).
+    - Accrued spend, remaining tokens in budget, average cost per query, and visual consumption progress bar.
+    - Persistent rate customization via browser storage.
+  - **Disliked Queries & Hallucination Triage Table**:
+    - Real-world RAGOps triage table showing all user-flagged queries with timestamps, comments, trace IDs, and a **"Re-run in Search"** button.
+  - **System Specifications**: Live summary of embedding model, reranker, vector database, and inference provider.
+
+### Running the Web Console:
+- **Served Directly by FastAPI**:
+  The production build is served out-of-the-box at `http://127.0.0.1:8000/`. (The original static directory is preserved at `http://127.0.0.1:8000/static/index.html`).
+- **Development Mode with Hot Module Reloading (HMR)**:
+  ```bash
+  cd react
+  npm install
+  npm run dev
+  # Open http://localhost:5173 (proxies API requests to :8000)
+  ```
+
+---
+
+## 9. REST API Endpoints
 
 | Method | Path | Description |
 |---|---|---|
-| `GET` | `/` | Serves the interactive RAGOps Web UI & Operations Dashboard |
+| `GET` | `/` | Serves the interactive modern React UI |
+| `GET` | `/static/index.html` | Serves the preserved legacy static HTML interface |
 | `POST` | `/api/v1/query` | Submit query; returns answer, citations, chunk text, and latency breakdown |
 | `POST` | `/api/v1/ingest` | Trigger document ingestion pipeline for files/directories |
 | `GET` | `/api/v1/documents/count` | Total indexed document chunks |

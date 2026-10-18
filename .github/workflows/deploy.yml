@@ -88,7 +88,8 @@ jobs:
         id: docker_tags
         shell: bash
         run: |
-          TAGS="ghcr.io/${{ github.repository }}:latest,ghcr.io/${{ github.repository }}:${{ github.sha }}"
+          REPO_LOWER=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
+          TAGS="ghcr.io/${REPO_LOWER}:latest,ghcr.io/${REPO_LOWER}:${{ github.sha }}"
           if [ -n "${{ secrets.DOCKERHUB_TOKEN }}" ]; then
             TAGS="$TAGS,ketan333/ragops:latest,ketan333/ragops:${{ github.sha }}"
             echo "Pushing to Docker Hub under user ketan333 and GHCR."
@@ -108,9 +109,10 @@ jobs:
       - name: Production Deployment Notification
         if: success()
         run: |
+          REPO_LOWER=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
           echo "=========================================================="
           echo "🚀 RAGOps Production Container Deployment Succeeded!"
           echo "Docker Hub Tag: ketan333/ragops:latest (when secret set)"
-          echo "GHCR Tag: ghcr.io/${{ github.repository }}:latest"
+          echo "GHCR Tag: ghcr.io/${REPO_LOWER}:latest"
           echo "Commit SHA: ${{ github.sha }}"
           echo "=========================================================="
