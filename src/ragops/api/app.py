@@ -138,8 +138,22 @@ def create_app() -> FastAPI:
         app.mount("/static", StaticFiles(directory=static_dir), name="static")
 
     # --- Modern React UI Assets ---
-    react_assets = Path(__file__).resolve().parents[3] / "react" / "dist" / "assets"
-    if react_assets.exists():
+    def get_react_assets_dir() -> Path | None:
+        candidates = [
+            Path(__file__).resolve().parent / "static_react" / "assets",
+            Path.cwd() / "react" / "dist" / "assets",
+            Path.cwd() / "src" / "ragops" / "api" / "static_react" / "assets",
+            Path("/app/react/dist/assets"),
+            Path("/opt/render/project/src/react/dist/assets"),
+            Path(__file__).resolve().parents[3] / "react" / "dist" / "assets",
+        ]
+        for c in candidates:
+            if c.exists():
+                return c
+        return None
+
+    react_assets = get_react_assets_dir()
+    if react_assets:
         app.mount("/assets", StaticFiles(directory=react_assets), name="react_assets")
 
     return app

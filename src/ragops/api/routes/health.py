@@ -14,14 +14,30 @@ from ragops.observability.metrics import get_metrics
 router = APIRouter(tags=["health"])
 
 STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
-REACT_DIST_INDEX = Path(__file__).resolve().parents[4] / "react" / "dist" / "index.html"
+
+
+def get_react_dist_index() -> Path | None:
+    """Find the modern React app index.html across production packaging and dev environments."""
+    candidates = [
+        Path(__file__).resolve().parent.parent / "static_react" / "index.html",
+        Path.cwd() / "react" / "dist" / "index.html",
+        Path.cwd() / "src" / "ragops" / "api" / "static_react" / "index.html",
+        Path("/app/react/dist/index.html"),
+        Path("/opt/render/project/src/react/dist/index.html"),
+        Path(__file__).resolve().parents[4] / "react" / "dist" / "index.html",
+    ]
+    for p in candidates:
+        if p.exists():
+            return p
+    return None
 
 
 @router.get("/", include_in_schema=False)
 async def root() -> Response:
     """Serve the interactive modern React UI, fallback to static UI or API docs."""
-    if REACT_DIST_INDEX.exists():
-        return FileResponse(REACT_DIST_INDEX)
+    react_index = get_react_dist_index()
+    if react_index:
+        return FileResponse(react_index)
     index_file = STATIC_DIR / "index.html"
     if index_file.exists():
         return FileResponse(index_file)
