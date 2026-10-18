@@ -12,3 +12,4 @@
 {"feedback_id":"fb_eb33b17dd15c","trace_id":"trace_69108da0a73f","query":"How to make authentic Neapolitan pizza dough?","rating":"negative","comment":"Knowledge base lacks recipes, correctly flagged as out-of-domain.","created_at":"2026-10-18T18:08:36.673484Z"}
 {"feedback_id":"fb_f39236d402ae","trace_id":"test_trace_12345","query":"","rating":"positive","comment":"Accurate response with valid citations.","created_at":"2026-10-18T18:11:28.739869Z"}
 {"feedback_id":"fb_38a41bd52f86","trace_id":"test_trace_12345","query":"","rating":"positive","comment":"Accurate response with valid citations.","created_at":"2026-10-18T18:19:52.128068Z"}
+{"feedback_id":"fb_fb78900ec34b","trace_id":"test_trace_12345","query":"","rating":"positive","comment":"Accurate response with valid citations.","created_at":"2026-10-18T20:21:59.873332Z"}

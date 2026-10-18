@@ -15,10 +15,8 @@ from ragops.core.config import get_settings
 from ragops.core.logging import get_logger
 from ragops.core.types import (
     DocumentChunk,
-    EmbeddedChunk,
     RetrievedChunk,
     RetrievedContext,
-    VectorSearchResult,
 )
 from ragops.retrieval.embeddings import EmbeddingProvider, SentenceTransformerEmbedding
 from ragops.retrieval.reranker import CrossEncoderReranker, NoOpReranker, Reranker

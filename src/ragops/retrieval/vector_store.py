@@ -19,7 +19,6 @@ from ragops.core.config import get_settings
 from ragops.core.exceptions import VectorStoreError
 from ragops.core.logging import get_logger
 from ragops.core.types import (
-    DocumentChunk,
     EmbeddedChunk,
     QueryEmbedding,
     VectorSearchResult,

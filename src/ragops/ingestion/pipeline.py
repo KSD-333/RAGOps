@@ -7,13 +7,12 @@ After chunking, it hands off to the retrieval module for embedding + storage.
 """
 
 import hashlib
-import uuid
 from pathlib import Path
 
 from ragops.core.config import get_settings
 from ragops.core.exceptions import IngestionError, UnsupportedFormatError
 from ragops.core.logging import get_logger
-from ragops.core.types import DocumentChunk, DocumentFormat, RawDocument
+from ragops.core.types import DocumentChunk
 from ragops.ingestion.cleaners import DocumentCleaner
 from ragops.ingestion.chunkers import RecursiveChunker
 from ragops.ingestion.loaders import BaseLoader

@@ -11,6 +11,7 @@ from ragops.core.logging import get_logger
 from ragops.core.types import (
     LLMResponse,
     RAGResponse,
+    RetrievedChunk,
     RetrievedContext,
     Source,
 )

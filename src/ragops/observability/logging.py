@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from ragops.core.logging import get_logger, setup_logging
+from ragops.core.logging import get_logger
 
 logger = get_logger(__name__)
 

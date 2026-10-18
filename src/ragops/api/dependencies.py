@@ -7,7 +7,6 @@ from functools import lru_cache
 from ragops.feedback.service import FeedbackService
 from ragops.rag.pipeline import RAGPipeline
 from ragops.retrieval.retriever import RAGRetriever
-from ragops.observability.metrics import get_metrics
 
 
 @lru_cache(maxsize=1)

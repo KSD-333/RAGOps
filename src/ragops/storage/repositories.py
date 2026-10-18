@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from ragops.core.logging import get_logger
 from ragops.storage.database import get_session
-from ragops.storage.models import DocumentModel, FeedbackModel, EvaluationModel, TraceModel
+from ragops.storage.models import DocumentModel, TraceModel
 
 logger = get_logger(__name__)
 

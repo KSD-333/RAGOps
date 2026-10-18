@@ -41,16 +41,16 @@ async def get_feedback_dashboard():
     try:
         from ragops.observability.metrics import get_metrics
         from ragops.api.dependencies import get_retriever
-        
+
         service = get_feedback_service()
         summary = service.get_dashboard_summary()
         metrics = get_metrics()
-        
+
         total_queries = int(metrics.get_counter("ragops_queries_total"))
         tokens_in = int(metrics.get_counter("ragops_tokens_input_total"))
         tokens_out = int(metrics.get_counter("ragops_tokens_output_total"))
         latency_stats = metrics.get_histogram_stats("ragops_query_latency_ms")
-        
+
         try:
             retriever = get_retriever()
             docs_count = retriever.document_count

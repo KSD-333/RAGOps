@@ -29,7 +29,6 @@ class MetricsAggregator:
 
         from ragops.evaluation.retrieval import recall_at_k, precision_at_k, mrr
         from ragops.evaluation.generation import (
-            faithfulness_heuristic,
             answer_relevance_heuristic,
             citation_accuracy,
         )

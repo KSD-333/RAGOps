@@ -12,7 +12,6 @@ import hashlib
 import math
 from typing import Protocol
 
-import numpy as np
 
 from ragops.core.config import get_settings
 from ragops.core.exceptions import EmbeddingError

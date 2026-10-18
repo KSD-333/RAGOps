@@ -7,7 +7,6 @@ Each chunk preserves enough metadata to answer "Where did this come from?"
 
 from __future__ import annotations
 
-import uuid
 from abc import ABC, abstractmethod
 
 from ragops.core.logging import get_logger
