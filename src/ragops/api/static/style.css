@@ -1,5 +1,5 @@
 /* ==============================================================================
-   RAGOps Web UI — Modern Glassmorphism, Markdown & Production Dashboard
+   RAGOps Web UI — Modern Glassmorphism, Unified Layout & Operations Dashboard
    ============================================================================== */
 
 :root {
@@ -10,7 +10,7 @@
   --bg-glass-hover: rgba(255, 255, 255, 0.07);
 
   --border-subtle: rgba(255, 255, 255, 0.08);
-  --border-glow: rgba(99, 102, 241, 0.4);
+  --border-glow: rgba(99, 102, 241, 0.45);
 
   --text-primary: #f8fafc;
   --text-secondary: #94a3b8;
@@ -32,7 +32,7 @@
   --radius-lg: 20px;
   --radius-full: 9999px;
 
-  --shadow-glow: 0 0 35px rgba(99, 102, 241, 0.18);
+  --shadow-glow: 0 0 35px rgba(99, 102, 241, 0.2);
   --shadow-card: 0 10px 30px -5px rgba(0, 0, 0, 0.5);
 }
 
@@ -97,7 +97,6 @@ body {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 1rem;
 }
 
 .brand {
@@ -107,8 +106,8 @@ body {
 }
 
 .logo-icon {
-  width: 38px;
-  height: 38px;
+  width: 36px;
+  height: 36px;
   background: linear-gradient(135deg, var(--accent-indigo), var(--accent-cyan));
   border-radius: var(--radius-sm);
   display: flex;
@@ -147,40 +146,6 @@ body {
   font-weight: 500;
 }
 
-/* Tab Navigation */
-.nav-tabs {
-  display: flex;
-  background: rgba(12, 17, 28, 0.8);
-  padding: 0.25rem;
-  border-radius: var(--radius-md);
-  border: 1px solid var(--border-subtle);
-}
-
-.nav-tab {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.45rem;
-  padding: 0.45rem 1rem;
-  border-radius: var(--radius-sm);
-  border: none;
-  background: transparent;
-  color: var(--text-secondary);
-  font-size: 0.85rem;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-
-.nav-tab:hover {
-  color: var(--text-primary);
-}
-
-.nav-tab.active {
-  background: rgba(99, 102, 241, 0.2);
-  color: #ffffff;
-  border: 1px solid rgba(99, 102, 241, 0.4);
-}
-
 .header-status {
   display: flex;
   align-items: center;
@@ -217,12 +182,6 @@ body {
   50% { opacity: 0.6; transform: scale(1.2); }
 }
 
-.header-actions {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-}
-
 .btn-ghost {
   display: inline-flex;
   align-items: center;
@@ -247,45 +206,37 @@ body {
 
 /* Main Container */
 .main-container {
-  max-width: 1000px;
+  max-width: 1050px;
   margin: 0 auto;
-  padding: 2.5rem 1.5rem 4rem;
+  padding: 2rem 1.5rem 4rem;
   position: relative;
   z-index: 1;
   flex: 1;
   width: 100%;
 }
 
-.view-panel {
-  display: none;
-}
-
-.view-panel.active {
-  display: block;
-}
-
 /* Hero Section */
 .hero-section {
   text-align: center;
-  margin-bottom: 2rem;
+  margin-bottom: 1.75rem;
 }
 
 .hero-title {
   font-family: var(--font-heading);
-  font-size: 2.2rem;
+  font-size: 2.1rem;
   font-weight: 800;
   letter-spacing: -0.8px;
-  margin-bottom: 0.75rem;
+  margin-bottom: 0.5rem;
   background: linear-gradient(135deg, #ffffff 40%, #94a3b8 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
 }
 
 .hero-subtitle {
-  font-size: 1.05rem;
+  font-size: 1rem;
   color: var(--text-secondary);
   max-width: 720px;
-  margin: 0 auto 1.5rem;
+  margin: 0 auto 1.25rem;
 }
 
 /* Suggestion Chips */
@@ -298,7 +249,7 @@ body {
 }
 
 .chips-label {
-  font-size: 0.85rem;
+  font-size: 0.82rem;
   color: var(--text-muted);
 }
 
@@ -332,15 +283,15 @@ body {
   border-color: var(--accent-amber);
 }
 
-/* Console Search Card */
+/* Console Search Card (Permanent) */
 .console-card {
   background: var(--bg-surface);
   backdrop-filter: blur(20px);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-lg);
-  padding: 1.5rem;
+  padding: 1.25rem 1.5rem;
   box-shadow: var(--shadow-card);
-  margin-bottom: 2rem;
+  margin-bottom: 1.5rem;
   transition: border-color 0.2s ease;
 }
 
@@ -356,7 +307,7 @@ body {
   background: rgba(10, 14, 22, 0.75);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-md);
-  padding: 0.5rem 0.75rem;
+  padding: 0.45rem 0.75rem;
 }
 
 .search-icon {
@@ -390,7 +341,7 @@ body {
   color: #fff;
   border: none;
   border-radius: var(--radius-sm);
-  padding: 0.75rem 1.4rem;
+  padding: 0.7rem 1.4rem;
   font-size: 0.95rem;
   font-weight: 600;
   cursor: pointer;
@@ -422,11 +373,11 @@ body {
   align-items: center;
   justify-content: space-between;
   flex-wrap: wrap;
-  gap: 1rem;
-  margin-top: 1rem;
+  gap: 0.75rem;
+  margin-top: 0.85rem;
   padding-top: 0.75rem;
   border-top: 1px solid rgba(255, 255, 255, 0.05);
-  font-size: 0.85rem;
+  font-size: 0.82rem;
 }
 
 .control-item {
@@ -453,6 +404,156 @@ body {
   border: 1px solid var(--border-subtle);
   font-size: 0.78rem;
   color: var(--text-secondary);
+}
+
+/* KPI Cards Strip (Permanent) */
+.kpi-section {
+  margin-bottom: 1.5rem;
+}
+
+.kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 1rem;
+}
+
+.kpi-card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: 1rem 1.25rem;
+  box-shadow: var(--shadow-card);
+  transition: transform 0.2s ease, border-color 0.2s ease;
+}
+
+.kpi-card:hover {
+  transform: translateY(-2px);
+  border-color: rgba(255, 255, 255, 0.15);
+}
+
+.kpi-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.35rem;
+}
+
+.kpi-label {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.kpi-icon {
+  font-size: 1rem;
+}
+
+.kpi-value {
+  font-family: var(--font-mono);
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 0.2rem;
+}
+
+.kpi-value.status-good {
+  color: var(--accent-emerald);
+}
+
+.kpi-sub {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+}
+
+/* Sub-Navigation Tabs Bar */
+.section-tabs-bar {
+  margin-bottom: 1.5rem;
+  display: flex;
+  justify-content: flex-start;
+}
+
+.sub-tabs {
+  display: inline-flex;
+  background: rgba(12, 17, 28, 0.85);
+  padding: 0.25rem;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-subtle);
+  gap: 0.35rem;
+}
+
+.sub-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.5rem 1rem;
+  border-radius: var(--radius-sm);
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 0.85rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.sub-tab:hover {
+  color: var(--text-primary);
+  background: var(--bg-glass);
+}
+
+.sub-tab.active {
+  background: rgba(99, 102, 241, 0.25);
+  color: #ffffff;
+  border: 1px solid rgba(99, 102, 241, 0.4);
+}
+
+.tab-badge {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  background: rgba(244, 63, 94, 0.2);
+  color: var(--accent-rose);
+  padding: 0.1rem 0.45rem;
+  border-radius: var(--radius-full);
+  border: 1px solid rgba(244, 63, 94, 0.3);
+}
+
+.tab-panel {
+  display: none;
+}
+
+.tab-panel.active {
+  display: block;
+}
+
+/* Welcome Card */
+.welcome-card {
+  background: var(--bg-surface);
+  border: 1px dashed var(--border-subtle);
+  border-radius: var(--radius-lg);
+  padding: 3rem 2rem;
+  text-align: center;
+  margin-bottom: 1.5rem;
+}
+
+.welcome-icon {
+  font-size: 2.2rem;
+  margin-bottom: 0.75rem;
+}
+
+.welcome-card h3 {
+  font-family: var(--font-heading);
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: #fff;
+  margin-bottom: 0.5rem;
+}
+
+.welcome-card p {
+  font-size: 0.95rem;
+  color: var(--text-secondary);
+  max-width: 580px;
+  margin: 0 auto;
 }
 
 /* Telemetry Latency Bar Card */
@@ -627,7 +728,7 @@ body {
   font-weight: 600;
 }
 
-/* Proper Code Block Container (Dark Editor Box) */
+/* Dark Code Box Container */
 .markdown-body pre {
   background: #090d16;
   border: 1px solid rgba(255, 255, 255, 0.12);
@@ -635,7 +736,6 @@ body {
   padding: 1rem 1.25rem;
   margin: 1rem 0;
   overflow-x: auto;
-  position: relative;
 }
 
 .markdown-body pre code {
@@ -685,10 +785,6 @@ body {
   font-size: 0.88rem;
   border-bottom: 1px solid rgba(255, 255, 255, 0.04);
   color: #cbd5e1;
-}
-
-.markdown-body tr:hover td {
-  background: rgba(255, 255, 255, 0.02);
 }
 
 .citation-mark {
@@ -874,78 +970,8 @@ body {
 }
 
 /* ==============================================================================
-   VIEW 2: RAGOPS OPERATIONS & FEEDBACK DASHBOARD
+   DISLIKED QUERIES & TRIAGE LOG
    ============================================================================== */
-.dashboard-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 2rem;
-}
-
-.dash-title {
-  font-family: var(--font-heading);
-  font-size: 1.8rem;
-  font-weight: 700;
-  color: #fff;
-}
-
-.dash-desc {
-  font-size: 0.95rem;
-  color: var(--text-secondary);
-  margin-top: 0.25rem;
-}
-
-.kpi-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
-  gap: 1.25rem;
-  margin-bottom: 2rem;
-}
-
-.kpi-card {
-  background: var(--bg-surface);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-md);
-  padding: 1.25rem;
-  box-shadow: var(--shadow-card);
-}
-
-.kpi-top {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 0.5rem;
-}
-
-.kpi-label {
-  font-size: 0.8rem;
-  color: var(--text-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-}
-
-.kpi-icon {
-  font-size: 1.1rem;
-}
-
-.kpi-value {
-  font-family: var(--font-mono);
-  font-size: 1.7rem;
-  font-weight: 700;
-  color: var(--text-primary);
-  margin-bottom: 0.25rem;
-}
-
-.kpi-value.status-good {
-  color: var(--accent-emerald);
-}
-
-.kpi-sub {
-  font-size: 0.78rem;
-  color: var(--text-secondary);
-}
-
 .dash-card {
   background: var(--bg-surface);
   border: 1px solid var(--border-subtle);
@@ -1023,13 +1049,20 @@ body {
   font-size: 0.92rem;
 }
 
-.badge-triage-pending {
-  background: rgba(245, 158, 11, 0.15);
-  color: var(--accent-amber);
-  border: 1px solid rgba(245, 158, 11, 0.3);
-  padding: 0.15rem 0.5rem;
-  border-radius: var(--radius-full);
-  font-size: 0.72rem;
+.btn-rerun {
+  background: rgba(99, 102, 241, 0.2);
+  color: var(--accent-cyan);
+  border: 1px solid rgba(99, 102, 241, 0.4);
+  padding: 0.25rem 0.6rem;
+  border-radius: var(--radius-sm);
+  font-size: 0.75rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.btn-rerun:hover {
+  background: var(--accent-indigo);
+  color: #fff;
 }
 
 /* ==============================================================================
