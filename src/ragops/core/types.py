@@ -136,6 +136,7 @@ class QueryRequest(BaseModel):
     session_id: str = Field(default_factory=lambda: f"session_{uuid.uuid4().hex[:8]}")
     filters: dict[str, Any] = Field(default_factory=dict)
     top_k: int = 10
+    chat_history: list[dict[str, str]] = Field(default_factory=list)
 
 
 class ProcessedQuery(BaseModel):
@@ -157,10 +158,11 @@ class QueryEmbedding(BaseModel):
 # =============================================================================
 
 class PromptContext(BaseModel):
-    """Input to the prompt builder — query + retrieved context strings."""
+    """Input to the prompt builder — query + retrieved context strings + conversation history."""
     query: str
     context: list[str] = Field(default_factory=list)
     sources: list[dict[str, Any]] = Field(default_factory=list)
+    chat_history: list[dict[str, str]] = Field(default_factory=list)
 
 
 class LLMResponse(BaseModel):

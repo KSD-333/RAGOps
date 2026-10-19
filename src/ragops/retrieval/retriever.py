@@ -162,3 +162,18 @@ class RAGRetriever:
     def document_count(self) -> int:
         """Number of chunks in the vector store."""
         return self._vector_store.count()
+
+    def get_document_inventory(self) -> list[str]:
+        """Get sorted list of all unique document sources indexed in the vector store."""
+        if hasattr(self._vector_store, "_collection") and self._vector_store._collection is not None:
+            try:
+                from pathlib import Path
+                data = self._vector_store._collection.get(include=["metadatas"])
+                sources = set()
+                for m in data.get("metadatas", []):
+                    if m and "source" in m:
+                        sources.add(Path(m["source"]).name)
+                return sorted(sources)
+            except Exception as e:
+                logger.warning("failed_to_fetch_collection_inventory", error=str(e))
+        return []

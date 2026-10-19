@@ -9,7 +9,7 @@ import {
   CheckCircle2 
 } from 'lucide-react';
 
-export default function Navbar({ activePage, setActivePage, isOnline, modelName, apiBaseUrl }) {
+export default function Navbar({ activePage, setActivePage, isOnline, modelName, apiBaseUrl, currentUser, onOpenAuthModal }) {
   const [showModelTooltip, setShowModelTooltip] = useState(false);
 
   // Computed Swagger URL
@@ -124,13 +124,41 @@ export default function Navbar({ activePage, setActivePage, isOnline, modelName,
             )}
           </div>
 
+          {/* User Account / Auth Switcher Badge */}
+          <button
+            type="button"
+            onClick={onOpenAuthModal}
+            className="flex items-center gap-2 px-2.5 sm:px-3 py-1.5 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] border border-white/10 text-xs text-white transition-all cursor-pointer shadow-sm"
+            title="Click to switch between admin, test1, test2 accounts"
+          >
+            <div className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold ${
+              currentUser?.role === 'admin' 
+                ? 'bg-amber-500 text-black' 
+                : 'bg-indigo-600 text-white'
+            }`}>
+              {currentUser?.username ? currentUser.username.charAt(0).toUpperCase() : 'U'}
+            </div>
+            <span className="font-medium hidden sm:inline-block">
+              {currentUser?.username || 'Sign In'}
+            </span>
+            {currentUser?.role && (
+              <span className={`text-[9px] px-1 py-0.2 rounded font-mono font-bold uppercase ${
+                currentUser.role === 'admin' 
+                  ? 'bg-amber-500/20 text-amber-300' 
+                  : 'bg-cyan-500/20 text-cyan-300'
+              }`}>
+                {currentUser.role}
+              </span>
+            )}
+          </button>
+
           {/* Swagger API Direct Button */}
           <a
             href={swaggerUrl}
             target="_blank"
             rel="noopener noreferrer"
             title="Open OpenAPI Swagger Interactive Documentation"
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-gradient-to-r from-indigo-500/20 to-cyan-500/20 hover:from-indigo-500/30 hover:to-cyan-500/30 text-cyan-300 hover:text-white border border-cyan-500/30 text-xs font-semibold transition-all shadow-sm shadow-cyan-500/10 cursor-pointer"
+            className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-gradient-to-r from-indigo-500/20 to-cyan-500/20 hover:from-indigo-500/30 hover:to-cyan-500/30 text-cyan-300 hover:text-white border border-cyan-500/30 text-xs font-semibold transition-all shadow-sm shadow-cyan-500/10 cursor-pointer"
           >
             <span>Swagger</span>
             <ExternalLink className="w-3.5 h-3.5 shrink-0" />

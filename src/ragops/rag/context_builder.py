@@ -28,11 +28,17 @@ class ContextBuilder:
         self._max_context_length = max_context_length
         self._max_chunks = max_chunks
 
-    def build(self, query: str, retrieved_context: RetrievedContext) -> PromptContext:
-        """Build PromptContext from retrieved chunks.
+    def build(
+        self,
+        query: str,
+        retrieved_context: RetrievedContext,
+        inventory: list[str] | None = None,
+        chat_history: list[dict[str, str]] | None = None,
+    ) -> PromptContext:
+        """Build PromptContext from retrieved chunks and optional document inventory.
 
-        Deduplicates chunks, respects length limits, and formats
-        source metadata for citation in the prompt.
+        Deduplicates chunks, respects length limits, formats source metadata,
+        and optionally injects verified document inventory for enumeration queries.
         """
         chunks = retrieved_context.chunks[: self._max_chunks]
 
@@ -77,10 +83,27 @@ class ContextBuilder:
             })
             current_length += len(chunk.text)
 
+        # Inject verified collection inventory if provided (enables collection-wide enumeration)
+        if inventory:
+            inv_lines = [
+                f"[VERIFIED COMPLETE KNOWLEDGE BASE INVENTORY: {len(inventory)} Total Distinct Indexed Documents]",
+            ]
+            for idx, doc_name in enumerate(inventory, start=1):
+                inv_lines.append(f"{idx}. {doc_name}")
+            inv_block = "\n".join(inv_lines)
+            context_texts.insert(0, inv_block)
+            source_metadata.insert(0, {
+                "source": "Verified Knowledge Base Catalog Index",
+                "chunk_id": "catalog_manifest",
+                "document_id": "catalog_manifest",
+                "score": 1.0,
+            })
+
         prompt_context = PromptContext(
             query=query,
             context=context_texts,
             sources=source_metadata,
+            chat_history=chat_history or [],
         )
 
         logger.debug(

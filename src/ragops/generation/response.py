@@ -134,6 +134,17 @@ class ResponseBuilder:
                     llm_response.latency_ms + retrieved_context.retrieval_latency_ms, 2
                 ),
                 "chunks_retrieved": len(retrieved_context.chunks),
+                "retrieved_chunks": [
+                    {
+                        "chunk_id": c.chunk_id,
+                        "document_id": getattr(c, "document_id", ""),
+                        "source": getattr(c, "source", ""),
+                        "page": c.metadata.get("page") if hasattr(c, "metadata") and c.metadata else None,
+                        "score": round(float(getattr(c, "score", 0.0)), 4),
+                        "text": c.text[:300],
+                    }
+                    for c in retrieved_context.chunks
+                ],
             },
         )
 

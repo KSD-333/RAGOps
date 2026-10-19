@@ -4,6 +4,7 @@ import SearchPage from './components/SearchPage';
 import DashboardPage from './components/DashboardPage';
 import DocsPage from './components/DocsPage';
 import ChunkModal from './components/ChunkModal';
+import AuthModal from './components/AuthModal';
 
 export default function App() {
   const getInitialPage = () => {
@@ -20,6 +21,22 @@ export default function App() {
   const [searchInitialQuery, setSearchInitialQuery] = useState('');
   const [isOnline, setIsOnline] = useState(true);
   const [modelName, setModelName] = useState('Groq LLaMA 3.1 70B');
+
+  // Authentication State
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
+  const [currentUser, setCurrentUser] = useState(() => {
+    try {
+      const stored = localStorage.getItem('ragops_user');
+      if (stored) return JSON.parse(stored);
+    } catch (e) {}
+    // Default active user is test1
+    return {
+      id: 2,
+      username: 'test1',
+      email: 'test1@ragops.io',
+      role: 'user',
+    };
+  });
 
   // API base URL for multi-environment: empty string means local origin/proxy, or custom cloud URL
   const [apiBaseUrl, setApiBaseUrl] = useState(() => {
@@ -71,6 +88,12 @@ export default function App() {
     handlePageChange('search');
   };
 
+  const handleLogout = () => {
+    localStorage.removeItem('ragops_token');
+    localStorage.removeItem('ragops_user');
+    setCurrentUser(null);
+  };
+
   return (
     <div className="min-h-screen bg-[#07090e] text-slate-100 flex flex-col font-['Inter'] selection:bg-indigo-500 selection:text-white">
       {/* Top Navigation */}
@@ -80,6 +103,8 @@ export default function App() {
         isOnline={isOnline}
         modelName={modelName}
         apiBaseUrl={apiBaseUrl}
+        currentUser={currentUser}
+        onOpenAuthModal={() => setIsAuthModalOpen(true)}
       />
 
       {/* Main Content Area */}
@@ -89,6 +114,8 @@ export default function App() {
             onChunkClick={(chunk) => setSelectedChunk(chunk)}
             initialQuery={searchInitialQuery}
             apiBaseUrl={apiBaseUrl}
+            currentUser={currentUser}
+            onOpenAuthModal={() => setIsAuthModalOpen(true)}
             onFeedbackRecorded={() => {}}
           />
         )}
@@ -97,6 +124,8 @@ export default function App() {
           <DashboardPage 
             onRerunQuery={handleRerunQuery}
             apiBaseUrl={apiBaseUrl}
+            currentUser={currentUser}
+            onOpenAuthModal={() => setIsAuthModalOpen(true)}
           />
         )}
 
@@ -113,21 +142,31 @@ export default function App() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-3">
           <div className="flex items-center gap-2">
             <span className="w-2 h-2 rounded-full bg-emerald-400" />
-            <span>RAGOps Enterprise Production Stack &bull; ChromaDB + Cross-Encoder + Groq LPUs</span>
+            <span>RAGOps Enterprise Production Stack &bull; PostgreSQL Telemetry + ChromaDB + Cross-Encoder</span>
           </div>
           <div>
-            <span>Strict Grounded Retrieval &bull; Real-time AI Token Telemetry &bull; Zero Hallucination Guardrails</span>
+            <span>Role-Based Access Control &bull; Chunk Provenance &bull; Grounded Inference</span>
           </div>
         </div>
       </footer>
 
-      {/* Chunk Modal Dialog */}
+      {/* Chunk Inspection Dialog */}
       {selectedChunk && (
         <ChunkModal
           chunk={selectedChunk}
           onClose={() => setSelectedChunk(null)}
         />
       )}
+
+      {/* Authentication & User Switcher Modal */}
+      <AuthModal
+        isOpen={isAuthModalOpen}
+        onClose={() => setIsAuthModalOpen(false)}
+        currentUser={currentUser}
+        onLoginSuccess={(user) => setCurrentUser(user)}
+        onLogout={handleLogout}
+        apiBaseUrl={apiBaseUrl}
+      />
     </div>
   );
 }

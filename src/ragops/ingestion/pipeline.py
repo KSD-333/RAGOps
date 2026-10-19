@@ -82,19 +82,63 @@ class IngestionPipeline:
         if metadata:
             raw_doc.metadata.update(metadata)
 
+        # Auto-classify document (policy, code, programme, governance, etc.)
+        from ragops.ingestion.classifier import DocumentClassifier
+        classification = DocumentClassifier.classify(file_path, raw_doc.content[:2500])
+        raw_doc.metadata.update(classification.to_dict())
+
         # 2. Clean
         clean_doc = self._cleaner.clean(raw_doc)
+        clean_doc.metadata.update(classification.to_dict())
 
         # 3. Chunk
         doc_hash = hashlib.sha256(f"{file_path.name}:{eff_version}".encode("utf-8")).hexdigest()[:12]
         document_id = f"doc_{doc_hash}"
         chunks = self._chunker.chunk(clean_doc, document_id, eff_version)
+        for chunk in chunks:
+            chunk.metadata.update(classification.to_dict())
+
+        # 4. Upsert document in database catalog
+        try:
+            from ragops.storage.database import get_session
+            from ragops.storage.models import DocumentModel
+            session = get_session()
+            existing_doc = session.query(DocumentModel).filter(DocumentModel.source == file_path.name).first()
+            if not existing_doc:
+                existing_doc = DocumentModel(
+                    document_id=document_id,
+                    source=file_path.name,
+                    title=classification.title,
+                    doc_type=classification.doc_type,
+                    category=classification.category,
+                    is_policy=classification.is_policy,
+                    governance_level=classification.governance_level,
+                    version=eff_version,
+                    chunk_count=len(chunks),
+                    metadata_json=classification.to_dict(),
+                )
+                session.add(existing_doc)
+            else:
+                existing_doc.chunk_count = len(chunks)
+                existing_doc.version = eff_version
+                existing_doc.title = classification.title
+                existing_doc.doc_type = classification.doc_type
+                existing_doc.category = classification.category
+                existing_doc.is_policy = classification.is_policy
+                existing_doc.governance_level = classification.governance_level
+                existing_doc.metadata_json = classification.to_dict()
+            session.commit()
+            session.close()
+        except Exception as e:
+            logger.warning("failed_to_sync_document_catalog", error=str(e))
 
         logger.info(
             "ingestion_complete",
             source=file_path.name,
             doc_id=document_id,
             chunks=len(chunks),
+            doc_type=classification.doc_type,
+            category=classification.category,
         )
         return chunks
 

@@ -20,6 +20,20 @@ async def submit_feedback(request: FeedbackRequest):
     try:
         service = get_feedback_service()
         response = service.submit(request)
+
+        # Update feedback in PostgreSQL chat_messages
+        try:
+            from ragops.storage.repositories import ChatRepository
+            chat_repo = ChatRepository()
+            rating_val = request.rating.value if hasattr(request.rating, "value") else str(request.rating)
+            chat_repo.update_feedback(
+                trace_id=request.trace_id,
+                rating=rating_val,
+                comment=request.comment or "",
+            )
+        except Exception:
+            pass
+
         return response
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to record feedback: {str(e)}")

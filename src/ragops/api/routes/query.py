@@ -12,6 +12,12 @@ from ragops.core.types import QueryRequest, RAGResponse
 from ragops.ingestion.pipeline import IngestionPipeline
 from ragops.ingestion.schemas import IngestionRequest, IngestionResult
 
+from typing import Optional
+from ragops.storage.repositories import ChatRepository, UserRepository
+from ragops.core.logging import get_logger
+
+logger = get_logger(__name__)
+
 router = APIRouter(tags=["query"])
 
 
@@ -22,6 +28,8 @@ class QueryInput(BaseModel):
     query: str
     top_k: int = Field(default=5, ge=1, le=50)
     filters: dict = Field(default_factory=dict)
+    username: Optional[str] = Field(default="test1", description="Active authenticated user")
+    session_id: Optional[str] = Field(default=None, description="Optional conversational session ID")
 
 
 class IngestInput(BaseModel):
@@ -38,6 +46,7 @@ async def query_rag(input: QueryInput):
     """Query the RAG pipeline and get an answer with citations.
 
     This is the main endpoint for the RAG system.
+    Automatically persists full telemetry and chunk provenance to PostgreSQL.
     """
     pipeline = get_rag_pipeline()
 
@@ -45,10 +54,46 @@ async def query_rag(input: QueryInput):
         query=input.query,
         top_k=input.top_k,
         filters=input.filters,
+        session_id=input.session_id or f"sess_{input.username or 'anon'}",
     )
 
     try:
         response = pipeline.query(request)
+
+        # Asynchronously or safely persist to PostgreSQL
+        try:
+            chat_repo = ChatRepository()
+            user_repo = UserRepository()
+            user_obj = user_repo.get_by_username(input.username or "test1")
+
+            meta = response.metadata or {}
+            citations_list = [s.model_dump() if hasattr(s, "model_dump") else dict(s) for s in response.sources]
+            chunks_list = meta.get("retrieved_chunks", [])
+
+            chat_repo.save_chat_turn(
+                username=input.username or "test1",
+                user_id=user_obj.id if user_obj else None,
+                query=input.query,
+                answer=response.answer,
+                trace_id=response.trace_id,
+                session_id=request.session_id,
+                model=meta.get("model", "groq"),
+                input_tokens=meta.get("input_tokens", 0),
+                output_tokens=meta.get("output_tokens", 0),
+                embed_latency_ms=meta.get("embed_latency_ms", 0.0),
+                search_latency_ms=meta.get("search_latency_ms", 0.0),
+                rerank_latency_ms=meta.get("rerank_latency_ms", 0.0),
+                generation_latency_ms=meta.get("generation_latency_ms", 0.0),
+                total_latency_ms=meta.get("total_latency_ms", 0.0),
+                chunks_sent=chunks_list,
+                citations=citations_list,
+                cache_hit=meta.get("cache_hit", False),
+                rewritten_query=meta.get("rewritten_query", ""),
+                cache_latency_saved_ms=meta.get("latency_saved_ms", 0.0),
+            )
+        except Exception as db_err:
+            logger.warning("chat_turn_db_persistence_failed", error=str(db_err))
+
         return response
     except RetrievalError as e:
         raise HTTPException(status_code=503, detail=f"Retrieval error: {e.message}")
@@ -56,6 +101,41 @@ async def query_rag(input: QueryInput):
         raise HTTPException(status_code=503, detail=f"Generation error: {e.message}")
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Internal error: {str(e)}")
+
+
+# --- Session & Conversation Endpoints (ChatGPT Style) ---
+
+@router.get("/sessions")
+async def list_user_sessions(username: str = "test1"):
+    """Get all conversation sessions for a user, ordered by most recent activity."""
+    try:
+        chat_repo = ChatRepository()
+        sessions = chat_repo.get_user_sessions(username=username)
+        return {"username": username, "sessions": sessions}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to fetch sessions: {str(e)}")
+
+
+@router.get("/sessions/{session_id}")
+async def get_session_history(session_id: str):
+    """Get all messages in a conversation session in chronological order."""
+    try:
+        chat_repo = ChatRepository()
+        messages = chat_repo.get_session_messages(session_id=session_id)
+        return {"session_id": session_id, "messages": messages, "count": len(messages)}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to fetch session messages: {str(e)}")
+
+
+@router.delete("/sessions/{session_id}")
+async def delete_user_session(session_id: str, username: Optional[str] = None):
+    """Delete a conversation session and all its messages."""
+    try:
+        chat_repo = ChatRepository()
+        success = chat_repo.delete_session(session_id=session_id, username=username)
+        return {"session_id": session_id, "deleted": success}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to delete session: {str(e)}")
 
 
 # --- Document Management Endpoints ---
@@ -111,3 +191,57 @@ async def get_document_count():
     """Get the total number of indexed document chunks."""
     retriever = get_retriever()
     return {"count": retriever.document_count}
+
+
+@router.get("/catalog")
+async def get_document_catalog(doc_type: Optional[str] = None):
+    """Get the auto-classified document inventory and classification summary."""
+    try:
+        from ragops.storage.repositories import DocumentCatalogRepository
+        repo = DocumentCatalogRepository()
+        documents = repo.list_documents(doc_type=doc_type)
+        summary = repo.get_summary()
+        return {
+            "summary": summary,
+            "documents": documents,
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to fetch catalog: {str(e)}")
+
+
+@router.get("/cache/stats")
+async def get_cache_statistics():
+    """Get semantic answer cache metrics (hits, hit rate, latency saved, cost saved)."""
+    try:
+        from ragops.storage.repositories import SemanticCacheRepository
+        repo = SemanticCacheRepository()
+        return repo.get_cache_stats()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to fetch cache stats: {str(e)}")
+
+
+@router.get("/cache/entries")
+async def list_cached_queries(limit: int = 50):
+    """List cached queries with scopes, hit counts, and answer previews."""
+    try:
+        from ragops.storage.repositories import SemanticCacheRepository
+        repo = SemanticCacheRepository()
+        return {"entries": repo.list_entries(limit=limit)}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to list cache entries: {str(e)}")
+
+
+@router.delete("/cache")
+async def clear_semantic_cache():
+    """Flush the semantic cache."""
+    try:
+        from ragops.storage.repositories import SemanticCacheRepository
+        repo = SemanticCacheRepository()
+        count = repo.clear_cache()
+        # Also clear in-memory pipeline cache
+        pipeline = get_rag_pipeline()
+        if hasattr(pipeline, "_query_intel"):
+            pipeline._query_intel._memory_cache.clear()
+        return {"status": "cleared", "deleted_entries": count}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to clear cache: {str(e)}")

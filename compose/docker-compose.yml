@@ -94,8 +94,30 @@ services:
     networks:
       - ragops-network
 
+  # --- PostgreSQL Enterprise Telemetry & Chat Database ---
+  postgres:
+    image: postgres:16-alpine
+    container_name: ragops-postgres
+    restart: unless-stopped
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_USER=ragops
+      - POSTGRES_PASSWORD=ragops
+      - POSTGRES_DB=ragops
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ragops -d ragops"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - ragops-network
+
 volumes:
   ragops-data:
+  postgres-data:
   prometheus-data:
   grafana-data:
 

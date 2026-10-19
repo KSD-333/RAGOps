@@ -20,9 +20,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from ragops.api.middleware import RequestLoggingMiddleware
-from ragops.api.routes import health, query, feedback
+from ragops.api.routes import health, query, feedback, auth, admin
 from ragops.core.config import get_settings
 from ragops.core.logging import setup_logging, get_logger
+from ragops.storage.database import init_db
 
 logger = get_logger(__name__)
 
@@ -58,6 +59,12 @@ async def lifespan(app: FastAPI):
         environment=settings.environment,
         model=settings.groq.model,
     )
+
+    # Initialize database tables and seed default dummy users (admin, test1, test2)
+    try:
+        init_db()
+    except Exception as db_err:
+        logger.warning("database_init_failed", error=str(db_err))
 
     # Launch model warmup in background task so Uvicorn opens listening port in <1 second
     asyncio.create_task(_async_warmup())
@@ -129,8 +136,10 @@ def create_app() -> FastAPI:
 
     # --- Routes ---
     app.include_router(health.router, prefix="")
+    app.include_router(auth.router, prefix="/api/v1")
     app.include_router(query.router, prefix="/api/v1")
     app.include_router(feedback.router, prefix="/api/v1")
+    app.include_router(admin.router, prefix="/api/v1")
 
     # --- Static Assets (Preserved Original Web UI) ---
     static_dir = Path(__file__).resolve().parent / "static"
