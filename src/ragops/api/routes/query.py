@@ -106,33 +106,72 @@ async def query_rag(input: QueryInput):
 # --- Session & Conversation Endpoints (ChatGPT Style) ---
 
 @router.get("/sessions")
-async def list_user_sessions(username: str = "test1"):
-    """Get all conversation sessions for a user, ordered by most recent activity."""
+async def list_user_sessions(
+    username: str = "test1",
+    role: Optional[str] = None,
+    filter_user: Optional[str] = None,
+):
+    """Get conversation sessions.
+    - If role == 'admin' and no filter_user or filter_user == 'all': returns all sessions across all users.
+    - If role == 'admin' and filter_user specified: returns all sessions for that user.
+    - If role != 'admin': strictly returns ONLY sessions belonging to the authenticated username.
+    """
     try:
         chat_repo = ChatRepository()
-        sessions = chat_repo.get_user_sessions(username=username)
-        return {"username": username, "sessions": sessions}
+        if role == "admin":
+            if filter_user and filter_user != "all":
+                sessions = chat_repo.get_all_sessions(limit=100, user_filter=filter_user)
+            else:
+                sessions = chat_repo.get_all_sessions(limit=100)
+        else:
+            # Non-admin user can ONLY see their own sessions
+            sessions = chat_repo.get_user_sessions(username=username)
+        return {"username": username, "role": role or "user", "sessions": sessions}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to fetch sessions: {str(e)}")
 
 
 @router.get("/sessions/{session_id}")
-async def get_session_history(session_id: str):
-    """Get all messages in a conversation session in chronological order."""
+async def get_session_history(
+    session_id: str,
+    username: Optional[str] = None,
+    role: Optional[str] = None,
+):
+    """Get all messages in a conversation session in chronological order.
+    Enforces privacy: non-admin users can only view messages from their own sessions.
+    """
     try:
         chat_repo = ChatRepository()
         messages = chat_repo.get_session_messages(session_id=session_id)
+        
+        # Access control: If non-admin user tries to access another user's session
+        if role != "admin" and username and messages:
+            session_owners = {m.get("username") for m in messages if m.get("username")}
+            if session_owners and username not in session_owners:
+                raise HTTPException(
+                    status_code=403, 
+                    detail="Access denied: You do not have permission to view another user's chat history."
+                )
+
         return {"session_id": session_id, "messages": messages, "count": len(messages)}
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to fetch session messages: {str(e)}")
 
 
 @router.delete("/sessions/{session_id}")
-async def delete_user_session(session_id: str, username: Optional[str] = None):
+async def delete_user_session(
+    session_id: str, 
+    username: Optional[str] = None,
+    role: Optional[str] = None,
+):
     """Delete a conversation session and all its messages."""
     try:
         chat_repo = ChatRepository()
-        success = chat_repo.delete_session(session_id=session_id, username=username)
+        # Admin can delete any session; non-admin can only delete their own
+        owner_filter = None if role == "admin" else username
+        success = chat_repo.delete_session(session_id=session_id, username=owner_filter)
         return {"session_id": session_id, "deleted": success}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to delete session: {str(e)}")

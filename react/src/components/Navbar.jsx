@@ -53,17 +53,22 @@ export default function Navbar({ activePage, setActivePage, isOnline, modelName,
             <span>Search &amp; Chat</span>
           </button>
 
-          <button
-            onClick={() => setActivePage('dashboard')}
-            className={`flex items-center gap-2 px-3 sm:px-4 py-1.5 rounded-lg text-xs sm:text-sm font-medium transition-all cursor-pointer ${
-              activePage === 'dashboard'
-                ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/30'
-                : 'text-slate-400 hover:text-slate-200 hover:bg-white/[0.04]'
-            }`}
-          >
-            <LayoutDashboard className="w-4 h-4 shrink-0" />
-            <span>Dashboard</span>
-          </button>
+          {currentUser?.role === 'admin' && (
+            <button
+              onClick={() => setActivePage('dashboard')}
+              className={`flex items-center gap-2 px-3 sm:px-4 py-1.5 rounded-lg text-xs sm:text-sm font-medium transition-all cursor-pointer ${
+                activePage === 'dashboard'
+                  ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/30'
+                  : 'text-slate-400 hover:text-slate-200 hover:bg-white/[0.04]'
+              }`}
+            >
+              <LayoutDashboard className="w-4 h-4 shrink-0 text-amber-400" />
+              <span>Dashboard</span>
+              <span className="text-[9px] px-1.5 py-0.2 rounded font-mono font-bold bg-amber-500/20 text-amber-300">
+                ADMIN
+              </span>
+            </button>
+          )}
 
           <button
             onClick={() => setActivePage('docs')}

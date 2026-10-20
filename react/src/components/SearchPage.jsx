@@ -52,6 +52,9 @@ export default function SearchPage({
   const messagesEndRef = useRef(null);
   const textareaRef = useRef(null);
 
+  // Admin Chat Filtering: 'all' users vs 'my' admin chats
+  const [adminChatFilter, setAdminChatFilter] = useState('all');
+
   // Auto-scroll to bottom of chat
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -61,11 +64,16 @@ export default function SearchPage({
     scrollToBottom();
   }, [messages, loading]);
 
-  // Load existing sessions for the current user
+  // Load existing sessions based on active role (Admin sees all; User sees only their own)
   const fetchSessions = async () => {
     try {
       const username = currentUser?.username || 'test1';
-      const res = await fetch(`${apiBaseUrl}/api/v1/sessions?username=${username}`);
+      const role = currentUser?.role || 'user';
+      let url = `${apiBaseUrl}/api/v1/sessions?username=${encodeURIComponent(username)}&role=${encodeURIComponent(role)}`;
+      if (role === 'admin' && adminChatFilter === 'my') {
+        url += `&filter_user=${encodeURIComponent(username)}`;
+      }
+      const res = await fetch(url);
       if (res.ok) {
         const json = await res.json();
         setSessions(json.sessions || []);
@@ -77,14 +85,16 @@ export default function SearchPage({
 
   useEffect(() => {
     fetchSessions();
-  }, [currentUser, apiBaseUrl]);
+  }, [currentUser, apiBaseUrl, adminChatFilter]);
 
   // Load turn-by-turn messages if an existing session is clicked
   const handleSelectSession = async (sessionId) => {
     setCurrentSessionId(sessionId);
     setLoading(true);
     try {
-      const res = await fetch(`${apiBaseUrl}/api/v1/sessions/${sessionId}`);
+      const username = currentUser?.username || 'test1';
+      const role = currentUser?.role || 'user';
+      const res = await fetch(`${apiBaseUrl}/api/v1/sessions/${sessionId}?username=${encodeURIComponent(username)}&role=${encodeURIComponent(role)}`);
       if (res.ok) {
         const json = await res.json();
         const loaded = (json.messages || []).map((m) => ({
@@ -132,7 +142,9 @@ export default function SearchPage({
     e.stopPropagation();
     if (!confirm('Are you sure you want to delete this chat session?')) return;
     try {
-      const res = await fetch(`${apiBaseUrl}/api/v1/sessions/${sessionId}?username=${currentUser?.username || 'test1'}`, {
+      const username = currentUser?.username || 'test1';
+      const role = currentUser?.role || 'user';
+      const res = await fetch(`${apiBaseUrl}/api/v1/sessions/${sessionId}?username=${encodeURIComponent(username)}&role=${encodeURIComponent(role)}`, {
         method: 'DELETE',
       });
       if (res.ok) {
@@ -313,13 +325,43 @@ export default function SearchPage({
 
         {/* Sessions List */}
         <div className="flex-1 overflow-y-auto p-2 space-y-1">
-          <div className="px-2 py-1 text-[10px] font-bold text-slate-500 uppercase tracking-wider">
-            Conversations History
+          <div className="flex items-center justify-between px-2 py-1">
+            <div className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+              {currentUser?.role === 'admin' ? 'Conversations Audit' : 'Your Conversations'}
+            </div>
+            {currentUser?.role === 'admin' && (
+              <div className="flex items-center gap-1 bg-white/[0.04] p-0.5 rounded-lg border border-white/5">
+                <button
+                  type="button"
+                  onClick={() => setAdminChatFilter('all')}
+                  className={`px-1.5 py-0.5 rounded text-[9px] font-mono font-bold transition-all cursor-pointer ${
+                    adminChatFilter === 'all'
+                      ? 'bg-amber-500 text-black shadow-sm'
+                      : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  All ({sessions.length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setAdminChatFilter('my')}
+                  className={`px-1.5 py-0.5 rounded text-[9px] font-mono font-bold transition-all cursor-pointer ${
+                    adminChatFilter === 'my'
+                      ? 'bg-indigo-600 text-white shadow-sm'
+                      : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  Mine
+                </button>
+              </div>
+            )}
           </div>
 
           {sessions.length === 0 ? (
             <div className="p-4 text-center text-slate-500 text-xs italic">
-              No previous chats recorded yet. Start a new topic!
+              {currentUser?.role === 'admin'
+                ? 'No conversations recorded for this filter.'
+                : 'No previous chats recorded yet. Start a new topic!'}
             </div>
           ) : (
             sessions.map((sess) => {
@@ -337,6 +379,15 @@ export default function SearchPage({
                   <div className="flex items-center gap-2 overflow-hidden pr-1">
                     <MessageSquare className={`w-3.5 h-3.5 shrink-0 ${isActive ? 'text-indigo-400' : 'text-slate-500'}`} />
                     <span className="truncate">{sess.title}</span>
+                    {currentUser?.role === 'admin' && sess.username && (
+                      <span className={`text-[9px] px-1.5 py-0.2 rounded font-mono font-bold shrink-0 ${
+                        sess.username === 'admin'
+                          ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+                          : 'bg-white/10 text-cyan-300'
+                      }`}>
+                        @{sess.username}
+                      </span>
+                    )}
                   </div>
 
                   <button

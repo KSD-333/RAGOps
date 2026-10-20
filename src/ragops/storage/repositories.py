@@ -296,6 +296,7 @@ class ChatRepository:
 
                 result.append({
                     "session_id": s.session_id,
+                    "username": username,
                     "title": title,
                     "message_count": s.message_count,
                     "total_tokens": int(s.total_tokens or 0),

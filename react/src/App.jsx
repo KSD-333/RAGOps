@@ -5,6 +5,7 @@ import DashboardPage from './components/DashboardPage';
 import DocsPage from './components/DocsPage';
 import ChunkModal from './components/ChunkModal';
 import AuthModal from './components/AuthModal';
+import { Lock, ShieldAlert, ArrowLeft, UserCheck } from 'lucide-react';
 
 export default function App() {
   const getInitialPage = () => {
@@ -121,12 +122,50 @@ export default function App() {
         )}
 
         {activePage === 'dashboard' && (
-          <DashboardPage 
-            onRerunQuery={handleRerunQuery}
-            apiBaseUrl={apiBaseUrl}
-            currentUser={currentUser}
-            onOpenAuthModal={() => setIsAuthModalOpen(true)}
-          />
+          currentUser?.role === 'admin' ? (
+            <DashboardPage 
+              onRerunQuery={handleRerunQuery}
+              apiBaseUrl={apiBaseUrl}
+              currentUser={currentUser}
+              onOpenAuthModal={() => setIsAuthModalOpen(true)}
+            />
+          ) : (
+            <div className="max-w-xl mx-auto py-16 px-4 text-center animate-in fade-in duration-200">
+              <div className="p-8 sm:p-10 rounded-3xl bg-[#0b0f19] border border-amber-500/30 shadow-2xl space-y-6">
+                <div className="w-16 h-16 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center mx-auto text-amber-400">
+                  <Lock className="w-8 h-8" />
+                </div>
+                <div className="space-y-2">
+                  <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500/10 text-amber-300 border border-amber-500/20 text-xs font-mono font-bold">
+                    <ShieldAlert className="w-3.5 h-3.5" />
+                    <span>ADMIN ONLY</span>
+                  </div>
+                  <h2 className="text-2xl font-bold text-white font-['Outfit']">
+                    Administrator Access Required
+                  </h2>
+                  <p className="text-sm text-slate-400 max-w-md mx-auto leading-relaxed">
+                    You are currently logged in as <span className="text-cyan-400 font-mono font-bold">@{currentUser?.username || 'user'}</span> (Standard User). The Enterprise Observability, User Directory, and Audit Dashboard is restricted to platform administrators.
+                  </p>
+                </div>
+                <div className="pt-2 flex flex-col sm:flex-row items-center justify-center gap-3">
+                  <button
+                    onClick={() => setIsAuthModalOpen(true)}
+                    className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-black font-semibold text-xs transition-all shadow-lg shadow-amber-500/20 cursor-pointer flex items-center justify-center gap-2"
+                  >
+                    <UserCheck className="w-4 h-4" />
+                    <span>Switch to Admin Account</span>
+                  </button>
+                  <button
+                    onClick={() => handlePageChange('search')}
+                    className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-white/[0.05] hover:bg-white/[0.1] text-slate-300 border border-white/10 font-semibold text-xs transition-all cursor-pointer flex items-center justify-center gap-2"
+                  >
+                    <ArrowLeft className="w-4 h-4" />
+                    <span>Return to Search &amp; Chat</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          )
         )}
 
         {activePage === 'docs' && (

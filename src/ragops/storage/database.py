@@ -103,7 +103,9 @@ def get_session() -> Session:
 
 def get_active_db_type() -> str:
     """Return active database engine type ('postgresql', 'sqlite', or 'sqlite_fallback')."""
-    global _active_db_type
+    global _active_db_type, _engine
+    if _engine is None:
+        get_engine()
     return _active_db_type
 
 
