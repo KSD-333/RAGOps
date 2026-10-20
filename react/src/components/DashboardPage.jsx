@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   Activity, 
   Coins, 
@@ -27,7 +27,19 @@ import {
   Sparkles,
   UserCheck,
   User,
-  ArrowRight
+  ArrowRight,
+  Upload,
+  Globe,
+  Building,
+  FileText,
+  Plus,
+  Trash2,
+  Edit3,
+  Save,
+  RefreshCw,
+  Briefcase,
+  MapPin,
+  Check
 } from 'lucide-react';
 
 export default function DashboardPage({ onRerunQuery, apiBaseUrl = '', currentUser, onOpenAuthModal }) {
@@ -53,6 +65,27 @@ export default function DashboardPage({ onRerunQuery, apiBaseUrl = '', currentUs
   const [catalogFilter, setCatalogFilter] = useState('all'); // 'all' | 'policy' | 'code' | 'programme' | 'governance' | 'manual'
   const [catalogSearch, setCatalogSearch] = useState('');
   const [isClearingCache, setIsClearingCache] = useState(false);
+
+  // Dynamic Company Profile & Web Intelligence States
+  const [companyProfile, setCompanyProfile] = useState(null);
+  const [isScrapingCompany, setIsScrapingCompany] = useState(false);
+  const [scrapeResultMsg, setScrapeResultMsg] = useState('');
+  const [newCompanyUrl, setNewCompanyUrl] = useState('');
+  const [isEditingCompany, setIsEditingCompany] = useState(false);
+  const [companyForm, setCompanyForm] = useState({
+    company_name: '',
+    group_name: '',
+    industry: '',
+    description: '',
+    ceo: '',
+    employee_details: '',
+  });
+
+  // Document Upload States
+  const [isUploadingDoc, setIsUploadingDoc] = useState(false);
+  const [uploadFeedback, setUploadFeedback] = useState(null);
+  const [dragActive, setDragActive] = useState(false);
+  const fileInputRef = useRef(null);
 
   // Billing Configuration (stored in localStorage)
   const [planTokens, setPlanTokens] = useState(() => {
@@ -111,6 +144,23 @@ export default function DashboardPage({ onRerunQuery, apiBaseUrl = '', currentUs
       if (resCache.ok) {
         setCacheStats(await resCache.json());
       }
+
+      // 7. Fetch Dynamic Company Profile
+      const resCompany = await fetch(`${apiBaseUrl}/api/v1/company/profile`);
+      if (resCompany.ok) {
+        const compJson = await resCompany.json();
+        setCompanyProfile(compJson.profile || null);
+        if (compJson.profile) {
+          setCompanyForm({
+            company_name: compJson.profile.company_name || '',
+            group_name: compJson.profile.group_name || '',
+            industry: compJson.profile.industry || '',
+            description: compJson.profile.description || '',
+            ceo: compJson.profile.ceo || '',
+            employee_details: compJson.profile.employee_details || '',
+          });
+        }
+      }
     } catch (err) {
       console.error('Failed to fetch dashboard telemetry:', err);
     } finally {
@@ -130,6 +180,129 @@ export default function DashboardPage({ onRerunQuery, apiBaseUrl = '', currentUs
       console.error('Failed to clear cache:', err);
     } finally {
       setIsClearingCache(false);
+    }
+  };
+
+  const handleAddCompanyUrl = async (e) => {
+    if (e) e.preventDefault();
+    const url = newCompanyUrl.trim();
+    if (!url) return;
+    try {
+      const res = await fetch(`${apiBaseUrl}/api/v1/company/urls`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setCompanyProfile((prev) => ({ ...prev, domains_urls: data.domains_urls }));
+        setNewCompanyUrl('');
+      }
+    } catch (err) {
+      console.error('Failed to add company URL:', err);
+    }
+  };
+
+  const handleRemoveCompanyUrl = async (url) => {
+    try {
+      const res = await fetch(`${apiBaseUrl}/api/v1/company/urls`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setCompanyProfile((prev) => ({ ...prev, domains_urls: data.domains_urls }));
+      }
+    } catch (err) {
+      console.error('Failed to remove URL:', err);
+    }
+  };
+
+  const handleScrapeCompany = async () => {
+    setIsScrapingCompany(true);
+    setScrapeResultMsg('');
+    try {
+      const res = await fetch(`${apiBaseUrl}/api/v1/company/scrape`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      });
+      const data = await res.json();
+      if (res.ok && data.status === 'success') {
+        setCompanyProfile(data.profile);
+        setScrapeResultMsg(`✅ ${data.message}`);
+      } else {
+        setScrapeResultMsg(`⚠️ ${data.message || 'Scrape completed with warnings.'}`);
+      }
+      setTimeout(() => setScrapeResultMsg(''), 7000);
+    } catch (err) {
+      setScrapeResultMsg(`❌ Crawl error: ${err.message}`);
+    } finally {
+      setIsScrapingCompany(false);
+    }
+  };
+
+  const handleSaveCompanyProfile = async (e) => {
+    if (e) e.preventDefault();
+    try {
+      const res = await fetch(`${apiBaseUrl}/api/v1/company/profile`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(companyForm),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setCompanyProfile(data.profile);
+        setIsEditingCompany(false);
+      }
+    } catch (err) {
+      alert(`Failed to update company profile: ${err.message}`);
+    }
+  };
+
+  const handleUploadDocument = async (file) => {
+    if (!file) return;
+    setIsUploadingDoc(true);
+    setUploadFeedback(null);
+    const formData = new FormData();
+    formData.append('file', file);
+    try {
+      const res = await fetch(`${apiBaseUrl}/api/v1/catalog/upload`, {
+        method: 'POST',
+        body: formData,
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || 'Upload failed');
+      setUploadFeedback({
+        type: 'success',
+        message: `Successfully ingested "${data.filename}"! Auto-classified as: ${data.doc_type?.toUpperCase()} (${data.category}) • ${data.chunks_indexed} chunks indexed into ChromaDB.`,
+      });
+      // Refresh catalog data
+      const resCatalog = await fetch(`${apiBaseUrl}/api/v1/catalog`);
+      if (resCatalog.ok) setCatalogData(await resCatalog.json());
+    } catch (err) {
+      setUploadFeedback({
+        type: 'error',
+        message: `Upload failed: ${err.message}`,
+      });
+    } finally {
+      setIsUploadingDoc(false);
+    }
+  };
+
+  const handleDeleteDocument = async (source) => {
+    if (!confirm(`Are you sure you want to remove "${source}" from PostgreSQL and vector index?`)) return;
+    try {
+      const res = await fetch(`${apiBaseUrl}/api/v1/catalog/${encodeURIComponent(source)}`, {
+        method: 'DELETE',
+      });
+      if (res.ok) {
+        const resCatalog = await fetch(`${apiBaseUrl}/api/v1/catalog`);
+        if (resCatalog.ok) setCatalogData(await resCatalog.json());
+      }
+    } catch (err) {
+      console.error('Failed to delete document:', err);
     }
   };
 
@@ -1079,25 +1252,381 @@ export default function DashboardPage({ onRerunQuery, apiBaseUrl = '', currentUs
       )}
 
       {/* =====================================================================
-          TAB 5: DOCUMENT CATALOG & AUTO-CLASSIFICATION
+          TAB 5: DOCUMENT CATALOG & COMPANY INTELLIGENCE
           ===================================================================== */}
       {activeTab === 'catalog' && (
-        <div className="space-y-6 animate-in fade-in duration-150">
+        <div className="space-y-8 animate-in fade-in duration-150">
           
-          {/* Header & Subtitle */}
-          <div className="flex flex-wrap items-center justify-between gap-4">
-            <div>
-              <h2 className="text-xl font-bold text-white font-['Outfit'] flex items-center gap-2">
-                <Database className="w-5 h-5 text-indigo-400" />
-                <span>Automated Document Catalog &amp; Corporate Classifications</span>
-              </h2>
-              <p className="text-xs text-slate-400 mt-1">
-                Every document parsed during ingestion is automatically classified into Policy, Code, Programme, Governance, or Manual with business category tags.
-              </p>
+          {/* Section 1: Dynamic Company Profile & Multi-URL MNC Knowledge Tool */}
+          <div className="p-6 rounded-2xl bg-gradient-to-br from-[#0c101a] via-[#0f1424] to-[#12192e] border border-indigo-500/30 shadow-2xl space-y-6">
+            <div className="flex flex-wrap items-center justify-between gap-4 border-b border-white/10 pb-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-indigo-600/30 border border-indigo-500/40 flex items-center justify-center text-indigo-400 shadow-md">
+                  <Building className="w-5 h-5" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2.5">
+                    <h2 className="text-lg font-bold text-white font-['Outfit']">
+                      {companyProfile?.company_name || 'Enterprise Corporate Profile'}
+                    </h2>
+                    {companyProfile?.group_name && (
+                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 font-mono font-bold">
+                        {companyProfile.group_name}
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    Dynamic corporate facts stored in PostgreSQL • Grounding AI answers without hardcoding
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setIsEditingCompany(!isEditingCompany)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-xs font-semibold text-slate-300 hover:text-white transition-all cursor-pointer"
+                >
+                  <Edit3 className="w-3.5 h-3.5 text-indigo-400" />
+                  <span>{isEditingCompany ? 'Cancel Edit' : 'Edit Profile'}</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={handleScrapeCompany}
+                  disabled={isScrapingCompany}
+                  className="flex items-center gap-2 px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-500 hover:to-indigo-600 text-white text-xs font-semibold transition-all shadow-md shadow-indigo-600/25 cursor-pointer disabled:opacity-50"
+                  title="Crawl all registered MNC URLs and extract corporate facts with Groq LLM"
+                >
+                  <Globe className={`w-3.5 h-3.5 ${isScrapingCompany ? 'animate-spin' : ''}`} />
+                  <span>{isScrapingCompany ? 'Crawling & Extracting...' : 'Crawl & Auto-Extract Details'}</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Live Scrape Status Alert */}
+            {scrapeResultMsg && (
+              <div className="p-3.5 rounded-xl bg-indigo-950/40 border border-indigo-500/40 text-xs text-indigo-200 animate-in fade-in duration-200 font-mono">
+                {scrapeResultMsg}
+              </div>
+            )}
+
+            {/* Edit Profile Form Mode */}
+            {isEditingCompany ? (
+              <form onSubmit={handleSaveCompanyProfile} className="space-y-4 pt-2">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
+                  <div>
+                    <label className="block text-slate-400 mb-1 font-semibold">Legal Company Name</label>
+                    <input
+                      type="text"
+                      value={companyForm.company_name}
+                      onChange={(e) => setCompanyForm({ ...companyForm, company_name: e.target.value })}
+                      className="w-full px-3 py-2 bg-black/40 border border-white/10 rounded-xl text-white font-sans focus:outline-none focus:border-indigo-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-slate-400 mb-1 font-semibold">Parent / MNC Group Name</label>
+                    <input
+                      type="text"
+                      value={companyForm.group_name}
+                      onChange={(e) => setCompanyForm({ ...companyForm, group_name: e.target.value })}
+                      className="w-full px-3 py-2 bg-black/40 border border-white/10 rounded-xl text-white font-sans focus:outline-none focus:border-indigo-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-slate-400 mb-1 font-semibold">Industry Sector</label>
+                    <input
+                      type="text"
+                      value={companyForm.industry}
+                      onChange={(e) => setCompanyForm({ ...companyForm, industry: e.target.value })}
+                      className="w-full px-3 py-2 bg-black/40 border border-white/10 rounded-xl text-white font-sans focus:outline-none focus:border-indigo-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-slate-400 mb-1 font-semibold">Leadership (CEO / Managing Director)</label>
+                    <input
+                      type="text"
+                      value={companyForm.ceo}
+                      onChange={(e) => setCompanyForm({ ...companyForm, ceo: e.target.value })}
+                      className="w-full px-3 py-2 bg-black/40 border border-white/10 rounded-xl text-white font-sans focus:outline-none focus:border-indigo-500"
+                    />
+                  </div>
+                  <div className="sm:col-span-2">
+                    <label className="block text-slate-400 mb-1 font-semibold">Corporate Overview / Description</label>
+                    <textarea
+                      rows={2}
+                      value={companyForm.description}
+                      onChange={(e) => setCompanyForm({ ...companyForm, description: e.target.value })}
+                      className="w-full px-3 py-2 bg-black/40 border border-white/10 rounded-xl text-white font-sans focus:outline-none focus:border-indigo-500 resize-none"
+                    />
+                  </div>
+                  <div className="sm:col-span-2">
+                    <label className="block text-slate-400 mb-1 font-semibold">Workforce &amp; Plant Details</label>
+                    <input
+                      type="text"
+                      value={companyForm.employee_details}
+                      onChange={(e) => setCompanyForm({ ...companyForm, employee_details: e.target.value })}
+                      className="w-full px-3 py-2 bg-black/40 border border-white/10 rounded-xl text-white font-sans focus:outline-none focus:border-indigo-500"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-3 pt-2">
+                  <button
+                    type="submit"
+                    className="flex items-center gap-2 px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold cursor-pointer shadow-md shadow-emerald-600/30 transition-all"
+                  >
+                    <Save className="w-3.5 h-3.5" />
+                    <span>Save to PostgreSQL</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setIsEditingCompany(false)}
+                    className="px-3.5 py-2 rounded-xl bg-white/5 hover:bg-white/10 text-slate-400 hover:text-white text-xs font-semibold cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </form>
+            ) : (
+              /* View Profile Mode */
+              <div className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
+                  <div className="p-3.5 rounded-xl bg-white/[0.02] border border-white/5 space-y-1">
+                    <div className="text-slate-400 font-semibold uppercase text-[10px] tracking-wider flex items-center gap-1.5">
+                      <Briefcase className="w-3.5 h-3.5 text-indigo-400" />
+                      <span>Industry &amp; Overview</span>
+                    </div>
+                    <div className="text-white font-medium">{companyProfile?.industry || 'Mechanical Engineering'}</div>
+                    <p className="text-[11px] text-slate-400 leading-relaxed mt-1">
+                      {companyProfile?.description || 'Leading manufacturer of drive systems and transmissions.'}
+                    </p>
+                  </div>
+
+                  <div className="p-3.5 rounded-xl bg-white/[0.02] border border-white/5 space-y-1">
+                    <div className="text-slate-400 font-semibold uppercase text-[10px] tracking-wider flex items-center gap-1.5">
+                      <UserCheck className="w-3.5 h-3.5 text-cyan-400" />
+                      <span>Leadership &amp; Workforce</span>
+                    </div>
+                    <div className="text-white font-medium">{companyProfile?.ceo || 'Enrico Carraro / Balaji M.'}</div>
+                    <p className="text-[11px] text-slate-400 leading-relaxed mt-1">
+                      {companyProfile?.employee_details || '1,500+ employees across manufacturing facilities.'}
+                    </p>
+                    {companyProfile?.directors && companyProfile.directors.length > 0 && (
+                      <div className="pt-1.5 text-[10px] text-slate-400">
+                        <strong className="text-slate-300">Directors:</strong> {companyProfile.directors.slice(0, 3).join(', ')}
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="p-3.5 rounded-xl bg-white/[0.02] border border-white/5 space-y-1">
+                    <div className="text-slate-400 font-semibold uppercase text-[10px] tracking-wider flex items-center gap-1.5">
+                      <MapPin className="w-3.5 h-3.5 text-emerald-400" />
+                      <span>Global &amp; Regional Locations</span>
+                    </div>
+                    <div className="space-y-1 pt-1">
+                      {companyProfile?.locations && companyProfile.locations.length > 0 ? (
+                        companyProfile.locations.map((loc, lIdx) => (
+                          <div key={lIdx} className="text-[11px] text-slate-300 flex items-center gap-1.5">
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0" />
+                            <span>
+                              {typeof loc === 'string' ? loc : `${loc.city}, ${loc.state || ''} — ${loc.type || 'Facility'}`}
+                            </span>
+                          </div>
+                        ))
+                      ) : (
+                        <div className="text-[11px] text-slate-400">Pune, Maharashtra &amp; Global Headquarters (Italy)</div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Products & Transmissions */}
+                {companyProfile?.products && companyProfile.products.length > 0 && (
+                  <div className="p-3.5 rounded-xl bg-white/[0.02] border border-white/5 space-y-2">
+                    <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                      Manufacturing Products &amp; Precision Mechanical Solutions:
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      {companyProfile.products.map((prod, pIdx) => (
+                        <span
+                          key={pIdx}
+                          className="px-2.5 py-1 rounded-lg bg-indigo-500/10 border border-indigo-500/25 text-indigo-300 font-mono text-[11px] font-semibold flex items-center gap-1"
+                        >
+                          <Zap className="w-3 h-3 text-indigo-400" />
+                          <span>{prod}</span>
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* MNC Multi-URL Management */}
+            <div className="pt-4 border-t border-white/10 space-y-3">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-2">
+                  <Globe className="w-4 h-4 text-cyan-400" />
+                  <span>Registered MNC Domains &amp; Live Inspection URLs (Multi-Location Support)</span>
+                </div>
+                <span className="text-[10px] font-mono text-slate-400">
+                  {companyProfile?.domains_urls?.length || 0} Registered URLs
+                </span>
+              </div>
+
+              {/* URL Pills List */}
+              <div className="flex flex-wrap items-center gap-2">
+                {companyProfile?.domains_urls && companyProfile.domains_urls.length > 0 ? (
+                  companyProfile.domains_urls.map((u, uIdx) => (
+                    <div
+                      key={uIdx}
+                      className="group flex items-center gap-2 px-3 py-1.5 rounded-xl bg-black/40 border border-white/10 text-xs font-mono text-cyan-300 hover:border-cyan-500/40 transition-all"
+                    >
+                      <a
+                        href={u}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="flex items-center gap-1.5 hover:underline truncate max-w-xs"
+                      >
+                        <span>{u}</span>
+                        <ExternalLink className="w-3 h-3 text-slate-500 group-hover:text-cyan-300" />
+                      </a>
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveCompanyUrl(u)}
+                        title="Remove URL"
+                        className="text-slate-500 hover:text-rose-400 transition-colors cursor-pointer"
+                      >
+                        <Trash2 className="w-3 h-3" />
+                      </button>
+                    </div>
+                  ))
+                ) : (
+                  <div className="text-xs text-slate-500 italic">No corporate URLs registered yet.</div>
+                )}
+              </div>
+
+              {/* Add New URL Input */}
+              <form onSubmit={handleAddCompanyUrl} className="flex items-center gap-2 max-w-xl pt-1">
+                <input
+                  type="url"
+                  placeholder="Add new MNC domain / location portal (e.g. https://www.carraro.com)..."
+                  value={newCompanyUrl}
+                  onChange={(e) => setNewCompanyUrl(e.target.value)}
+                  className="flex-1 px-3 py-1.5 bg-black/40 border border-white/10 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 font-mono"
+                />
+                <button
+                  type="submit"
+                  disabled={!newCompanyUrl.trim()}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 text-white text-xs font-semibold cursor-pointer transition-all shrink-0"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>Add URL</span>
+                </button>
+              </form>
             </div>
           </div>
 
-          {/* Classification Breakdown Summary Cards */}
+          {/* Section 2: Document Ingestion & Auto-Classification Upload Zone */}
+          <div className="p-6 rounded-2xl bg-[#0f1422] border border-white/10 shadow-xl space-y-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h3 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
+                  <Upload className="w-4 h-4 text-cyan-400" />
+                  <span>Upload &amp; Auto-Classify New Document (PDF, Markdown, TXT)</span>
+                </h3>
+                <p className="text-xs text-slate-400 mt-1">
+                  Upload any document to automatically classify category, chunk, compute dense embeddings, and store in PostgreSQL &amp; ChromaDB.
+                </p>
+              </div>
+            </div>
+
+            {/* Upload Feedback Alert */}
+            {uploadFeedback && (
+              <div className={`p-4 rounded-xl border text-xs flex items-center justify-between animate-in fade-in duration-200 ${
+                uploadFeedback.type === 'success' 
+                  ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300' 
+                  : 'bg-rose-500/10 border-rose-500/30 text-rose-300'
+              }`}>
+                <div className="flex items-center gap-2">
+                  {uploadFeedback.type === 'success' ? (
+                    <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                  ) : (
+                    <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0" />
+                  )}
+                  <span>{uploadFeedback.message}</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setUploadFeedback(null)}
+                  className="text-slate-400 hover:text-white text-xs font-bold cursor-pointer ml-3"
+                >
+                  &times;
+                </button>
+              </div>
+            )}
+
+            {/* Drag & Drop Area */}
+            <div
+              onClick={() => !isUploadingDoc && fileInputRef.current?.click()}
+              onDragOver={(e) => { e.preventDefault(); setDragActive(true); }}
+              onDragLeave={() => setDragActive(false)}
+              onDrop={(e) => {
+                e.preventDefault();
+                setDragActive(false);
+                if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+                  handleUploadDocument(e.dataTransfer.files[0]);
+                }
+              }}
+              className={`p-6 rounded-2xl border-2 border-dashed transition-all flex flex-col items-center justify-center text-center space-y-3 cursor-pointer select-none ${
+                dragActive
+                  ? 'border-indigo-500 bg-indigo-500/10'
+                  : 'border-white/10 hover:border-indigo-500/40 bg-white/[0.01] hover:bg-white/[0.02]'
+              }`}
+            >
+              <div className="w-12 h-12 rounded-2xl bg-indigo-600/20 text-indigo-400 flex items-center justify-center border border-indigo-500/30 shadow-md pointer-events-none">
+                {isUploadingDoc ? (
+                  <RotateCw className="w-6 h-6 animate-spin text-cyan-400" />
+                ) : (
+                  <FileText className="w-6 h-6 text-indigo-400" />
+                )}
+              </div>
+
+              {isUploadingDoc ? (
+                <div className="space-y-1 pointer-events-none">
+                  <div className="text-sm font-semibold text-white">Analyzing &amp; Embedding Document...</div>
+                  <p className="text-xs text-slate-400">
+                    Running DocumentClassifier, generating 384d vectors, and updating PostgreSQL document catalog.
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-1 pointer-events-none">
+                  <div className="text-sm font-semibold text-white">
+                    Drag and drop your document here, or <span className="text-indigo-400 underline">browse files</span>
+                  </div>
+                  <p className="text-xs text-slate-500">
+                    Supported: PDF, Markdown (.md), TXT (e.g. Employee Handbooks, IT Standard Runbooks, Vendor Policies)
+                  </p>
+                </div>
+              )}
+
+              <input
+                ref={fileInputRef}
+                type="file"
+                disabled={isUploadingDoc}
+                accept=".pdf,.md,.markdown,.txt"
+                onChange={(e) => {
+                  if (e.target.files && e.target.files[0]) {
+                    handleUploadDocument(e.target.files[0]);
+                    e.target.value = '';
+                  }
+                }}
+                className="hidden"
+              />
+            </div>
+          </div>
+
+          {/* Section 3: Classification Breakdown Summary Cards */}
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
             <div className="p-4 rounded-xl bg-[#0f1422] border border-white/10">
               <div className="text-[11px] font-semibold text-slate-400 uppercase">Total Files</div>
@@ -1142,7 +1671,7 @@ export default function DashboardPage({ onRerunQuery, apiBaseUrl = '', currentUs
             </div>
           </div>
 
-          {/* Filter Bar & Search */}
+          {/* Section 4: Filter Bar & Search */}
           <div className="p-4 rounded-2xl bg-[#0f1422] border border-white/10 flex flex-wrap items-center justify-between gap-4">
             <div className="flex flex-wrap items-center gap-2">
               <span className="text-xs font-semibold text-slate-400 flex items-center gap-1.5 mr-2">
@@ -1183,7 +1712,7 @@ export default function DashboardPage({ onRerunQuery, apiBaseUrl = '', currentUs
             </div>
           </div>
 
-          {/* Document Inventory Table */}
+          {/* Section 5: Document Inventory Table with Delete Action */}
           <div className="rounded-2xl bg-[#0f1422] border border-white/10 overflow-hidden shadow-xl">
             <div className="overflow-x-auto">
               <table className="w-full text-left text-xs">
@@ -1195,6 +1724,7 @@ export default function DashboardPage({ onRerunQuery, apiBaseUrl = '', currentUs
                     <th className="py-3.5 px-4">Business Category</th>
                     <th className="py-3.5 px-4">Governance Level</th>
                     <th className="py-3.5 px-4">Source Filename</th>
+                    <th className="py-3.5 px-4 text-right">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-white/5 font-sans">
@@ -1238,6 +1768,16 @@ export default function DashboardPage({ onRerunQuery, apiBaseUrl = '', currentUs
                         </td>
                         <td className="py-3 px-4 font-mono text-[11px] text-slate-400 truncate max-w-xs">
                           {doc.source}
+                        </td>
+                        <td className="py-3 px-4 text-right">
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteDocument(doc.source)}
+                            title={`Delete ${doc.source}`}
+                            className="p-1.5 rounded-lg text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 transition-colors cursor-pointer"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
                         </td>
                       </tr>
                     ))}
