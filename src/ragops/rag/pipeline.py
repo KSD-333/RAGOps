@@ -104,12 +104,21 @@ class RAGPipeline:
 
         # Conversational Chitchat & Acknowledgment handling (e.g. "ohk", "thanks", "hello")
         if intent.scope == "conversational":
+            comp_name = "Enterprise"
+            try:
+                from ragops.storage.repositories import CompanyRepository
+                prof = CompanyRepository().get_profile()
+                if prof and prof.get("company_name"):
+                    comp_name = prof["company_name"]
+            except Exception:
+                pass
+
             if intent.intent_type == "conversational_greeting":
-                reply = "Hello! I am your RAGOps corporate policy assistant for Carraro India Limited. How can I help you navigate our company policies, codes of conduct, or governance guidelines today?"
+                reply = f"Hello! I am your RAGOps corporate assistant for {comp_name}. How can I help you navigate our company facts, locations, policies, codes of conduct, or governance guidelines today?"
             elif intent.intent_type == "conversational_acknowledgment":
-                reply = "You're welcome! Feel free to ask if you have any questions about company policies, POSH procedures, or board guidelines."
+                reply = "You're welcome! Feel free to ask if you have any questions about company operations, locations, clients, policies, or procedures."
             else:
-                reply = "Please enter a specific question or policy topic to search across the knowledge base (e.g. 'What is the company name?', 'How many company policies exist?', or 'POSH complaint procedure')."
+                reply = "Please enter a specific question or topic to search across the knowledge base (e.g. 'What are all company locations?', 'Who are key clients?', or 'POSH complaint procedure')."
 
             return RAGResponse(
                 query=request.query,
@@ -152,6 +161,33 @@ class RAGPipeline:
             query=processed_query.search_query,
             top_k=request.top_k,
         )
+
+        # Dynamic Web & Company Profile Tool:
+        # If user asks about locations, clients, products, employees, founding background, or live facts,
+        # synthesize dynamic context from PostgreSQL profile and registered MNC URLs
+        try:
+            from ragops.tools.web_extractor import CompanyWebExtractor
+            from ragops.core.types import RetrievedChunk
+            web_tool = CompanyWebExtractor()
+            active_q = intent.rewritten_query if intent.is_rewritten else processed_query.original
+            web_chunks = web_tool.fetch_dynamic_web_context(query=active_q, top_n_chunks=4)
+            if web_chunks:
+                priority_chunks = [
+                    RetrievedChunk(
+                        chunk_id=f"web_{abs(hash(wc['text'][:40])) % 1000000}",
+                        document_id=wc.get("document", "Corporate Profile"),
+                        text=wc["text"],
+                        score=wc.get("score", 0.98),
+                        source=wc["source"],
+                        metadata={"url": wc.get("url", ""), "provenance": "dynamic_corporate_tool", "is_priority": True},
+                    )
+                    for wc in web_chunks
+                ]
+                # Prepend dynamic corporate chunks to top of context so they are never sliced away
+                retrieved_context.chunks = priority_chunks + retrieved_context.chunks
+        except Exception as web_err:
+            logger.debug("dynamic_web_lookup_skipped", error=str(web_err))
+
 
         # 5. Detect collection-wide enumeration queries
         q_lower = (intent.rewritten_query if intent.is_rewritten else processed_query.original).lower()

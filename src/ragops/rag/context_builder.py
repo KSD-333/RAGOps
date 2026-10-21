@@ -40,12 +40,22 @@ class ContextBuilder:
         Deduplicates chunks, respects length limits, formats source metadata,
         and optionally injects verified document inventory for enumeration queries.
         """
-        chunks = retrieved_context.chunks[: self._max_chunks]
+        # Partition into priority grounding chunks (corporate facts/profile) and standard retrieved chunks
+        priority_chunks = [
+            c for c in retrieved_context.chunks
+            if c.metadata.get("is_priority") or c.document_id == "corporate_profile" or "Corporate" in c.source
+        ]
+        regular_chunks = [
+            c for c in retrieved_context.chunks
+            if not (c.metadata.get("is_priority") or c.document_id == "corporate_profile" or "Corporate" in c.source)
+        ]
+
+        candidate_chunks = priority_chunks + regular_chunks[: self._max_chunks]
 
         # Deduplicate by text content
         seen_texts: set[str] = set()
         unique_chunks = []
-        for chunk in chunks:
+        for chunk in candidate_chunks:
             text_key = chunk.text.strip()[:200]  # First 200 chars as dedup key
             if text_key not in seen_texts:
                 seen_texts.add(text_key)

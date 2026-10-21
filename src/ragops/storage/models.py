@@ -201,3 +201,35 @@ class TraceModel(Base):
     total_latency_ms = Column(Float, default=0.0)
     chunks_retrieved = Column(Integer, default=0)
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+
+
+class CompanyProfileModel(Base):
+    """Dynamic company profile and knowledge grounding.
+
+    Stores real-world enterprise facts:
+    - Company name & Group name
+    - Industry and corporate description
+    - Products, services, and solutions (JSON list or dict)
+    - Employee count, structure, and details
+    - Locations (headquarters, manufacturing plants, regional offices)
+    - Leadership (Current CEO, Managing Directors, Board members)
+    - Registered MNC domains & URLs (JSON list of strings)
+    - Additional extracted metadata (ratings, certifications, stock symbols, etc.)
+    """
+    __tablename__ = "company_profiles"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    company_name = Column(String(200), nullable=False, default="Carraro India Limited")
+    group_name = Column(String(200), nullable=False, default="Carraro Group")
+    industry = Column(String(100), default="Automotive & Mechanical Transmission Systems")
+    description = Column(Text, default="")
+    products = Column(JSON, default=list)  # list of products/services
+    employee_details = Column(Text, default="")
+    locations = Column(JSON, default=list)  # list of plants / offices / regions
+    ceo = Column(String(200), default="")
+    directors = Column(JSON, default=list)  # list of directors/key executives
+    domains_urls = Column(JSON, default=list)  # list of corporate URLs / branch links
+    metadata_json = Column(JSON, default=dict)
+    updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+

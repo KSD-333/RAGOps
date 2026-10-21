@@ -6,7 +6,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any, Optional
 
-from sqlalchemy import desc, func
+from sqlalchemy import cast, desc, func, Integer
 
 from ragops.core.auth import UserProfile, verify_password
 from ragops.core.logging import get_logger
@@ -349,8 +349,8 @@ class ChatRepository:
                     func.coalesce(func.sum(ChatMessageModel.total_tokens), 0).label("total_tokens"),
                     func.coalesce(func.sum(ChatMessageModel.cost_usd), 0.0).label("total_cost"),
                     func.max(ChatMessageModel.created_at).label("last_activity"),
-                    func.max(ChatMessageModel.policy_risk_flag).label("has_policy_risk"),
-                    func.max(ChatMessageModel.churn_risk_flag).label("has_churn_risk"),
+                    func.max(cast(ChatMessageModel.policy_risk_flag, Integer)).label("has_policy_risk"),
+                    func.max(cast(ChatMessageModel.churn_risk_flag, Integer)).label("has_churn_risk"),
                 )
             )
             if user_filter:
@@ -747,3 +747,128 @@ class SemanticCacheRepository:
             return 0
         finally:
             session.close()
+
+
+# -----------------------------------------------------------------------------
+# Company Profile Repository
+# -----------------------------------------------------------------------------
+
+class CompanyRepository:
+    """Repository for managing dynamic company profile and MNC domains/URLs."""
+
+    def get_profile(self) -> dict[str, Any]:
+        """Fetch the current company profile from PostgreSQL."""
+        session = get_session()
+        try:
+            from ragops.storage.models import CompanyProfileModel
+            profile = session.query(CompanyProfileModel).first()
+            if not profile:
+                return {}
+            return self._to_dict(profile)
+        finally:
+            session.close()
+
+    def update_profile(self, data: dict[str, Any]) -> dict[str, Any]:
+        """Update or create the company profile."""
+        session = get_session()
+        try:
+            from ragops.storage.models import CompanyProfileModel
+            profile = session.query(CompanyProfileModel).first()
+            if not profile:
+                profile = CompanyProfileModel()
+                session.add(profile)
+
+            updatable_fields = [
+                "company_name",
+                "group_name",
+                "industry",
+                "description",
+                "products",
+                "employee_details",
+                "locations",
+                "ceo",
+                "directors",
+                "domains_urls",
+                "metadata_json",
+            ]
+            for field in updatable_fields:
+                if field in data:
+                    setattr(profile, field, data[field])
+
+            # Gracefully handle clients and hubs passed at top level
+            if "clients" in data or "hubs" in data:
+                current_meta = dict(profile.metadata_json or {})
+                if "clients" in data:
+                    current_meta["clients"] = data["clients"]
+                if "hubs" in data:
+                    current_meta["hubs"] = data["hubs"]
+                profile.metadata_json = current_meta
+
+            profile.updated_at = datetime.now(timezone.utc)
+            session.commit()
+            session.refresh(profile)
+            return self._to_dict(profile)
+        except Exception as e:
+            session.rollback()
+            logger.error("update_company_profile_failed", error=str(e))
+            raise
+        finally:
+            session.close()
+
+    def add_domain_url(self, url: str) -> dict[str, Any]:
+        """Append a domain/URL to the list of registered corporate MNC URLs."""
+        session = get_session()
+        try:
+            from ragops.storage.models import CompanyProfileModel
+            profile = session.query(CompanyProfileModel).first()
+            if not profile:
+                profile = CompanyProfileModel()
+                session.add(profile)
+
+            urls = list(profile.domains_urls or [])
+            clean_url = url.strip()
+            if clean_url and clean_url not in urls:
+                urls.append(clean_url)
+                profile.domains_urls = urls
+                profile.updated_at = datetime.now(timezone.utc)
+                session.commit()
+                session.refresh(profile)
+            return self._to_dict(profile)
+        finally:
+            session.close()
+
+    def remove_domain_url(self, url: str) -> dict[str, Any]:
+        """Remove a domain/URL from the profile."""
+        session = get_session()
+        try:
+            from ragops.storage.models import CompanyProfileModel
+            profile = session.query(CompanyProfileModel).first()
+            if profile and profile.domains_urls:
+                urls = [u for u in profile.domains_urls if u.strip() != url.strip()]
+                profile.domains_urls = urls
+                profile.updated_at = datetime.now(timezone.utc)
+                session.commit()
+                session.refresh(profile)
+            return self._to_dict(profile) if profile else {}
+        finally:
+            session.close()
+
+    @staticmethod
+    def _to_dict(p: Any) -> dict[str, Any]:
+        return {
+            "id": p.id,
+            "company_name": p.company_name,
+            "group_name": p.group_name,
+            "industry": p.industry,
+            "description": p.description,
+            "products": p.products or [],
+            "employee_details": p.employee_details or "",
+            "locations": p.locations or [],
+            "ceo": p.ceo or "",
+            "directors": p.directors or [],
+            "domains_urls": p.domains_urls or [],
+            "metadata_json": p.metadata_json or {},
+            "updated_at": str(p.updated_at) if p.updated_at else "",
+            "created_at": str(p.created_at) if p.created_at else "",
+        }
+

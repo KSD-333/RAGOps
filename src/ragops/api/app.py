@@ -20,7 +20,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from ragops.api.middleware import RequestLoggingMiddleware
-from ragops.api.routes import health, query, feedback, auth, admin
+from ragops.api.routes import health, query, feedback, auth, admin, company
 from ragops.core.config import get_settings
 from ragops.core.logging import setup_logging, get_logger
 from ragops.storage.database import init_db
@@ -140,6 +140,7 @@ def create_app() -> FastAPI:
     app.include_router(query.router, prefix="/api/v1")
     app.include_router(feedback.router, prefix="/api/v1")
     app.include_router(admin.router, prefix="/api/v1")
+    app.include_router(company.router, prefix="/api/v1")
 
     # --- Static Assets (Preserved Original Web UI) ---
     static_dir = Path(__file__).resolve().parent / "static"
@@ -149,8 +150,8 @@ def create_app() -> FastAPI:
     # --- Modern React UI Assets ---
     def get_react_assets_dir() -> Path | None:
         candidates = [
-            Path(__file__).resolve().parent / "static_react" / "assets",
             Path.cwd() / "react" / "dist" / "assets",
+            Path(__file__).resolve().parent / "static_react" / "assets",
             Path.cwd() / "src" / "ragops" / "api" / "static_react" / "assets",
             Path("/app/react/dist/assets"),
             Path("/opt/render/project/src/react/dist/assets"),

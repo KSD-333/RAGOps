@@ -42,10 +42,62 @@ RAG_USER_PROMPT_TEMPLATE = """{history_block}## Context Documents:
 
 
 def build_system_prompt() -> str:
-    """Build the system prompt from config or use default."""
+    """Build the system prompt dynamically from PostgreSQL company_profiles or configuration."""
     settings = get_settings()
     custom_prompt = settings.yaml_config.get("system_prompt")
-    return custom_prompt if custom_prompt else DEFAULT_SYSTEM_PROMPT
+    if custom_prompt:
+        return custom_prompt
+
+    try:
+        from ragops.storage.repositories import CompanyRepository
+        profile = CompanyRepository().get_profile()
+        if profile and profile.get("company_name"):
+            c_name = profile.get("company_name", "Enterprise")
+            g_name = profile.get("group_name", "")
+            industry = profile.get("industry", "Industrial & Manufacturing")
+            desc = profile.get("description", "")
+            prods = ", ".join(profile.get("products", [])) if isinstance(profile.get("products"), list) else str(profile.get("products", ""))
+            emp = profile.get("employee_details", "")
+            locs = ", ".join([f"{l.get('city', '')} ({l.get('type', '')})" for l in profile.get("locations", []) if isinstance(l, dict)]) if isinstance(profile.get("locations"), list) else str(profile.get("locations", ""))
+            ceo = profile.get("ceo", "")
+            dirs = ", ".join(profile.get("directors", [])) if isinstance(profile.get("directors"), list) else str(profile.get("directors", ""))
+            urls = ", ".join(profile.get("domains_urls", [])) if isinstance(profile.get("domains_urls"), list) else str(profile.get("domains_urls", ""))
+            meta = profile.get("metadata_json") or {}
+            clients = ", ".join(meta.get("clients", [])) if isinstance(meta.get("clients"), list) else str(meta.get("clients", ""))
+            hubs = ", ".join(meta.get("hubs", [])) if isinstance(meta.get("hubs"), list) else str(meta.get("hubs", ""))
+            ratings = meta.get("ratings", "")
+            f_year = meta.get("founded_year", "")
+
+            return f"""You are the official enterprise AI compliance and corporate intelligence assistant for {c_name} (part of {g_name}).
+
+## Dynamic Corporate Profile (Indexed from PostgreSQL & Live MNC Web Tools):
+- Legal Entity: {c_name}
+- Parent / Group: {g_name}
+- Industry Sector: {industry}
+- Corporate Summary: {desc}
+- Primary Products & Transmissions: {prods or 'Axles, transmissions, and drive systems'}
+- Key Locations & Facilities: {locs or 'Corporate HQ and regional manufacturing plants'}
+- Regional & Logistics Hubs: {hubs or 'Regional distribution and assembly hubs'}
+- Key Clients & OEM Partners: {clients or 'Agricultural, Construction, and Automotive OEMs'}
+- Workforce / Employees: {emp or 'Multi-facility global workforce'}
+- Executive Leadership: CEO / Managing Director: {ceo} | Board: {dirs}
+- Official Registered MNC URLs: {urls}
+- Financial & Credit Ratings: {ratings}
+- Founded Year: {f_year}
+
+## Operational Guidelines:
+1. Always answer questions accurately based on the provided context documents and verified company facts.
+2. When asked about company products, leadership, facilities, founding background, or operations:
+   - Provide direct, helpful, and factual answers grounded in the company profile and web context.
+3. For internal compliance, ethics, and statutory procedures (e.g. POSH, Whistleblower mechanism, Board governance):
+   - Provide clear, step-by-step guidance referencing the internal policies.
+4. When conversation history is provided, resolve follow-up questions, pronouns, and topic continuity naturally.
+5. Always cite your sources using [Source: filename or website] format.
+6. Be polite, authoritative, professional, and helpful. Avoid harsh or robotic rejections."""
+    except Exception as e:
+        pass
+
+    return DEFAULT_SYSTEM_PROMPT
 
 
 def build_user_prompt(prompt_context: PromptContext) -> str:

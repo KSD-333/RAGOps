@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 
-from fastapi import APIRouter, HTTPException
+from pathlib import Path
+from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 from pydantic import BaseModel, Field
 
 from ragops.api.dependencies import get_rag_pipeline, get_retriever
@@ -246,6 +247,114 @@ async def get_document_catalog(doc_type: Optional[str] = None):
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to fetch catalog: {str(e)}")
+
+
+@router.post("/catalog/upload")
+async def upload_and_classify_document(
+    file: UploadFile = File(...),
+    title: Optional[str] = Form(None),
+):
+    """Upload a new document (.pdf, .md, .txt), auto-classify its governance/policy category, chunk, embed into ChromaDB, and record in PostgreSQL."""
+    filename = file.filename
+    if not filename:
+        raise HTTPException(status_code=400, detail="Filename missing from upload request.")
+
+    # Determine document title: use provided title or default to original filename
+    effective_title = title.strip() if title and title.strip() else filename
+
+    suffix = Path(filename).suffix.lower()
+    allowed_suffixes = {".pdf", ".md", ".markdown", ".txt", ".html", ".htm"}
+    if suffix not in allowed_suffixes:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unsupported file format '{suffix}'. Supported formats: {', '.join(sorted(allowed_suffixes))}"
+        )
+
+    # 1. Save file to data directory
+    data_dir = Path("data").resolve()
+    data_dir.mkdir(parents=True, exist_ok=True)
+    target_path = data_dir / filename
+
+    content = await file.read()
+    with open(target_path, "wb") as f:
+        f.write(content)
+
+    logger.info("document_uploaded_saving_to_disk", filename=filename, title=effective_title, size_bytes=len(content))
+
+    # 2. Ingest, auto-classify, chunk, and save metadata to PostgreSQL
+    try:
+        pipeline = IngestionPipeline()
+        chunks = pipeline.ingest_file(target_path, metadata={"custom_title": effective_title})
+    except Exception as e:
+        logger.error("ingestion_failed_for_upload", filename=filename, error=str(e))
+        raise HTTPException(status_code=500, detail=f"Failed to process and chunk document: {str(e)}")
+
+    # 3. Index embeddings into ChromaDB vector store
+    try:
+        retriever = get_retriever()
+        indexed_count = retriever.index(chunks) if hasattr(retriever, "index") else retriever.index_chunks(chunks)
+    except Exception as e:
+        logger.error("vector_indexing_failed", filename=filename, error=str(e))
+        raise HTTPException(status_code=500, detail=f"Failed to index embeddings in ChromaDB: {str(e)}")
+
+    # 4. Fetch the synced classification record from PostgreSQL and persist custom title
+    from ragops.storage.database import get_session
+    from ragops.storage.models import DocumentModel
+    session = get_session()
+    doc_record = None
+    try:
+        doc_record = session.query(DocumentModel).filter(DocumentModel.source == filename).first()
+        if doc_record:
+            doc_record.title = effective_title
+            session.commit()
+    finally:
+        session.close()
+
+    logger.info("document_upload_and_classification_complete", filename=filename, title=effective_title, chunks=len(chunks), indexed=indexed_count)
+
+    return {
+        "status": "success",
+        "message": f"Successfully ingested and indexed '{filename}'.",
+        "filename": filename,
+        "title": effective_title,
+        "doc_type": doc_record.doc_type if doc_record else "other",
+        "category": doc_record.category if doc_record else "General Corporate",
+        "governance_level": doc_record.governance_level if doc_record else "Operational",
+        "is_policy": doc_record.is_policy if doc_record else False,
+        "chunks_indexed": indexed_count,
+        "file_size_bytes": len(content),
+    }
+
+
+@router.delete("/catalog/{document_source}")
+async def delete_catalog_document(document_source: str):
+    """Delete a document from PostgreSQL and remove its chunks from ChromaDB."""
+    try:
+        from ragops.storage.database import get_session
+        from ragops.storage.models import DocumentModel
+        session = get_session()
+        source_name = document_source
+        try:
+            doc = session.query(DocumentModel).filter(
+                (DocumentModel.source == document_source) | (DocumentModel.document_id == document_source)
+            ).first()
+            if doc:
+                source_name = doc.source
+                session.delete(doc)
+                session.commit()
+        finally:
+            session.close()
+
+        # Delete chunks from ChromaDB collection
+        retriever = get_retriever()
+        if hasattr(retriever._vector_store, "_collection") and retriever._vector_store._collection:
+            retriever._vector_store._collection.delete(where={"source": source_name})
+
+        return {"status": "success", "message": f"Deleted document '{source_name}' and its vector embeddings."}
+    except Exception as e:
+        logger.error("delete_catalog_document_failed", document=document_source, error=str(e))
+        raise HTTPException(status_code=500, detail=f"Failed to delete document: {str(e)}")
+
 
 
 @router.get("/cache/stats")

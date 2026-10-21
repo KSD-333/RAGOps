@@ -82,6 +82,8 @@ class RAGRetriever:
         logger.info("indexing_complete", indexed=count)
         return count
 
+    index_chunks = index
+
     def retrieve(self, query: str, top_k: int | None = None) -> RetrievedContext:
         """Full retrieval pipeline: embed query → search → rerank.
 

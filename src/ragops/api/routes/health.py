@@ -19,8 +19,8 @@ STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
 def get_react_dist_index() -> Path | None:
     """Find the modern React app index.html across production packaging and dev environments."""
     candidates = [
-        Path(__file__).resolve().parent.parent / "static_react" / "index.html",
         Path.cwd() / "react" / "dist" / "index.html",
+        Path(__file__).resolve().parent.parent / "static_react" / "index.html",
         Path.cwd() / "src" / "ragops" / "api" / "static_react" / "index.html",
         Path("/app/react/dist/index.html"),
         Path("/opt/render/project/src/react/dist/index.html"),

@@ -111,7 +111,7 @@ def get_active_db_type() -> str:
 
 def init_db() -> None:
     """Initialize the database — create all tables and seed default users."""
-    from ragops.storage.models import Base, UserModel
+    from ragops.storage.models import Base, CompanyProfileModel, UserModel
     from ragops.core.auth import DEFAULT_USERS, generate_salt, hash_password
 
     from sqlalchemy import text
@@ -206,6 +206,72 @@ def init_db() -> None:
         except Exception as e:
             session.rollback()
             logger.warning("document_catalog_sync_failed", error=str(e))
+
+        # Seed dynamic company profile if empty
+        try:
+            profile = session.query(CompanyProfileModel).first()
+            if not profile:
+                profile = CompanyProfileModel(
+                    company_name="Carraro India Limited",
+                    group_name="Carraro Group",
+                    industry="Automotive & Mechanical Transmission Systems",
+                    description="Carraro India Limited (a subsidiary of the Italian multinational Carraro Group) is a premier manufacturer of drive systems, advanced axles, transmissions, and gears for agricultural tractors, construction equipment, and commercial vehicles.",
+                    products=[
+                        "Tractor Axles & Transmissions (Agricultural)",
+                        "Backhoe Loader Transmissions & Drive Axles (Construction)",
+                        "Gears, Pinions, and Shafts (Precision Mechanical Components)",
+                        "Electric & Hybrid Powertrain Solutions (e.Carraro)"
+                    ],
+                    employee_details="Approx 1,500+ employees across Pune plants and Indian corporate operations.",
+                    locations=[
+                        {"city": "Pune", "state": "Maharashtra", "type": "Headquarters & Manufacturing Plant 1 (Ranjangaon)"},
+                        {"city": "Pune", "state": "Maharashtra", "type": "Manufacturing Plant 2 (MIDC)"},
+                        {"city": "Campodarsego (Padua)", "state": "Italy", "type": "Global Corporate HQ (Carraro Group S.p.A.)"}
+                    ],
+                    ceo="Enrico Carraro (Group Chairman), Balaji M. (Managing Director / CEO India)",
+                    directors=[
+                        "Enrico Carraro (Chairman)",
+                        "Tomaso Carraro (Vice Chairman)",
+                        "Balaji M. (Managing Director)",
+                        "Andrea Conchetto (CEO Carraro Group)"
+                    ],
+                    domains_urls=[
+                        "https://www.carraro.com",
+                        "https://www.carraro.com/en/company/global-presence/india",
+                        "https://www.carraroir.com"
+                    ],
+                    metadata_json={
+                        "ratings": "ICRA AA- (Stable) for long-term bank facilities",
+                        "founded_year": 1997,
+                        "group_founded_year": 1932,
+                        "certifications": ["ISO 9001:2015", "IATF 16949:2016", "ISO 14001:2015"],
+                        "clients": [
+                            "John Deere (Agricultural Tractors)",
+                            "CNH Industrial (Case IH, New Holland)",
+                            "Mahindra & Mahindra",
+                            "Same Deutz-Fahr (SDF)",
+                            "Escorts Kubota Limited",
+                            "Caterpillar Inc."
+                        ],
+                        "hubs": [
+                            "Pune Logistics & Spare Parts Hub (Ranjangaon)",
+                            "Padua Central Global Distribution Hub (Italy)"
+                        ]
+                    }
+                )
+                session.add(profile)
+                session.commit()
+                logger.info("default_company_profile_seeded", company_name=profile.company_name)
+
+                # Embed into Vector Store on initial seeding
+                try:
+                    from ragops.tools.web_extractor import CompanyWebExtractor
+                    CompanyWebExtractor().embed_company_profile(CompanyWebExtractor().repo.get_profile())
+                except Exception as emb_err:
+                    logger.debug("initial_company_embed_skipped", error=str(emb_err))
+        except Exception as e:
+            session.rollback()
+            logger.warning("company_profile_seed_skipped", error=str(e))
 
     except Exception as e:
         session.rollback()

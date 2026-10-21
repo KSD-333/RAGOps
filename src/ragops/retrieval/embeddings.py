@@ -70,7 +70,11 @@ class SentenceTransformerEmbedding:
             logger.info("loading_embedding_model", model=self._model_name)
             try:
                 from sentence_transformers import SentenceTransformer
-                self._model = SentenceTransformer(self._model_name)
+                try:
+                    self._model = SentenceTransformer(self._model_name)
+                except Exception as first_err:
+                    logger.warning("sentence_transformer_gpu_load_failed_falling_back_to_cpu", error=str(first_err))
+                    self._model = SentenceTransformer(self._model_name, device="cpu")
             except ImportError:
                 logger.warning(
                     "sentence_transformers_not_installed_fallback_to_mock",

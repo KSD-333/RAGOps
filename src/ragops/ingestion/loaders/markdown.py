@@ -17,7 +17,7 @@ class MarkdownLoader(BaseLoader):
     """Load and extract text from Markdown files."""
 
     def supports(self, file_path: Path) -> bool:
-        return file_path.suffix.lower() in (".md", ".markdown")
+        return file_path.suffix.lower() in (".md", ".markdown", ".txt")
 
     def load(self, file_path: Path) -> RawDocument:
         """Extract text content from a Markdown file.

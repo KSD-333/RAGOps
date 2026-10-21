@@ -48,7 +48,11 @@ class CrossEncoderReranker:
             try:
                 from sentence_transformers import CrossEncoder
                 logger.info("loading_reranker_model", model=self._model_name)
-                self._model = CrossEncoder(self._model_name)
+                try:
+                    self._model = CrossEncoder(self._model_name)
+                except Exception as first_err:
+                    logger.warning("cross_encoder_gpu_load_failed_falling_back_to_cpu", error=str(first_err))
+                    self._model = CrossEncoder(self._model_name, device="cpu")
             except ImportError:
                 logger.warning(
                     "sentence_transformers_not_installed_reranker_fallback",

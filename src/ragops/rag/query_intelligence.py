@@ -102,13 +102,36 @@ class QueryIntelligenceEngine:
                 rewritten_query=q,
             )
 
-        # 2. Company Identity & Scope Intent Detection
+        # Dynamic company name lookup from PostgreSQL
+        active_company_name = "Enterprise"
+        try:
+            from ragops.storage.repositories import CompanyRepository
+            _prof = CompanyRepository().get_profile()
+            if _prof and _prof.get("company_name"):
+                active_company_name = _prof["company_name"]
+        except Exception:
+            pass
+
+        # 2. Company Location, Client & Identity Intent Detection
+        is_location_query = any(k in q_lower for k in [
+            "location", "locations", "loaction", "loactions", "plant", "plants", "factory", "factories",
+            "headquarter", "headquarters", "hq", "branch", "branches", "facility", "facilities", "hub", "hubs",
+            "where is the company", "where are the plants", "where is it located", "where are locations",
+            "all locations", "all loactions", "company all loactions", "company all locations"
+        ])
+
+        is_client_query = any(k in q_lower for k in [
+            "client", "clients", "customer", "customers", "partner", "partners", "oem", "oems",
+            "who buys", "who do they supply", "major buyers", "commercial clients", "key customers"
+        ])
+
         is_company_identity = any(k in q_lower for k in [
             "company name", "what is company", "what is the company", "name of company",
             "name of the company", "which company", "about company", "what company",
             "who is the company", "company product", "what products", "what it is provide",
             "what does the company do", "which field", "what field", "field it the company",
-            "how old company", "when was company founded", "who owns the company"
+            "how old company", "when was company founded", "who owns the company", "company overview",
+            "who is ceo", "who is managing director", "who is chairman", "company directors"
         ])
 
         # 3. Scope & Intent Detection
@@ -127,7 +150,15 @@ class QueryIntelligenceEngine:
             "posh", "sexual harassment", "icc", "internal complaints committee"
         ])
 
-        if is_company_identity:
+        if is_location_query:
+            intent_type = "company_locations"
+            scope = "company_overview"
+            target_entity = "company"
+        elif is_client_query:
+            intent_type = "company_clients"
+            scope = "company_overview"
+            target_entity = "company"
+        elif is_company_identity:
             intent_type = "company_identity"
             scope = "company_overview"
             target_entity = "company"
@@ -160,8 +191,14 @@ class QueryIntelligenceEngine:
         rewritten = q
         is_rewritten = False
 
-        if is_company_identity:
-            rewritten = "Carraro India Limited corporate identity, company definition, and governance policies"
+        if is_location_query:
+            rewritten = f"{active_company_name} all corporate locations, manufacturing plants, regional hubs, facilities, and global headquarters"
+            is_rewritten = True
+        elif is_client_query:
+            rewritten = f"{active_company_name} key clients, OEM commercial customers, and strategic partners"
+            is_rewritten = True
+        elif is_company_identity:
+            rewritten = f"{active_company_name} corporate identity, overview, products, and operations"
             is_rewritten = True
         else:
             # Multi-turn conversational pronoun / referent resolution
