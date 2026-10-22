@@ -439,11 +439,14 @@ class CompanyWebExtractor:
     def embed_company_profile(self, profile: Optional[dict[str, Any]] = None) -> int:
         """Construct dense grounding chunks from company facts and embed into ChromaDB vector store."""
         if not profile:
-            profile = self.repo.get_profile()
-        if not profile or not profile.get("company_name"):
-            return 0
+            profile = self.repo.get_profile() or {}
+        c_name = (profile.get("company_name") or "").strip()
+        if not c_name or c_name.lower() in ("enterprise", "company"):
+            from ragops.rag.query_intelligence import QueryIntelligenceEngine
+            c_name = QueryIntelligenceEngine().get_active_company_identity()
 
-        c_name = profile.get("company_name", "Enterprise")
+        if not c_name or c_name == "Company":
+            c_name = "Enterprise"
         g_name = profile.get("group_name", "")
         industry = profile.get("industry", "Manufacturing & Engineering")
         desc = profile.get("description", "")
@@ -506,7 +509,7 @@ class CompanyWebExtractor:
             f"Manufacturing Plants & Headquarters:\n"
             f"{(chr(10).join(loc_lines)) if loc_lines else 'Global HQ and Regional Manufacturing Facilities.'}\n"
             f"{('Regional & Logistics Hubs:' + chr(10) + chr(10).join(hub_lines)) if hub_lines else ''}\n"
-            f"Summary: {c_name} maintains operational manufacturing plants, corporate headquarters, and regional assembly/logistics hubs across global and Indian territories."
+            f"Summary: {c_name} maintains operational corporate offices, headquarters, and facilities across global and regional locations."
         )
         chunks_to_index.append(
             DocumentChunk(
@@ -522,9 +525,9 @@ class CompanyWebExtractor:
         # 3. Key Clients, OEM Customers & Strategic Partners
         client_lines = [f"• {c}" for c in clients] if isinstance(clients, list) else [str(clients)]
         client_text = (
-            f"Key Clients, OEM Partners, and Commercial Customers of {c_name}:\n"
-            f"{(chr(10).join(client_lines)) if clients else 'Major Agricultural Machinery OEMs, Construction Equipment Manufacturers, and Commercial Automotive OEMs.'}\n"
-            f"Target Market Sectors: Agricultural tractors, backhoe loaders, earthmoving machinery, material handling equipment, and commercial vehicle powertrains."
+            f"Key Clients, Enterprise Partners, and Customers of {c_name}:\n"
+            f"{(chr(10).join(client_lines)) if clients else f'Commercial clients, strategic enterprise partners, and industry customers of {c_name}.'}\n"
+            f"Target Market Sectors: {industry or 'Global enterprise markets and commercial operations.'}"
         )
         chunks_to_index.append(
             DocumentChunk(
@@ -540,9 +543,9 @@ class CompanyWebExtractor:
         # 4. Products & Precision Engineering Solutions
         prod_lines = [f"• {p}" for p in prods] if isinstance(prods, list) else [str(prods)]
         prod_text = (
-            f"Products, Transmissions, Axles, and Precision Mechanical Systems by {c_name}:\n"
-            f"{(chr(10).join(prod_lines)) if prods else 'Axles, transmissions, drive systems, precision gears, and electric powertrains.'}\n"
-            f"Specializations: Drive systems for agricultural tractors, heavy construction equipment, pinion gears, and hybrid/electric powertrains."
+            f"Products, Commercial Offerings, and Technical Solutions by {c_name}:\n"
+            f"{(chr(10).join(prod_lines)) if prods else f'Core commercial products, services, and operational solutions developed by {c_name}.'}\n"
+            f"Domain Focus: {industry or 'Commercial enterprise products and services.'}"
         )
         chunks_to_index.append(
             DocumentChunk(
@@ -590,10 +593,51 @@ class CompanyWebExtractor:
             logger.error("embed_company_profile_failed", error=str(embed_err))
             return 0
 
+    def clear_company_embeddings(self) -> int:
+        """Clear all corporate profile chunks from the ChromaDB vector store."""
+        try:
+            from ragops.retrieval.retriever import RAGRetriever
+            retriever = RAGRetriever(use_reranker=False)
+            if hasattr(retriever._vector_store, "_collection") and retriever._vector_store._collection is not None:
+                retriever._vector_store._collection.delete(where={"document_id": "corporate_profile"})
+                logger.info("company_profile_embeddings_cleared")
+                return 1
+        except Exception as e:
+            logger.debug("clear_company_embeddings_skipped", error=str(e))
+        return 0
+
     def fetch_dynamic_web_context(self, query: str, top_n_chunks: int = 4) -> list[dict[str, Any]]:
-        """Fetch targeted real-time web context from registered URLs to answer queries about products, locations, clients, or company facts."""
+        """Fetch targeted real-time web context from registered URLs or search tool to answer queries about products, locations, clients, or company facts."""
         profile = self.repo.get_profile()
-        urls = profile.get("domains_urls", [])
+        c_name = profile.get("company_name", "").strip() if profile else ""
+        urls = list(profile.get("domains_urls", [])) if profile else []
+        meta = profile.get("metadata_json", {}) if (profile and isinstance(profile.get("metadata_json"), dict)) else {}
+
+        # Check registered sources if profile is unpopulated
+        if not c_name or not urls:
+            try:
+                from ragops.storage.database import get_session
+                from ragops.storage.models import CompanySourceModel
+                session = get_session()
+                src = session.query(CompanySourceModel).order_by(CompanySourceModel.created_at.desc()).first()
+                if src:
+                    if not c_name:
+                        raw = (src.display_name or "").replace(" Official Portal", "").replace(" Portal", "").strip()
+                        if raw and not raw.startswith("http") and raw.lower() not in ("company", "enterprise", "portal"):
+                            c_name = raw
+                        elif src.source_url:
+                            domain = urllib.parse.urlparse(src.source_url).netloc.lower()
+                            parts = domain.replace("www.", "").split(".")
+                            if parts:
+                                c_name = parts[0].capitalize()
+                    if not urls and src.source_url:
+                        urls.append(src.source_url)
+                session.close()
+            except Exception:
+                pass
+
+        if not c_name:
+            c_name = "the enterprise"
 
         q_lower = query.lower()
         results: list[dict[str, Any]] = []
@@ -602,70 +646,150 @@ class CompanyWebExtractor:
         triggers = [
             "location", "locations", "loaction", "loactions", "plant", "plants", "factory", "factories",
             "headquarter", "headquarters", "hq", "branch", "branches", "facility", "facilities", "hub", "hubs",
-            "pune", "italy", "where", "city", "cities", "address",
+            "where", "city", "cities", "address",
             "client", "clients", "customer", "customers", "partner", "partners", "oem", "buyer", "buyers",
-            "product", "products", "make", "produce", "manufacture", "provide", "transmission", "axle", "gear",
+            "product", "products", "make", "produce", "manufacture", "provide", "service", "services",
             "employee", "employees", "workforce", "headcount", "staff",
             "ceo", "director", "directors", "chairman", "managing director", "leadership", "founder", "founding", "founded", "old", "age",
-            "rating", "ratings", "domain", "website", "company", "who is", "what does"
+            "rating", "ratings", "domain", "website", "company", "who is", "what does", "name of company", "what is company"
         ]
 
         if not any(t in q_lower for t in triggers):
             return []
 
-        # Synthesize structured knowledge chunks from PostgreSQL profile
+        # Synthesize structured knowledge chunks from PostgreSQL profile and approved facts
         facts_text_lines = []
-        c_name = profile.get("company_name", "Enterprise")
-        g_name = profile.get("group_name", "")
 
-        facts_text_lines.append(f"Company: {c_name}" + (f" (Parent Group: {g_name})" if g_name else ""))
-        if profile.get("industry"):
-            facts_text_lines.append(f"Industry Sector: {profile['industry']}")
-        if profile.get("description"):
-            facts_text_lines.append(f"Corporate Overview: {profile['description']}")
+        # Check for approved facts in company_facts repository
+        approved_map = {}
+        try:
+            from ragops.storage.repositories import FactManagementRepository
+            approved_list = FactManagementRepository().get_approved_facts()
+            for f in approved_list:
+                approved_map[(f["section_key"], f["fact_key"])] = f["approved_value"]
+        except Exception as e:
+            logger.debug("approved_facts_lookup_skipped", error=str(e))
 
-        # Locations & Hubs
-        if profile.get("locations"):
+        c_name = approved_map.get(("identity", "legal_name")) or c_name
+        g_name = approved_map.get(("identity", "group_name")) or (profile.get("group_name", "") if profile else "")
+        hq = approved_map.get(("identity", "headquarters")) or approved_map.get(("identity", "global_headquarters"))
+
+        if c_name and c_name != "the enterprise":
+            identity_line = f"Company Legal Name: {c_name}"
+            if g_name and g_name != c_name:
+                identity_line += f" (Parent Group: {g_name})"
+            facts_text_lines.append(identity_line)
+
+        if hq:
+            if isinstance(hq, dict):
+                parts = [hq.get("address"), hq.get("city"), hq.get("province") or hq.get("state"), hq.get("country")]
+                addr = ", ".join([str(p) for p in parts if p])
+                facts_text_lines.append(f"Global Corporate Headquarters: {addr}")
+            else:
+                facts_text_lines.append(f"Global Corporate Headquarters: {hq}")
+        elif any(k in q_lower for k in ["location", "locations", "loaction", "loactions", "where", "plant", "plants", "headquarter", "headquarters", "hq", "city", "address"]):
+            # Gap-filler: Query search tool directly for headquarters / locations
+            try:
+                from ragops.tools.search_tool import WebSearchTool
+                entity_info = WebSearchTool().search_corporate_entity(c_name)
+                if entity_info and entity_info.get("extract"):
+                    facts_text_lines.append(f"Corporate Overview & Official Location Footprint: {entity_info['extract']}")
+            except Exception as e_ent:
+                logger.debug("entity_location_search_failed", error=str(e_ent))
+
+        if any(k in q_lower for k in ["company name", "what is company", "what is the company", "about company", "who is"]):
+            if not any("Corporate Overview" in line for line in facts_text_lines):
+                try:
+                    from ragops.tools.search_tool import WebSearchTool
+                    entity_info = WebSearchTool().search_corporate_entity(c_name)
+                    if entity_info and entity_info.get("extract"):
+                        facts_text_lines.append(f"Corporate Identity & Summary: {entity_info['extract']}")
+                except Exception:
+                    pass
+
+
+        if ("identity", "chairman") in approved_map:
+            facts_text_lines.append(f"Chairman: {approved_map[('identity', 'chairman')]}")
+        if ("identity", "ceo") in approved_map:
+            facts_text_lines.append(f"Chief Executive Officer (CEO): {approved_map[('identity', 'ceo')]}")
+        elif profile.get("ceo"):
+            facts_text_lines.append(f"Chief Executive Officer (CEO): {profile['ceo']}")
+
+        if ("identity", "founded_year") in approved_map:
+            facts_text_lines.append(f"Founded Year: {approved_map[('identity', 'founded_year')]}")
+        elif meta.get("founded_year"):
+            facts_text_lines.append(f"Founded Year: {meta['founded_year']}")
+
+        # Workforce
+        if ("workforce", "global_headcount") in approved_map:
+            gh = approved_map[("workforce", "global_headcount")]
+            cnt = gh.get("headcount", gh) if isinstance(gh, dict) else gh
+            facts_text_lines.append(f"Workforce & Headcount: {cnt} people globally.")
+        elif profile.get("employee_details"):
+            facts_text_lines.append(f"Workforce & Headcount: {profile['employee_details']}")
+
+        # Locations & Manufacturing Plants
+        plants = approved_map.get(("locations", "manufacturing_plants")) or approved_map.get(("locations", "facilities"))
+        if plants and isinstance(plants, list):
+            loc_lines = []
+            for p in plants:
+                if isinstance(p, dict):
+                    loc_lines.append(f"• {p.get('facility', p.get('city', 'Facility'))} ({p.get('country', '')}) — {p.get('role', p.get('type', 'Facility'))}")
+                else:
+                    loc_lines.append(f"• {p}")
+            facts_text_lines.append("Corporate Locations & Manufacturing Facilities:\n" + "\n".join(loc_lines))
+        elif profile.get("locations"):
             loc_strs = []
             for l in profile["locations"]:
                 if isinstance(l, dict):
                     loc_strs.append(f"{l.get('city', '')}, {l.get('state', '')} ({l.get('type', 'Facility')})")
                 elif isinstance(l, str):
                     loc_strs.append(l)
-            facts_text_lines.append(f"Company All Locations & Plants: {'; '.join(loc_strs)}")
+            facts_text_lines.append(f"Company Locations & Plants: {'; '.join(loc_strs)}")
 
-        meta = profile.get("metadata_json") or {}
-        if meta.get("hubs"):
+        # Logistics Hubs
+        hubs = approved_map.get(("hubs", "logistics_spares_hubs")) or approved_map.get(("hubs", "distribution_hubs"))
+        if hubs and isinstance(hubs, list):
+            hub_lines = []
+            for h in hubs:
+                if isinstance(h, dict):
+                    hub_lines.append(f"• {h.get('hub_name', h.get('name', 'Hub'))} ({h.get('location', '')}) — {h.get('facility_type', 'Distribution Hub')}")
+                else:
+                    hub_lines.append(f"• {h}")
+            facts_text_lines.append("Regional Logistics & Distribution Hubs:\n" + "\n".join(hub_lines))
+        elif meta.get("hubs"):
             facts_text_lines.append(f"Regional Hubs & Logistics: {', '.join(meta['hubs']) if isinstance(meta['hubs'], list) else meta['hubs']}")
-        if meta.get("clients"):
+
+        # Commercial Clients & OEM Partners
+        clients_data = approved_map.get(("clients", "oem_partners")) or approved_map.get(("clients", "key_clients"))
+        if clients_data:
+            if isinstance(clients_data, dict):
+                oems = clients_data.get("verified_tractor_oems") or clients_data.get("verified_clients", [])
+                facts_text_lines.append(f"Verified Commercial Clients & Partners: {', '.join(oems)}.")
+            elif isinstance(clients_data, list):
+                facts_text_lines.append(f"Verified Commercial Clients & Partners: {', '.join(clients_data)}.")
+            else:
+                facts_text_lines.append(f"Commercial Clients: {clients_data}")
+        elif meta.get("clients"):
             facts_text_lines.append(f"Key Clients & OEM Customers: {', '.join(meta['clients']) if isinstance(meta['clients'], list) else meta['clients']}")
 
-        if profile.get("products"):
+        # Products & Solutions
+        prods_data = approved_map.get(("products", "product_portfolio")) or approved_map.get(("products", "catalog"))
+        if prods_data and isinstance(prods_data, list):
+            facts_text_lines.append("Official Products & Solutions:\n" + "\n".join([f"• {pr}" for pr in prods_data]))
+        elif profile.get("products"):
             prod_str = ", ".join(profile['products']) if isinstance(profile['products'], list) else str(profile['products'])
             facts_text_lines.append(f"Products & Solutions: {prod_str}")
-        if profile.get("employee_details"):
-            facts_text_lines.append(f"Workforce & Headcount: {profile['employee_details']}")
-        if profile.get("ceo"):
-            facts_text_lines.append(f"Chief Executive / Leadership: {profile['ceo']}")
-        if profile.get("directors"):
-            dir_str = ", ".join(profile['directors']) if isinstance(profile['directors'], list) else str(profile['directors'])
-            facts_text_lines.append(f"Board of Directors: {dir_str}")
-        if meta.get("founded_year"):
-            facts_text_lines.append(f"Founded Year: {meta['founded_year']}")
-        if meta.get("ratings"):
-            facts_text_lines.append(f"Credit / Quality Ratings: {meta['ratings']}")
 
         if facts_text_lines:
-            primary_url = urls[0] if urls else "Official Corporate Profile"
+            primary_url = urls[0] if urls else (profile.get("domains_urls", [""])[0] if profile.get("domains_urls") else "")
             results.append({
-                "document": f"Corporate Profile & Locations ({c_name})",
+                "document": f"Corporate Profile & Grounded Facts ({c_name})",
                 "page": 1,
-                "score": 0.98,
-                "source": f"Corporate Knowledge Grounding ({primary_url})",
-                "text": "\n".join(facts_text_lines),
+                "score": 0.99,
+                "source": f"Corporate Grounded Knowledge ({primary_url})" if primary_url else "Corporate Grounded Knowledge",
+                "text": "\n\n".join(facts_text_lines),
             })
-            # High-priority corporate grounding facts already available from PostgreSQL
-            # Return immediately to avoid network timeouts and latency during live query inference
             return results[:top_n_chunks]
 
         # Fallback: fetch a live excerpt from URLs only if no database profile exists

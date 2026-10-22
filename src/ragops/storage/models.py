@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+import uuid
 
 from sqlalchemy import (
     Boolean,
@@ -219,9 +220,9 @@ class CompanyProfileModel(Base):
     __tablename__ = "company_profiles"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    company_name = Column(String(200), nullable=False, default="Carraro India Limited")
-    group_name = Column(String(200), nullable=False, default="Carraro Group")
-    industry = Column(String(100), default="Automotive & Mechanical Transmission Systems")
+    company_name = Column(String(200), nullable=False, default="")
+    group_name = Column(String(200), nullable=False, default="")
+    industry = Column(String(100), default="")
     description = Column(Text, default="")
     products = Column(JSON, default=list)  # list of products/services
     employee_details = Column(Text, default="")
@@ -232,4 +233,146 @@ class CompanyProfileModel(Base):
     metadata_json = Column(JSON, default=dict)
     updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+
+
+class CompanySourceModel(Base):
+    """Registered official domains, branch portals, and uploaded sources."""
+    __tablename__ = "company_sources"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    organization_id = Column(String(50), default="default_org", nullable=False, index=True)
+    source_type = Column(String(20), nullable=False, default="website")  # 'website' | 'upload'
+    source_url = Column(String(500), nullable=True)
+    display_name = Column(String(200), nullable=False)
+    country_code = Column(String(10), nullable=True)
+    language_code = Column(String(10), default="en")
+    verification_status = Column(String(20), default="pending", nullable=False)  # 'pending', 'verified', 'rejected'
+    is_enabled = Column(Boolean, default=True, nullable=False)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+
+    documents = relationship("SourceDocumentModel", back_populates="source", cascade="all, delete-orphan")
+
+
+class SourceDocumentModel(Base):
+    """Retrieved page or uploaded file content with versioning and cryptographic SHA-256 hash."""
+    __tablename__ = "source_documents"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    organization_id = Column(String(50), default="default_org", nullable=False, index=True)
+    source_id = Column(String(36), ForeignKey("company_sources.id", ondelete="CASCADE"), nullable=True, index=True)
+    canonical_url = Column(String(500), nullable=True)
+    title = Column(String(255), nullable=True)
+    content_text = Column(Text, nullable=True)
+    content_sha256 = Column(String(64), nullable=False, index=True)
+    content_version = Column(Integer, default=1, nullable=False)
+    content_language = Column(String(10), default="en")
+    country_code = Column(String(10), nullable=True)
+    publication_date = Column(String(50), nullable=True)
+    fetched_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    processing_status = Column(String(20), default="ready", nullable=False)  # 'pending', 'processing', 'ready', 'failed', 'superseded'
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+
+    source = relationship("CompanySourceModel", back_populates="documents")
+    candidates = relationship("FactCandidateModel", back_populates="document", cascade="all, delete-orphan")
+
+
+class FactCandidateModel(Base):
+    """Field-level extracted candidate facts awaiting validation or review."""
+    __tablename__ = "fact_candidates"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    organization_id = Column(String(50), default="default_org", nullable=False, index=True)
+    document_id = Column(String(36), ForeignKey("source_documents.id", ondelete="SET NULL"), nullable=True, index=True)
+    section_key = Column(String(50), nullable=False, index=True)  # 'identity', 'workforce', 'locations', 'clients', 'hubs', 'products', 'overview'
+    fact_key = Column(String(100), nullable=False, index=True)  # 'legal_name', 'headquarters', 'employee_count', 'manufacturing_plants', etc.
+    scope_key = Column(String(50), default="global", nullable=False, index=True)  # 'global', 'country:IN', 'country:IT'
+    proposed_value = Column(JSON, nullable=False)
+    normalized_value = Column(JSON, nullable=True)
+    validation_status = Column(String(20), default="pending", nullable=False)  # 'pending', 'valid', 'invalid', 'conflicting', 'needs_review'
+    review_status = Column(String(20), default="pending", nullable=False)  # 'pending', 'approved', 'rejected', 'needs_changes', 'superseded'
+    extractor_version = Column(String(50), default="v1.0")
+    extraction_confidence = Column(Float, default=1.0)
+    reviewed_by = Column(String(100), nullable=True)
+    reviewed_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+
+    document = relationship("SourceDocumentModel", back_populates="candidates")
+    evidence = relationship("FactEvidenceModel", back_populates="candidate", cascade="all, delete-orphan")
+    decisions = relationship("FactReviewDecisionModel", back_populates="candidate", cascade="all, delete-orphan")
+
+
+class FactEvidenceModel(Base):
+    """Exact evidence sentence/span supporting an extracted fact candidate."""
+    __tablename__ = "fact_evidence"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    candidate_id = Column(String(36), ForeignKey("fact_candidates.id", ondelete="CASCADE"), nullable=False, index=True)
+    document_id = Column(String(36), nullable=True)
+    evidence_text = Column(Text, nullable=False)
+    start_offset = Column(Integer, nullable=True)
+    end_offset = Column(Integer, nullable=True)
+    section_heading = Column(String(200), nullable=True)
+    source_url = Column(String(500), nullable=True)
+    retrieved_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+
+    candidate = relationship("FactCandidateModel", back_populates="evidence")
+
+
+class CompanyFactModel(Base):
+    """Approved company facts serving as immutable, versioned source of truth."""
+    __tablename__ = "company_facts"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    organization_id = Column(String(50), default="default_org", nullable=False, index=True)
+    section_key = Column(String(50), nullable=False, index=True)
+    fact_key = Column(String(100), nullable=False, index=True)
+    scope_key = Column(String(50), default="global", nullable=False, index=True)
+    approved_value = Column(JSON, nullable=False)
+    source_candidate_id = Column(String(36), nullable=True)
+    version = Column(Integer, default=1, nullable=False)
+    valid_from = Column(String(50), nullable=True)
+    valid_until = Column(String(50), nullable=True)
+    approved_by = Column(String(100), default="admin")
+    approved_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    is_active = Column(Boolean, default=True, nullable=False, index=True)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+
+    __table_args__ = (
+        Index("idx_company_facts_active_scope", "organization_id", "section_key", "fact_key", "scope_key", "is_active"),
+    )
+
+
+class FactReviewDecisionModel(Base):
+    """Immutable audit trail of human review decisions."""
+    __tablename__ = "fact_review_decisions"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    organization_id = Column(String(50), default="default_org", nullable=False, index=True)
+    candidate_id = Column(String(36), ForeignKey("fact_candidates.id", ondelete="CASCADE"), nullable=False, index=True)
+    reviewer_id = Column(String(100), default="admin", nullable=False)
+    decision = Column(String(20), nullable=False)  # 'approved', 'rejected', 'needs_changes'
+    submitted_value = Column(JSON, nullable=True)
+    reason = Column(Text, nullable=True)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+
+    candidate = relationship("FactCandidateModel", back_populates="decisions")
+
+
+class PublicationOutboxModel(Base):
+    """Transactional publication outbox for reliable, safe vector index updates."""
+    __tablename__ = "publication_outbox"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    organization_id = Column(String(50), default="default_org", nullable=False, index=True)
+    entity_type = Column(String(50), default="company_fact", nullable=False)  # 'company_fact', 'document_version'
+    entity_id = Column(String(36), nullable=False)
+    entity_version = Column(Integer, default=1, nullable=False)
+    operation = Column(String(20), default="upsert", nullable=False)  # 'upsert', 'delete'
+    status = Column(String(20), default="pending", nullable=False, index=True)  # 'pending', 'processing', 'completed', 'failed'
+    attempts = Column(Integer, default=0, nullable=False)
+    next_attempt_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    last_error = Column(Text, nullable=True)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    completed_at = Column(DateTime(timezone=True), nullable=True)
 

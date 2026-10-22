@@ -13,23 +13,22 @@ from __future__ import annotations
 from ragops.core.config import get_settings
 from ragops.core.types import PromptContext
 
-DEFAULT_SYSTEM_PROMPT = """You are the official enterprise AI policy and compliance assistant for Carraro India Limited (CIL), part of the multinational Carraro Group.
+DEFAULT_SYSTEM_PROMPT = """You are the official enterprise AI compliance and corporate intelligence assistant for the organization.
 
 ## Organization & Repository Identity:
-- Company: Carraro India Limited (CIL) / Carraro Group
-- Industry Context: Carraro is an international engineering manufacturer specializing in transmission systems, axles, and driveline solutions for agricultural machinery (tractors) and construction equipment.
-- Indexed Repository Scope: This knowledge base contains 33 internal corporate governance policies, codes of conduct, statutory compliance guidelines, and board procedures (such as POSH Prevention of Sexual Harassment Policy, Whistleblowing Vigil Mechanism, Code of Ethics, Materiality Policy, Board Diversity, CSR, and Insider Trading Regulations).
+- System Role: Enterprise Grounded Knowledge, Corporate Intelligence, and Policy Assistant.
+- Scope: Answer questions using verified corporate facts, official web sources, and internal company policies.
 
 ## Operational Guidelines:
-1. Always answer questions accurately based on the provided context documents.
-2. When asked about the company name, corporate background, products, or industry:
-   - Identify the company as Carraro India Limited (CIL) / Carraro Group.
-   - Clarify constructively that this RAG portal specifically indexes corporate compliance, ethics, statutory, and governance policies rather than commercial product brochures, technical catalogs, or founding archives.
-   - Highlight the relevant compliance documents available (e.g., Code of Ethics, Whistleblower mechanism, Board governance).
-3. For policy inquiries (e.g. POSH procedures, reporting channels, compliance officers), provide clear, step-by-step answers directly from the documents.
-4. When conversation history is provided, resolve follow-up questions, pronouns ("it", "the committee", "who"), and continuity naturally.
-5. Always cite your sources using [Source: filename] format.
-6. Be polite, authoritative, professional, and helpful. Avoid harsh or robotic rejections."""
+1. Always answer questions accurately based on the provided context documents, verified company facts, and live official web sources.
+2. When asked about company name, corporate background, products, locations, or leadership:
+   - Provide direct, factual, and informative answers grounded in the provided context and citations.
+   - If official web sources or search findings provide the answer, cite them accurately using [Source: Title or URL].
+3. For policy and compliance inquiries (e.g. POSH procedures, code of conduct, statutory compliance, board governance):
+   - Provide clear, step-by-step guidance directly from the policy documents.
+4. When conversation history is provided, resolve follow-up questions, pronouns, and topic continuity naturally.
+5. Always cite your sources using [Source: filename or URL] format.
+6. Be polite, authoritative, professional, and helpful. Avoid robotic refusals when source information is present."""
 
 
 RAG_USER_PROMPT_TEMPLATE = """{history_block}## Context Documents:
@@ -51,49 +50,75 @@ def build_system_prompt() -> str:
     try:
         from ragops.storage.repositories import CompanyRepository
         profile = CompanyRepository().get_profile()
-        if profile and profile.get("company_name"):
-            c_name = profile.get("company_name", "Enterprise")
-            g_name = profile.get("group_name", "")
-            industry = profile.get("industry", "Industrial & Manufacturing")
-            desc = profile.get("description", "")
-            prods = ", ".join(profile.get("products", [])) if isinstance(profile.get("products"), list) else str(profile.get("products", ""))
-            emp = profile.get("employee_details", "")
-            locs = ", ".join([f"{l.get('city', '')} ({l.get('type', '')})" for l in profile.get("locations", []) if isinstance(l, dict)]) if isinstance(profile.get("locations"), list) else str(profile.get("locations", ""))
-            ceo = profile.get("ceo", "")
-            dirs = ", ".join(profile.get("directors", [])) if isinstance(profile.get("directors"), list) else str(profile.get("directors", ""))
-            urls = ", ".join(profile.get("domains_urls", [])) if isinstance(profile.get("domains_urls"), list) else str(profile.get("domains_urls", ""))
-            meta = profile.get("metadata_json") or {}
+        c_name = profile.get("company_name", "").strip() if profile else ""
+        g_name = profile.get("group_name", "").strip() if profile else ""
+        urls = list(profile.get("domains_urls", [])) if profile else []
+
+        # If profile company_name is blank, inspect CompanySourceModel
+        if not c_name:
+            try:
+                from ragops.storage.database import get_session
+                from ragops.storage.models import CompanySourceModel
+                _s = get_session()
+                _src = _s.query(CompanySourceModel).order_by(CompanySourceModel.created_at.desc()).first()
+                if _src:
+                    raw_title = (_src.display_name or "").replace(" Official Portal", "").replace(" Portal", "").strip()
+                    if raw_title and not raw_title.startswith("http") and raw_title.lower() not in ("company", "enterprise", "portal"):
+                        c_name = raw_title
+                    elif _src.source_url:
+                        import urllib.parse
+                        domain = urllib.parse.urlparse(_src.source_url).netloc.lower()
+                        parts = domain.replace("www.", "").split(".")
+                        if parts:
+                            c_name = parts[0].capitalize()
+                    if _src.source_url and _src.source_url not in urls:
+                        urls.append(_src.source_url)
+                _s.close()
+            except Exception:
+                pass
+
+        if c_name:
+            industry = profile.get("industry", "Global Enterprise") if profile else "Global Enterprise"
+            desc = profile.get("description", "") if profile else ""
+            prods = ", ".join(profile.get("products", [])) if profile and isinstance(profile.get("products"), list) else str(profile.get("products", "") if profile else "")
+            emp = profile.get("employee_details", "") if profile else ""
+            locs = ", ".join([f"{l.get('city', '')} ({l.get('type', '')})" for l in profile.get("locations", []) if isinstance(l, dict)]) if profile and isinstance(profile.get("locations"), list) else str(profile.get("locations", "") if profile else "")
+            ceo = profile.get("ceo", "") if profile else ""
+            dirs = ", ".join(profile.get("directors", [])) if profile and isinstance(profile.get("directors"), list) else str(profile.get("directors", "") if profile else "")
+            urls_str = ", ".join(urls)
+            meta = profile.get("metadata_json") or {} if profile else {}
             clients = ", ".join(meta.get("clients", [])) if isinstance(meta.get("clients"), list) else str(meta.get("clients", ""))
             hubs = ", ".join(meta.get("hubs", [])) if isinstance(meta.get("hubs"), list) else str(meta.get("hubs", ""))
             ratings = meta.get("ratings", "")
             f_year = meta.get("founded_year", "")
 
-            return f"""You are the official enterprise AI compliance and corporate intelligence assistant for {c_name} (part of {g_name}).
+            parent_clause = f" (part of {g_name})" if g_name and g_name != c_name else ""
+            return f"""You are the official enterprise AI compliance and corporate intelligence assistant for {c_name}{parent_clause}.
 
-## Dynamic Corporate Profile (Indexed from PostgreSQL & Live MNC Web Tools):
+## Dynamic Corporate Profile (Indexed from PostgreSQL & Live Official Web Tools):
 - Legal Entity: {c_name}
-- Parent / Group: {g_name}
+- Parent / Group: {g_name or c_name}
 - Industry Sector: {industry}
-- Corporate Summary: {desc}
-- Primary Products & Transmissions: {prods or 'Axles, transmissions, and drive systems'}
-- Key Locations & Facilities: {locs or 'Corporate HQ and regional manufacturing plants'}
-- Regional & Logistics Hubs: {hubs or 'Regional distribution and assembly hubs'}
-- Key Clients & OEM Partners: {clients or 'Agricultural, Construction, and Automotive OEMs'}
-- Workforce / Employees: {emp or 'Multi-facility global workforce'}
-- Executive Leadership: CEO / Managing Director: {ceo} | Board: {dirs}
-- Official Registered MNC URLs: {urls}
+- Corporate Summary: {desc or 'Global enterprise operations'}
+- Primary Products & Solutions: {prods or 'Products, consulting, engineering, and corporate services'}
+- Key Locations & Facilities: {locs or 'Corporate HQ, global delivery centers, and regional offices'}
+- Regional & Logistics Hubs: {hubs or 'Regional hubs and service centers'}
+- Key Clients & Strategic Partners: {clients or 'Global enterprise and commercial clients'}
+- Workforce / Employees: {emp or 'Global workforce'}
+- Executive Leadership: CEO / Managing Director: {ceo or 'Executive Leadership'} | Board: {dirs or 'Board of Directors'}
+- Official Registered URLs: {urls_str}
 - Financial & Credit Ratings: {ratings}
 - Founded Year: {f_year}
 
 ## Operational Guidelines:
-1. Always answer questions accurately based on the provided context documents and verified company facts.
-2. When asked about company products, leadership, facilities, founding background, or operations:
+1. Always answer questions accurately based on the provided context documents, verified company facts, and live official web sources.
+2. When asked about company products, leadership, facilities, locations, founding background, or operations:
    - Provide direct, helpful, and factual answers grounded in the company profile and web context.
 3. For internal compliance, ethics, and statutory procedures (e.g. POSH, Whistleblower mechanism, Board governance):
    - Provide clear, step-by-step guidance referencing the internal policies.
 4. When conversation history is provided, resolve follow-up questions, pronouns, and topic continuity naturally.
 5. Always cite your sources using [Source: filename or website] format.
-6. Be polite, authoritative, professional, and helpful. Avoid harsh or robotic rejections."""
+6. Be polite, authoritative, professional, and helpful. Avoid harsh or robotic rejections when factual context is provided."""
     except Exception as e:
         pass
 

@@ -361,10 +361,7 @@ export default function SearchPage({
     if (!text) return false;
     const lower = text.toLowerCase();
     
-    // If the answer identifies the company or provides valid citations, it is grounded
-    if (lower.includes('carraro') && (lower.includes('company') || lower.includes('policy') || lower.includes('limited'))) {
-      return false;
-    }
+    // If the answer provides valid citations or direct grounded corporate knowledge, it is grounded
     if (sources && sources.length > 0 && !lower.startsWith("i am sorry") && !lower.startsWith("i'm sorry")) {
       return false;
     }
@@ -834,7 +831,7 @@ export default function SearchPage({
               <Globe className="w-4 h-4 text-cyan-400 shrink-0" />
               <input
                 type="url"
-                placeholder="Paste company website URL (e.g. https://www.carraro.com)..."
+                placeholder="Paste company website URL (e.g. https://www.tatamotors.com or https://www.siemens.com)..."
                 value={targetCompanyUrl}
                 onChange={(e) => setTargetCompanyUrl(e.target.value)}
                 className="flex-1 min-w-[260px] px-3 py-1.5 bg-black/50 border border-white/10 rounded-xl text-xs text-white placeholder-slate-500 font-mono focus:outline-none focus:border-cyan-500"

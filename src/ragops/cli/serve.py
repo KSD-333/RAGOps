@@ -15,7 +15,7 @@ console = Console()
 @click.command(name="serve")
 @click.option("--host", default="0.0.0.0", help="Server host")
 @click.option("--port", default=8000, type=int, help="Server port")
-@click.option("--reload", is_flag=True, help="Enable auto-reload")
+@click.option("--reload/--no-reload", default=True, help="Enable auto-reload")
 def serve_command(host: str, port: int, reload: bool):
     """Start the RAGOps API server."""
     setup_logging("INFO")

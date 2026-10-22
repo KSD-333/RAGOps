@@ -228,7 +228,7 @@ def evaluate(dataset: str, version: str, no_judge: bool):
 @cli.command()
 @click.option("--host", default="0.0.0.0", help="Server host")
 @click.option("--port", default=8000, type=int, help="Server port")
-@click.option("--reload", is_flag=True, help="Enable auto-reload")
+@click.option("--reload/--no-reload", default=True, help="Enable auto-reload")
 def serve(host: str, port: int, reload: bool):
     """Start the RAGOps API server."""
     import uvicorn

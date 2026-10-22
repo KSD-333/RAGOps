@@ -39,7 +39,11 @@ import {
   RefreshCw,
   Briefcase,
   MapPin,
-  Check
+  Check,
+  XCircle,
+  Tag,
+  Eye,
+  GitMerge
 } from 'lucide-react';
 
 export default function DashboardPage({ onRerunQuery, apiBaseUrl = '', currentUser, onOpenAuthModal }) {
@@ -78,13 +82,38 @@ export default function DashboardPage({ onRerunQuery, apiBaseUrl = '', currentUs
   const [isExtractingCompany, setIsExtractingCompany] = useState(false);
   const [scrapeResultMsg, setScrapeResultMsg] = useState('');
   const [newCompanyUrl, setNewCompanyUrl] = useState('');
-  const [companyUrlInput, setCompanyUrlInput] = useState('https://www.carraro.com');
+  const [companyUrlInput, setCompanyUrlInput] = useState('');
   const [isEditingCompany, setIsEditingCompany] = useState(false);
   const [isReviewMode, setIsReviewMode] = useState(false);
   const [isPreviewModalOpen, setIsPreviewModalOpen] = useState(false);
   const [previewData, setPreviewData] = useState(null);
   const [isApprovingProfile, setIsApprovingProfile] = useState(false);
   const [isReindexingEmbeddings, setIsReindexingEmbeddings] = useState(false);
+
+  // Source-Backed Fact Validation & Outbox States
+  const [companyHubSubTab, setCompanyHubSubTab] = useState('candidates'); // 'candidates' | 'approved' | 'outbox' | 'edit_profile'
+  const [factCandidates, setFactCandidates] = useState([]);
+  const [approvedFacts, setApprovedFacts] = useState([]);
+  const [outboxEvents, setOutboxEvents] = useState([]);
+  const [companySources, setCompanySources] = useState([]);
+  const [candidateSectionFilter, setCandidateSectionFilter] = useState('all');
+  const [editingCandidateId, setEditingCandidateId] = useState(null);
+  const [editingCandidateValue, setEditingCandidateValue] = useState('');
+  const [isProcessingOutbox, setIsProcessingOutbox] = useState(false);
+  const [isSeedingKnowledge, setIsSeedingKnowledge] = useState(false);
+
+  // Universal Multi-Company & Autonomous Research Tool States
+  const [trackedCompanies, setTrackedCompanies] = useState([]);
+  const [selectedOrgId, setSelectedOrgId] = useState('default_org');
+  const [fillGapsWithSearch, setFillGapsWithSearch] = useState(true);
+  const [reconcilingCandidate, setReconcilingCandidate] = useState(null);
+  const [reconciledValueInput, setReconciledValueInput] = useState('');
+  const [reconciledReasonInput, setReconciledReasonInput] = useState('');
+  const [showSearchToolDrawer, setShowSearchToolDrawer] = useState(false);
+  const [searchToolFactType, setSearchToolFactType] = useState('leadership');
+  const [searchToolResults, setSearchToolResults] = useState([]);
+  const [isSearchingGap, setIsSearchingGap] = useState(false);
+
   const [newLocationInput, setNewLocationInput] = useState({
     city: '',
     state: '',
@@ -96,21 +125,18 @@ export default function DashboardPage({ onRerunQuery, apiBaseUrl = '', currentUs
   const [newHubInput, setNewHubInput] = useState('');
   const [newProductInput, setNewProductInput] = useState('');
   const [companyForm, setCompanyForm] = useState({
-    company_name: 'Carraro India Limited',
-    group_name: 'Carraro Group',
-    industry: 'Automotive & Mechanical Transmission Systems',
-    description: 'Leading global manufacturer of mechanical transmission systems, axles, and drive systems for agricultural tractors and construction machinery.',
-    ceo: 'Mr. Balaji Gopalan (Managing Director)',
-    founded_year: '1997',
-    employee_details: '500+ employees (India Plant: 450+ engineers & workforce; Global Carraro: 3,500+)',
-    clients: ['John Deere', 'CNH Industrial', 'Mahindra & Mahindra', 'Caterpillar', 'Escorts Kubota', 'Case IH', '100+ OEM Clients'],
-    hubs: ['Pune Central Spares Hub', 'Padua Global Distribution Center'],
-    products: ['Agricultural Tractor Transmissions', 'Construction Equipment Axles', 'Drive Systems', 'Precision Gears', 'Electric Powertrains'],
-    locations: [
-      { city: 'Pune', state: 'Maharashtra', country: 'India', type: 'Manufacturing Plant', address: 'B-85, MIDC, Ranjangaon, Pune - 412209' },
-      { city: 'Padua', state: 'Veneto', country: 'Italy', type: 'Global Headquarters', address: 'Via Olmo, 37, 35011 Campodarsego, Padua' }
-    ],
-    domains_urls: ['https://www.carraro.com'],
+    company_name: '',
+    group_name: '',
+    industry: '',
+    description: '',
+    ceo: '',
+    founded_year: '',
+    employee_details: '',
+    clients: [],
+    hubs: [],
+    products: [],
+    locations: [],
+    domains_urls: [],
   });
 
   // Document Upload States (with Title input & Filename fallback)
@@ -193,14 +219,14 @@ export default function DashboardPage({ onRerunQuery, apiBaseUrl = '', currentUs
           const locsList = Array.isArray(prof.locations) ? prof.locations : [];
           const urlsList = Array.isArray(prof.domains_urls) ? prof.domains_urls : [];
           setCompanyForm({
-            company_name: prof.company_name || 'Carraro India Limited',
-            group_name: prof.group_name || 'Carraro Group',
-            industry: prof.industry || 'Automotive & Mechanical Transmission Systems',
+            company_name: prof.company_name || '',
+            group_name: prof.group_name || '',
+            industry: prof.industry || '',
             description: prof.description || '',
             ceo: prof.ceo || '',
-            founded_year: meta.founded_year || prof.founded_year || '1997',
-            employee_details: prof.employee_details || '500+ employees (India Plant: 450+ engineers & workforce; Global: 3,500+)',
-            clients: clientsList.length > 0 ? clientsList : ['John Deere', 'CNH Industrial', 'Mahindra & Mahindra', '100+ OEM Clients'],
+            founded_year: meta.founded_year || prof.founded_year || '',
+            employee_details: prof.employee_details || '',
+            clients: clientsList,
             hubs: hubsList,
             products: prodsList,
             locations: locsList,
@@ -211,10 +237,248 @@ export default function DashboardPage({ onRerunQuery, apiBaseUrl = '', currentUs
           }
         }
       }
+
+      // 8. Fetch Fact Candidates for Review
+      try {
+        const resCand = await fetch(`${apiBaseUrl}/api/v1/company/candidates`);
+        if (resCand.ok) {
+          const cJson = await resCand.json();
+          setFactCandidates(cJson.candidates || []);
+        }
+      } catch (eCand) {
+        console.warn('Failed to load fact candidates:', eCand);
+      }
+
+      // 9. Fetch Approved Structured Facts
+      try {
+        const resFacts = await fetch(`${apiBaseUrl}/api/v1/company/knowledge`);
+        if (resFacts.ok) {
+          const fJson = await resFacts.json();
+          setApprovedFacts(fJson.facts || []);
+        }
+      } catch (eFacts) {
+        console.warn('Failed to load approved facts:', eFacts);
+      }
+
+      // 10. Fetch Publication Outbox Events
+      try {
+        const resOutbox = await fetch(`${apiBaseUrl}/api/v1/company/outbox`);
+        if (resOutbox.ok) {
+          const oJson = await resOutbox.json();
+          setOutboxEvents(oJson.outbox_events || []);
+        }
+      } catch (eOutbox) {
+        console.warn('Failed to load outbox events:', eOutbox);
+      }
+
+      // 11. Fetch Tracked Companies
+      await fetchTrackedCompanies();
     } catch (err) {
       console.error('Failed to fetch dashboard telemetry:', err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchTrackedCompanies = async () => {
+    try {
+      const res = await fetch(`${apiBaseUrl}/api/v1/company/universal/companies`);
+      if (res.ok) {
+        const data = await res.json();
+        setTrackedCompanies(data.companies || []);
+      }
+    } catch (err) {
+      console.warn('Failed to load tracked companies:', err);
+    }
+  };
+
+  const fetchFactCandidates = async (orgId = null) => {
+    try {
+      const targetOrg = orgId || selectedOrgId;
+      const res = await fetch(`${apiBaseUrl}/api/v1/company/candidates?organization_id=${targetOrg}`);
+      if (res.ok) {
+        const data = await res.json();
+        setFactCandidates(data.candidates || []);
+      }
+    } catch (err) {
+      console.error('Failed to fetch candidates:', err);
+    }
+  };
+
+  const fetchApprovedFacts = async (orgId = null) => {
+    try {
+      const targetOrg = orgId || selectedOrgId;
+      const res = await fetch(`${apiBaseUrl}/api/v1/company/knowledge?organization_id=${targetOrg}`);
+      if (res.ok) {
+        const data = await res.json();
+        setApprovedFacts(data.facts || []);
+      }
+    } catch (err) {
+      console.error('Failed to fetch approved facts:', err);
+    }
+  };
+
+  const fetchOutboxEvents = async (orgId = null) => {
+    try {
+      const targetOrg = orgId || selectedOrgId;
+      const res = await fetch(`${apiBaseUrl}/api/v1/company/outbox?organization_id=${targetOrg}`);
+      if (res.ok) {
+        const data = await res.json();
+        setOutboxEvents(data.outbox_events || []);
+      }
+    } catch (err) {
+      console.error('Failed to fetch outbox events:', err);
+    }
+  };
+
+  const handleExecuteQuickGapSearch = async () => {
+    const targetName = companyForm.company_name || 'Enterprise';
+    setIsSearchingGap(true);
+    try {
+      const res = await fetch(`${apiBaseUrl}/api/v1/company/universal/search-gap`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          company_name: targetName,
+          fact_type: searchToolFactType,
+        }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setSearchToolResults(data.results || []);
+      }
+    } catch (err) {
+      console.error('Gap search failed:', err);
+    } finally {
+      setIsSearchingGap(false);
+    }
+  };
+
+  const handleReviewCandidate = async (candidateId, decision, submittedValue = null, reason = null) => {
+    try {
+      const res = await fetch(`${apiBaseUrl}/api/v1/company/candidates/${candidateId}/review`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          decision,
+          reviewer_id: currentUser?.username || 'admin',
+          submitted_value: submittedValue,
+          reason,
+        }),
+      });
+      if (res.ok) {
+        await Promise.all([
+          fetchFactCandidates(selectedOrgId),
+          fetchApprovedFacts(selectedOrgId),
+          fetchOutboxEvents(selectedOrgId),
+          fetchTrackedCompanies(),
+        ]);
+        setScrapeResultMsg(`Fact candidate status updated to '${decision}' with transactional outbox queue.`);
+        setTimeout(() => setScrapeResultMsg(''), 6000);
+      }
+    } catch (err) {
+      console.error('Failed to review candidate:', err);
+    }
+  };
+
+  const handleSaveCandidateEdit = async (candidateId) => {
+    try {
+      let parsedValue = editingCandidateValue;
+      try {
+        parsedValue = JSON.parse(editingCandidateValue);
+      } catch (_) {
+        // Keep as string
+      }
+      const res = await fetch(`${apiBaseUrl}/api/v1/company/candidates/${candidateId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ proposed_value: parsedValue }),
+      });
+      if (res.ok) {
+        setEditingCandidateId(null);
+        setEditingCandidateValue('');
+        await fetchFactCandidates();
+      }
+    } catch (err) {
+      console.error('Failed to edit candidate value:', err);
+    }
+  };
+
+  const handleProcessOutbox = async () => {
+    setIsProcessingOutbox(true);
+    try {
+      const res = await fetch(`${apiBaseUrl}/api/v1/company/publish-outbox/process`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ limit: 50 }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setScrapeResultMsg(`⚡ Published ${data.result?.processed || 0} facts to ChromaDB vector store safely!`);
+        await Promise.all([fetchOutboxEvents(), fetchApprovedFacts()]);
+        setTimeout(() => setScrapeResultMsg(''), 8000);
+      }
+    } catch (err) {
+      console.error('Failed to process publication outbox:', err);
+    } finally {
+      setIsProcessingOutbox(false);
+    }
+  };
+
+  const [isClearingCompany, setIsClearingCompany] = useState(false);
+
+  const handleClearCompanyData = async (clearAll = true) => {
+    if (!window.confirm(clearAll 
+      ? 'Are you sure you want to completely clear ALL previous company info, candidates, facts, and profile? This gives you a clean slate for any new enterprise.'
+      : `Are you sure you want to clear company data for ${selectedOrgId}?`
+    )) {
+      return;
+    }
+    setIsClearingCompany(true);
+    setScrapeResultMsg('🧹 Clearing corporate facts, candidates, review queue, and profile...');
+    try {
+      const res = await fetch(`${apiBaseUrl}/api/v1/company/clear`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          organization_id: clearAll ? null : selectedOrgId,
+          clear_all: clearAll,
+        }),
+      });
+      if (res.ok) {
+        setCompanyForm({
+          company_name: '',
+          group_name: '',
+          industry: '',
+          description: '',
+          ceo: '',
+          founded_year: '',
+          employee_details: '',
+          clients: [],
+          hubs: [],
+          products: [],
+          locations: [],
+          domains_urls: [],
+        });
+        setCompanyUrlInput('');
+        setCompanyProfile(null);
+        setFactCandidates([]);
+        setApprovedFacts([]);
+        setOutboxEvents([]);
+        setSelectedOrgId('default_org');
+        setTrackedCompanies([]);
+        await fetchTrackedCompanies();
+        setScrapeResultMsg('✨ Clean slate: All previous company data wiped cleanly! Ready for any enterprise URL.');
+        setTimeout(() => setScrapeResultMsg(''), 6000);
+      } else {
+        const errJson = await res.json().catch(() => ({}));
+        setScrapeResultMsg(`⚠️ Failed to clear company data: ${errJson.detail || 'Unknown error'}`);
+      }
+    } catch (err) {
+      console.error('Failed to clear company data:', err);
+      setScrapeResultMsg(`❌ Clear error: ${err.message}`);
+    } finally {
+      setIsClearingCompany(false);
     }
   };
 
@@ -272,50 +536,38 @@ export default function DashboardPage({ onRerunQuery, apiBaseUrl = '', currentUs
   const handleExtractCompanyFromUrl = async (urlOverride = null) => {
     const target = (urlOverride || companyUrlInput || newCompanyUrl).trim();
     if (!target) {
-      alert('Please enter a company website URL (e.g. https://www.carraro.com)');
+      alert('Please enter any company website URL (e.g. https://www.tatamotors.com or https://www.siemens.com or https://www.caterpillar.com)');
       return;
     }
     setIsExtractingCompany(true);
     setIsScrapingCompany(true);
-    setScrapeResultMsg('🌐 Crawling official website, exploring subpages, & running multi-query AI extraction for locations, clients, and workforce...');
+    setScrapeResultMsg('🌐 Universal Autonomous AI: Crawling multi-page site, discovering subpages, & researching missing facts with AI Search Tool...');
     try {
-      const res = await fetch(`${apiBaseUrl}/api/v1/company/scrape-preview`, {
+      const res = await fetch(`${apiBaseUrl}/api/v1/company/universal/analyze`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url: target }),
+        body: JSON.stringify({
+          url: target,
+          company_name: companyForm.company_name || null,
+          organization_id: selectedOrgId !== 'default_org' ? selectedOrgId : null,
+          max_pages: 6,
+          fill_gaps_with_search: fillGapsWithSearch,
+        }),
       });
       const data = await res.json();
-      if (res.ok && (data.status === 'preview_ready' || data.preview)) {
-        const preview = data.preview;
-        setPreviewData(preview);
-        const meta = preview.metadata_json || {};
-        
-        const locs = Array.isArray(preview.locations) ? preview.locations : [];
-        const clientsArr = Array.isArray(meta.clients) ? meta.clients : (Array.isArray(preview.clients) ? preview.clients : []);
-        const hubsArr = Array.isArray(meta.hubs) ? meta.hubs : (Array.isArray(preview.hubs) ? preview.hubs : []);
-        const prodsArr = Array.isArray(preview.products) ? preview.products : [];
-        const urlsArr = Array.isArray(preview.domains_urls) ? preview.domains_urls : [target];
-
-        setCompanyForm({
-          company_name: preview.company_name || 'Carraro India Limited',
-          group_name: preview.group_name || 'Carraro Group',
-          industry: preview.industry || 'Automotive & Mechanical Transmission Systems',
-          description: preview.description || '',
-          ceo: preview.ceo || '',
-          founded_year: meta.founded_year || preview.founded_year || '1997',
-          employee_details: preview.employee_details || '500+ employees',
-          clients: clientsArr.length > 0 ? clientsArr : ['John Deere', 'CNH Industrial', 'Mahindra & Mahindra', '100+ OEM Clients'],
-          hubs: hubsArr,
-          products: prodsArr,
-          locations: locs,
-          domains_urls: urlsArr,
-        });
-
-        setIsReviewMode(true);
-        setIsEditingCompany(true);
-        setScrapeResultMsg(`✅ AI Multi-Query extraction complete from ${data.crawled_urls?.length || 1} pages! Check and validate the details below before saving.`);
+      if (res.ok && data.status === 'success') {
+        const analysis = data.analysis;
+        setSelectedOrgId(analysis.organization_id);
+        await Promise.all([
+          fetchFactCandidates(analysis.organization_id),
+          fetchApprovedFacts(analysis.organization_id),
+          fetchOutboxEvents(analysis.organization_id),
+          fetchTrackedCompanies(),
+        ]);
+        setCompanyHubSubTab('candidates');
+        setScrapeResultMsg(`✅ Universal AI Extraction Complete for ${analysis.company_name}: Crawled ${analysis.pages_crawled} pages, executed ${analysis.search_queries_executed} AI searches, and staged ${analysis.candidates_count} candidate facts in PostgreSQL!`);
       } else {
-        setScrapeResultMsg(`⚠️ ${data.message || 'Scrape completed with warnings.'}`);
+        setScrapeResultMsg(`⚠️ ${data.detail || data.message || 'Analysis completed with warnings.'}`);
       }
       setTimeout(() => setScrapeResultMsg(''), 10000);
     } catch (err) {
@@ -1456,9 +1708,10 @@ export default function DashboardPage({ onRerunQuery, apiBaseUrl = '', currentUs
           ===================================================================== */}
       {activeTab === 'catalog' && (
         <div className="space-y-8 animate-in fade-in duration-150">
-          {/* Section 1: Company Info & Multi-Query AI Extractor (Corporate Knowledge Hub) */}
+          {/* Section 1: Source-Backed Company Knowledge Hub & Review-Before-Publish Workflow */}
           <div className="p-6 rounded-2xl bg-gradient-to-br from-[#0c101a] via-[#0f1424] to-[#12192e] border border-indigo-500/30 shadow-2xl space-y-6">
-            {/* Header with Title & Stats */}
+            
+            {/* Header with Title, Stats & Action Bar */}
             <div className="flex flex-wrap items-center justify-between gap-4 border-b border-white/10 pb-4">
               <div className="flex items-center gap-3">
                 <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-indigo-500/30 to-purple-500/20 border border-indigo-500/40 flex items-center justify-center text-indigo-400 shadow-lg shadow-indigo-500/10">
@@ -1467,57 +1720,184 @@ export default function DashboardPage({ onRerunQuery, apiBaseUrl = '', currentUs
                 <div>
                   <div className="flex items-center gap-2.5">
                     <h2 className="text-lg font-bold text-white font-['Outfit'] tracking-wide">
-                      {companyForm?.company_name || companyProfile?.company_name || 'Company Info & Knowledge Hub'}
+                      {trackedCompanies.find((c) => c.organization_id === selectedOrgId)?.company_name || companyForm?.company_name || 'Universal Enterprise Hub'}
                     </h2>
-                    {(companyForm?.group_name || companyProfile?.group_name) && (
-                      <span className="text-[10px] px-2.5 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 font-mono font-bold">
-                        {companyForm?.group_name || companyProfile?.group_name}
-                      </span>
-                    )}
+                    <span className="text-[10px] px-2.5 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 font-mono font-bold">
+                      Org: {selectedOrgId}
+                    </span>
                   </div>
                   <p className="text-xs text-slate-400 mt-0.5">
-                    Multi-query AI extraction from corporate websites • Section-wise fact verification • Grounded PostgreSQL &amp; Vector Store
+                    Universal multi-company intelligence &bull; Multi-page crawler &bull; AI search tool &bull; Human-in-the-loop review &bull; Vector index sync
                   </p>
                 </div>
               </div>
 
-              {/* Status & Quick Stats Badges */}
+              {/* Company Switcher Dropdown & Actions */}
               <div className="flex flex-wrap items-center gap-2 text-xs">
-                <div className="px-3 py-1.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 font-mono text-[11px] flex items-center gap-1.5">
-                  <MapPin className="w-3.5 h-3.5 text-emerald-400" />
-                  <span>{companyForm.locations?.length || 0} Locations</span>
+                {/* Switcher Dropdown */}
+                <div className="flex items-center gap-1.5 bg-black/60 border border-white/10 rounded-xl px-2.5 py-1 text-xs">
+                  <span className="text-[10px] text-slate-400 font-bold uppercase font-mono">Company:</span>
+                  <select
+                    value={selectedOrgId}
+                    onChange={(e) => {
+                      const newOrg = e.target.value;
+                      setSelectedOrgId(newOrg);
+                      fetchFactCandidates(newOrg);
+                      fetchApprovedFacts(newOrg);
+                      fetchOutboxEvents(newOrg);
+                    }}
+                    className="bg-transparent text-white text-xs font-semibold focus:outline-none cursor-pointer pr-1"
+                  >
+                    {trackedCompanies.length === 0 ? (
+                      <option value="default_org" className="bg-slate-900 text-white">Active Enterprise</option>
+                    ) : (
+                      trackedCompanies.map((c) => (
+                        <option key={c.organization_id} value={c.organization_id} className="bg-slate-900 text-white">
+                          {c.company_name || c.organization_id}
+                        </option>
+                      ))
+                    )}
+                  </select>
                 </div>
-                <div className="px-3 py-1.5 rounded-xl bg-cyan-500/10 border border-cyan-500/30 text-cyan-300 font-mono text-[11px] flex items-center gap-1.5">
-                  <Users className="w-3.5 h-3.5 text-cyan-400" />
-                  <span>500+ Workforce</span>
-                </div>
-                <div className="px-3 py-1.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-300 font-mono text-[11px] flex items-center gap-1.5">
-                  <Award className="w-3.5 h-3.5 text-amber-400" />
-                  <span>{companyForm.clients?.length || 0} Clients (100+)</span>
-                </div>
+
                 <button
                   type="button"
-                  onClick={handleReindexEmbeddings}
-                  disabled={isReindexingEmbeddings}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-indigo-500/10 hover:bg-indigo-500/20 border border-indigo-500/30 text-xs font-semibold text-indigo-300 hover:text-white transition-all cursor-pointer disabled:opacity-50"
-                  title="Re-embed corporate profile facts directly into ChromaDB vector store"
+                  onClick={() => setShowSearchToolDrawer(!showSearchToolDrawer)}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-semibold transition-all cursor-pointer ${
+                    showSearchToolDrawer
+                      ? 'bg-cyan-600/30 border-cyan-500/50 text-cyan-200'
+                      : 'bg-white/5 border-white/10 text-slate-300 hover:text-white'
+                  }`}
+                  title="Toggle Autonomous AI Search Tool to query missing corporate dimensions live"
                 >
-                  <Database className={`w-3.5 h-3.5 text-indigo-400 ${isReindexingEmbeddings ? 'animate-spin' : ''}`} />
-                  <span>{isReindexingEmbeddings ? 'Embedding...' : 'Sync Vector Store'}</span>
+                  <Search className="w-3.5 h-3.5 text-cyan-400" />
+                  <span>AI Search Tool</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => handleClearCompanyData(true)}
+                  disabled={isClearingCompany}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-rose-600/20 hover:bg-rose-600/30 border border-rose-500/40 text-xs font-semibold text-rose-300 hover:text-white transition-all cursor-pointer disabled:opacity-50"
+                  title="Purge previous company facts, candidate queue, and active profile"
+                >
+                  <Trash2 className={`w-3.5 h-3.5 text-rose-400 ${isClearingCompany ? 'animate-spin' : ''}`} />
+                  <span>{isClearingCompany ? 'Clearing...' : 'Clear Company Data'}</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleProcessOutbox}
+                  disabled={isProcessingOutbox}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-600/20 hover:bg-emerald-600/30 border border-emerald-500/40 text-xs font-semibold text-emerald-300 hover:text-white transition-all cursor-pointer disabled:opacity-50"
+                  title="Claim pending publication outbox events and synchronize with ChromaDB vector store safely"
+                >
+                  <Database className={`w-3.5 h-3.5 text-emerald-400 ${isProcessingOutbox ? 'animate-spin' : ''}`} />
+                  <span>{isProcessingOutbox ? 'Publishing...' : 'Publish Outbox to Vector Store'}</span>
                 </button>
               </div>
             </div>
 
-            {/* URL Input Bar & Multi-Query AI Extraction Button */}
+            {/* AI Search Research Tool Drawer (Interactive Gap-Filler) */}
+            {showSearchToolDrawer && (
+              <div className="p-4 rounded-xl bg-cyan-950/20 border border-cyan-500/30 space-y-3 animate-in fade-in duration-200">
+                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-cyan-500/20 pb-2">
+                  <div className="flex items-center gap-2 text-cyan-300 text-xs font-bold">
+                    <Search className="w-4 h-4 text-cyan-400" />
+                    <span>Autonomous AI Web Search Tool &bull; Fill Information Gaps Live</span>
+                  </div>
+                  <span className="text-[11px] text-cyan-200/80">
+                    Queries search engines to resolve missing leadership, headcount, locations, or clients
+                  </span>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-[11px] font-bold text-slate-300">Dimension to Research:</span>
+                  {[
+                    { key: 'leadership', label: 'Leadership & CEO' },
+                    { key: 'headquarters', label: 'Global HQ' },
+                    { key: 'headcount', label: 'Workforce / Headcount' },
+                    { key: 'plants', label: 'Manufacturing Plants' },
+                    { key: 'clients', label: 'OEM Clients & Partners' },
+                    { key: 'hubs', label: 'Spares & Logistics Hubs' },
+                    { key: 'products', label: 'Products & Offerings' },
+                    { key: 'financials', label: 'Revenue & Financials' },
+                  ].map((dim) => (
+                    <button
+                      key={dim.key}
+                      type="button"
+                      onClick={() => setSearchToolFactType(dim.key)}
+                      className={`px-2.5 py-1 rounded-lg text-[11px] font-mono font-semibold transition-all cursor-pointer ${
+                        searchToolFactType === dim.key
+                          ? 'bg-cyan-500/30 text-cyan-200 border border-cyan-400/50 shadow-sm'
+                          : 'bg-black/40 text-slate-400 border border-white/5 hover:text-white'
+                      }`}
+                    >
+                      {dim.label}
+                    </button>
+                  ))}
+
+                  <button
+                    type="button"
+                    onClick={handleExecuteQuickGapSearch}
+                    disabled={isSearchingGap}
+                    className="ml-auto px-4 py-1.5 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-bold flex items-center gap-1.5 cursor-pointer disabled:opacity-50 shadow-md shadow-cyan-600/20"
+                  >
+                    <Search className={`w-3.5 h-3.5 ${isSearchingGap ? 'animate-spin' : ''}`} />
+                    <span>{isSearchingGap ? 'Searching Web...' : 'Search Live Web'}</span>
+                  </button>
+                </div>
+
+                {/* Search Findings Results */}
+                {searchToolResults.length > 0 && (
+                  <div className="mt-3 space-y-2 border-t border-cyan-500/20 pt-3">
+                    <span className="text-[10px] text-cyan-300 font-mono font-bold uppercase">
+                      Live Search Findings ({searchToolResults.length} organic sources):
+                    </span>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                      {searchToolResults.map((item, idx) => (
+                        <div key={idx} className="p-2.5 rounded-lg bg-black/50 border border-white/5 space-y-1">
+                          <div className="flex items-center justify-between text-[11px]">
+                            <a
+                              href={item.url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="font-bold text-cyan-300 hover:underline flex items-center gap-1 truncate"
+                            >
+                              <span>{item.title}</span>
+                              <ExternalLink className="w-3 h-3 shrink-0" />
+                            </a>
+                            <span className="text-[9px] font-mono text-slate-500">{item.source}</span>
+                          </div>
+                          <p className="text-[11px] text-slate-300 leading-relaxed line-clamp-3">
+                            "{item.snippet}"
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Universal Website Input Bar & Deep Crawl Action */}
             <div className="p-4 rounded-xl bg-[#090d17] border border-indigo-500/20 space-y-3">
-              <div className="flex items-center justify-between">
+              <div className="flex flex-wrap items-center justify-between gap-2">
                 <label className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-2">
                   <Globe className="w-4 h-4 text-cyan-400" />
-                  <span>Corporate Website URL Input &amp; AI Multi-Query Extraction</span>
+                  <span>Universal Autonomous Intelligence: Extract from Any Enterprise Domain</span>
                 </label>
-                <span className="text-[11px] text-slate-400">
-                  Crawls /locations, /plants, /about, /clients &amp; runs 3 specialized LLM queries
-                </span>
+                <div className="flex items-center gap-2 text-xs">
+                  <label className="flex items-center gap-1.5 text-[11px] text-slate-300 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={fillGapsWithSearch}
+                      onChange={(e) => setFillGapsWithSearch(e.target.checked)}
+                      className="rounded bg-black/60 border-white/20 text-indigo-500 focus:ring-0"
+                    />
+                    <span>Autonomous AI Search Gap-Filler</span>
+                  </label>
+                </div>
               </div>
 
               <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5">
@@ -1525,7 +1905,7 @@ export default function DashboardPage({ onRerunQuery, apiBaseUrl = '', currentUs
                   <Globe className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
                   <input
                     type="url"
-                    placeholder="Enter company website URL (e.g. https://www.carraro.com)..."
+                    placeholder="Enter any enterprise website URL (e.g. https://www.tatamotors.com or https://www.siemens.com or https://www.tesla.com)..."
                     value={companyUrlInput}
                     onChange={(e) => setCompanyUrlInput(e.target.value)}
                     onKeyDown={(e) => {
@@ -1534,8 +1914,18 @@ export default function DashboardPage({ onRerunQuery, apiBaseUrl = '', currentUs
                         handleExtractCompanyFromUrl();
                       }
                     }}
-                    className="w-full pl-10 pr-4 py-2.5 bg-black/60 border border-white/10 rounded-xl text-white text-xs font-mono placeholder-slate-500 focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 transition-all"
+                    className="w-full pl-10 pr-10 py-2.5 bg-black/60 border border-white/10 rounded-xl text-white text-xs font-mono placeholder-slate-500 focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 transition-all"
                   />
+                  {companyUrlInput && (
+                    <button
+                      type="button"
+                      onClick={() => setCompanyUrlInput('')}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white text-xs cursor-pointer p-1"
+                      title="Clear URL input"
+                    >
+                      &times;
+                    </button>
+                  )}
                 </div>
                 <button
                   type="button"
@@ -1545,7 +1935,7 @@ export default function DashboardPage({ onRerunQuery, apiBaseUrl = '', currentUs
                   title="Crawl official website and execute multi-query AI extraction for identity, locations, workforce, and clients"
                 >
                   <Sparkles className={`w-4 h-4 text-cyan-200 ${isExtractingCompany ? 'animate-spin' : ''}`} />
-                  <span>{isExtractingCompany ? 'Crawling & AI Extracting...' : 'AI Extract Details'}</span>
+                  <span>{isExtractingCompany ? 'Deep Crawling & AI Searching...' : 'Analyze & Extract Universal Intelligence'}</span>
                 </button>
               </div>
 
@@ -1553,7 +1943,7 @@ export default function DashboardPage({ onRerunQuery, apiBaseUrl = '', currentUs
               {scrapeResultMsg && (
                 <div className="p-3 rounded-lg bg-indigo-950/60 border border-indigo-500/40 text-xs text-indigo-200 font-mono flex items-center justify-between animate-in fade-in duration-200">
                   <div className="flex items-center gap-2">
-                    <RotateCw className={`w-3.5 h-3.5 text-cyan-400 ${isExtractingCompany ? 'animate-spin' : ''}`} />
+                    <RotateCw className={`w-3.5 h-3.5 text-cyan-400 ${isExtractingCompany || isProcessingOutbox ? 'animate-spin' : ''}`} />
                     <span>{scrapeResultMsg}</span>
                   </div>
                   <button
@@ -1567,424 +1957,967 @@ export default function DashboardPage({ onRerunQuery, apiBaseUrl = '', currentUs
               )}
             </div>
 
-            {/* Section-Wise Corporate Fact Validation Form */}
-            <div className="space-y-6 pt-1">
-              <div className="flex items-center justify-between border-b border-white/5 pb-2">
-                <div className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-2">
-                  <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-                  <span>Validate &amp; Check Extracted Details Section-Wise</span>
-                </div>
-                <span className="text-[11px] text-slate-400 italic">
-                  Review and edit before saving to PostgreSQL &amp; Vector Store
-                </span>
+            {/* Sub-Navigation Tabs: Candidate Review Queue vs Approved Grounding vs Outbox vs Manual Form */}
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/10 pb-3">
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setCompanyHubSubTab('candidates')}
+                  className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                    companyHubSubTab === 'candidates'
+                      ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/30'
+                      : 'bg-white/5 text-slate-300 hover:bg-white/10'
+                  }`}
+                >
+                  <CheckCircle2 className="w-3.5 h-3.5" />
+                  <span>Candidate Review Queue</span>
+                  <span className="px-1.5 py-0.5 rounded-full bg-black/40 text-[10px] font-mono">
+                    {factCandidates.length}
+                  </span>
+                  {factCandidates.some((c) => c.validation_status === 'conflicting') && (
+                    <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" title="Conflicting facts require reconciliation" />
+                  )}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setCompanyHubSubTab('approved')}
+                  className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                    companyHubSubTab === 'approved'
+                      ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-600/30'
+                      : 'bg-white/5 text-slate-300 hover:bg-white/10'
+                  }`}
+                >
+                  <Award className="w-3.5 h-3.5" />
+                  <span>Approved Knowledge (Active RAG Truth)</span>
+                  <span className="px-1.5 py-0.5 rounded-full bg-black/40 text-[10px] font-mono">
+                    {approvedFacts.length}
+                  </span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setCompanyHubSubTab('outbox')}
+                  className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                    companyHubSubTab === 'outbox'
+                      ? 'bg-cyan-600 text-white shadow-lg shadow-cyan-600/30'
+                      : 'bg-white/5 text-slate-300 hover:bg-white/10'
+                  }`}
+                >
+                  <Database className="w-3.5 h-3.5" />
+                  <span>Publication Outbox &amp; Vector Index</span>
+                  <span className="px-1.5 py-0.5 rounded-full bg-black/40 text-[10px] font-mono">
+                    {outboxEvents.length}
+                  </span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setCompanyHubSubTab('edit_profile')}
+                  className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                    companyHubSubTab === 'edit_profile'
+                      ? 'bg-purple-600 text-white shadow-lg shadow-purple-600/30'
+                      : 'bg-white/5 text-slate-300 hover:bg-white/10'
+                  }`}
+                >
+                  <Edit3 className="w-3.5 h-3.5" />
+                  <span>Manual Form</span>
+                </button>
               </div>
 
-              {/* SECTION A: Company Identity & Overview */}
-              <div className="p-4 rounded-xl bg-black/30 border border-white/5 space-y-4">
-                <div className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
-                  <Briefcase className="w-3.5 h-3.5 text-indigo-400" />
-                  <span>1. Company Legal Identity &amp; Leadership</span>
+              <span className="text-[11px] text-slate-400 italic">
+                {companyHubSubTab === 'candidates' && 'Review each extracted fact and citation individually before publication'}
+                {companyHubSubTab === 'approved' && 'Only approved facts are active in PostgreSQL and serve the RAG assistant'}
+                {companyHubSubTab === 'outbox' && 'Transactional outbox prevents desynchronization between PostgreSQL and ChromaDB'}
+                {companyHubSubTab === 'edit_profile' && 'Direct field-by-field manual editing'}
+              </span>
+            </div>
+
+            {/* =================================================================
+                SUB-TAB 1: CANDIDATE REVIEW QUEUE
+                ================================================================= */}
+            {companyHubSubTab === 'candidates' && (
+              <div className="space-y-4 animate-in fade-in duration-150">
+                {/* Section Filter Pills */}
+                <div className="flex flex-wrap items-center gap-1.5 pb-1">
+                  {[
+                    { key: 'all', label: 'All Sections' },
+                    { key: 'identity', label: '1. Identity & Leadership' },
+                    { key: 'workforce', label: '2. Workforce & Headcount' },
+                    { key: 'locations', label: '3. Locations & Plants' },
+                    { key: 'clients', label: '4. Clients & OEMs' },
+                    { key: 'hubs', label: '5. Logistics Hubs' },
+                    { key: 'products', label: '6. Products & Solutions' },
+                    { key: 'overview', label: '7. Markets & Overview' },
+                    { key: 'innovation', label: '8. Technology & R&D' },
+                  ].map((filter) => (
+                    <button
+                      key={filter.key}
+                      type="button"
+                      onClick={() => setCandidateSectionFilter(filter.key)}
+                      className={`px-3 py-1 rounded-lg text-xs font-medium transition-all cursor-pointer ${
+                        candidateSectionFilter === filter.key
+                          ? 'bg-indigo-500/30 text-indigo-200 border border-indigo-500/50'
+                          : 'bg-black/30 text-slate-400 hover:text-white border border-white/5'
+                      }`}
+                    >
+                      {filter.label}
+                    </button>
+                  ))}
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 text-xs">
-                  <div>
-                    <label className="block text-slate-400 font-semibold mb-1">Company Legal Name</label>
-                    <input
-                      type="text"
-                      value={companyForm.company_name || ''}
-                      onChange={(e) => setCompanyForm({ ...companyForm, company_name: e.target.value })}
-                      placeholder="e.g. Carraro India Limited"
-                      className="w-full px-3 py-2 bg-black/50 border border-white/10 rounded-xl text-white font-sans focus:outline-none focus:border-indigo-500"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-slate-400 font-semibold mb-1">Parent MNC / Group</label>
-                    <input
-                      type="text"
-                      value={companyForm.group_name || ''}
-                      onChange={(e) => setCompanyForm({ ...companyForm, group_name: e.target.value })}
-                      placeholder="e.g. Carraro Group"
-                      className="w-full px-3 py-2 bg-black/50 border border-white/10 rounded-xl text-white font-sans focus:outline-none focus:border-indigo-500"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-slate-400 font-semibold mb-1">Industry Sector</label>
-                    <input
-                      type="text"
-                      value={companyForm.industry || ''}
-                      onChange={(e) => setCompanyForm({ ...companyForm, industry: e.target.value })}
-                      placeholder="e.g. Automotive & Mechanical Transmission Systems"
-                      className="w-full px-3 py-2 bg-black/50 border border-white/10 rounded-xl text-white font-sans focus:outline-none focus:border-indigo-500"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-slate-400 font-semibold mb-1">Founded Year</label>
-                    <input
-                      type="text"
-                      value={companyForm.founded_year || ''}
-                      onChange={(e) => setCompanyForm({ ...companyForm, founded_year: e.target.value })}
-                      placeholder="e.g. 1997"
-                      className="w-full px-3 py-2 bg-black/50 border border-white/10 rounded-xl text-white font-sans focus:outline-none focus:border-indigo-500 font-mono"
-                    />
-                  </div>
-                  <div className="sm:col-span-2">
-                    <label className="block text-slate-400 font-semibold mb-1">Executive Leadership (MD / CEO / Directors)</label>
-                    <input
-                      type="text"
-                      value={companyForm.ceo || ''}
-                      onChange={(e) => setCompanyForm({ ...companyForm, ceo: e.target.value })}
-                      placeholder="e.g. Mr. Balaji Gopalan (Managing Director)"
-                      className="w-full px-3 py-2 bg-black/50 border border-white/10 rounded-xl text-white font-sans focus:outline-none focus:border-indigo-500"
-                    />
-                  </div>
-                  <div className="sm:col-span-2 lg:col-span-3">
-                    <label className="block text-slate-400 font-semibold mb-1">Corporate Overview &amp; Description</label>
-                    <textarea
-                      rows={2}
-                      value={companyForm.description || ''}
-                      onChange={(e) => setCompanyForm({ ...companyForm, description: e.target.value })}
-                      placeholder="Comprehensive overview of company business operations and manufacturing scope..."
-                      className="w-full px-3 py-2 bg-black/50 border border-white/10 rounded-xl text-white font-sans focus:outline-none focus:border-indigo-500 resize-none"
-                    />
-                  </div>
+                {/* Candidate Cards Grid */}
+                <div className="grid grid-cols-1 gap-3.5">
+                  {factCandidates
+                    .filter((c) => candidateSectionFilter === 'all' || c.section_key === candidateSectionFilter)
+                    .map((cand) => {
+                      const isConflicting = cand.validation_status === 'conflicting';
+                      const isApproved = cand.review_status === 'approved';
+                      const isEditing = editingCandidateId === cand.id;
+                      const evidenceItem = cand.evidence && cand.evidence.length > 0 ? cand.evidence[0] : null;
+
+                      return (
+                        <div
+                          key={cand.id}
+                          className={`p-4 rounded-xl border transition-all ${
+                            isConflicting
+                              ? 'bg-amber-950/20 border-amber-500/40 shadow-lg shadow-amber-950/20'
+                              : isApproved
+                              ? 'bg-black/30 border-emerald-500/30'
+                              : 'bg-black/40 border-white/10 hover:border-indigo-500/30'
+                          }`}
+                        >
+                          {/* Card Top Row: Meta Tags & Statuses */}
+                          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-white/5 pb-2.5">
+                            <div className="flex items-center gap-2">
+                              <span className="px-2 py-0.5 rounded font-mono text-[10px] font-bold uppercase bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
+                                {cand.section_key}
+                              </span>
+                              <span className="text-xs font-bold text-white font-mono">
+                                {cand.fact_key}
+                              </span>
+                              <span className="px-2 py-0.5 rounded font-mono text-[10px] bg-white/5 text-slate-400 border border-white/10">
+                                Scope: {cand.scope_key}
+                              </span>
+                            </div>
+
+                            <div className="flex items-center gap-2">
+                              {/* Validation Status Badge */}
+                              {cand.validation_status === 'valid' && (
+                                <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 font-mono text-[10px] font-bold flex items-center gap-1">
+                                  <Check className="w-3 h-3 text-emerald-400" />
+                                  <span>Verified Fact</span>
+                                </span>
+                              )}
+                              {cand.validation_status === 'conflicting' && (
+                                <span className="px-2.5 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/50 font-mono text-[10px] font-bold flex items-center gap-1 animate-pulse">
+                                  <AlertTriangle className="w-3 h-3 text-amber-400" />
+                                  <span>Conflict / Needs Reconciliation</span>
+                                </span>
+                              )}
+                              {cand.validation_status === 'needs_review' && (
+                                <span className="px-2.5 py-0.5 rounded-full bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 font-mono text-[10px] font-bold flex items-center gap-1">
+                                  <Clock className="w-3 h-3 text-cyan-400" />
+                                  <span>Pending Review</span>
+                                </span>
+                              )}
+
+                              {/* Review Status Badge */}
+                              <span className={`px-2.5 py-0.5 rounded-full font-mono text-[10px] font-bold uppercase ${
+                                isApproved
+                                  ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                                  : cand.review_status === 'needs_changes'
+                                  ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+                                  : cand.review_status === 'rejected'
+                                  ? 'bg-rose-500/20 text-rose-300 border border-rose-500/30'
+                                  : 'bg-white/10 text-slate-300 border border-white/10'
+                              }`}>
+                                {cand.review_status}
+                              </span>
+                            </div>
+                          </div>
+
+                          {/* Conflicting Source Alert Banner */}
+                          {isConflicting && (
+                            <div className="mt-3 p-3 rounded-xl bg-amber-950/40 border border-amber-500/50 text-xs text-amber-200 space-y-1">
+                              <div className="flex items-center gap-2 font-bold text-amber-300">
+                                <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
+                                <span>Conflicting Source Claims Detected &bull; Reconciliation Required</span>
+                              </div>
+                              <p className="text-[11px] text-amber-200/90 leading-relaxed pl-6">
+                                {cand.conflict_note || cand.validation_notes || 'Conflicting source claims detected across ingested pages. Review candidate value and reconcile evidence context before publishing.'}
+                              </p>
+                            </div>
+                          )}
+
+                          {/* Proposed Value Display / Inline Editor */}
+                          <div className="mt-3 space-y-1.5">
+                            <div className="flex items-center justify-between text-[11px] font-bold text-slate-400 uppercase tracking-wider">
+                              <span>Candidate Proposed Value</span>
+                              {!isEditing && (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setEditingCandidateId(cand.id);
+                                    setEditingCandidateValue(
+                                      typeof cand.proposed_value === 'object'
+                                        ? JSON.stringify(cand.proposed_value, null, 2)
+                                        : String(cand.proposed_value)
+                                    );
+                                  }}
+                                  className="text-indigo-400 hover:text-indigo-300 flex items-center gap-1 text-[11px] font-mono cursor-pointer"
+                                >
+                                  <Edit3 className="w-3 h-3" />
+                                  <span>Edit Value</span>
+                                </button>
+                              )}
+                            </div>
+
+                            {isEditing ? (
+                              <div className="space-y-2">
+                                <textarea
+                                  rows={4}
+                                  value={editingCandidateValue}
+                                  onChange={(e) => setEditingCandidateValue(e.target.value)}
+                                  className="w-full px-3 py-2 bg-black/70 border border-indigo-500/50 rounded-xl text-xs font-mono text-white focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                                />
+                                <div className="flex items-center gap-2 justify-end">
+                                  <button
+                                    type="button"
+                                    onClick={() => setEditingCandidateId(null)}
+                                    className="px-3 py-1 rounded-lg bg-white/10 hover:bg-white/20 text-xs text-slate-300 cursor-pointer"
+                                  >
+                                    Cancel
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleSaveCandidateEdit(cand.id)}
+                                    className="px-3 py-1 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-xs font-bold text-white cursor-pointer shadow-md shadow-indigo-600/30"
+                                  >
+                                    Save Edits
+                                  </button>
+                                </div>
+                              </div>
+                            ) : (
+                              <div className="p-3 rounded-xl bg-black/40 border border-white/5 text-xs text-slate-200 font-sans">
+                                {typeof cand.proposed_value === 'object' && cand.proposed_value !== null ? (
+                                  Array.isArray(cand.proposed_value) ? (
+                                    <div className="flex flex-wrap gap-1.5">
+                                      {cand.proposed_value.map((item, idx) => (
+                                        <span
+                                          key={idx}
+                                          className="px-2.5 py-1 rounded-lg bg-white/5 border border-white/10 text-white font-mono text-[11px]"
+                                        >
+                                          {typeof item === 'object' ? `${item.facility || item.city || item.name} (${item.country || item.type || ''})` : String(item)}
+                                        </span>
+                                      ))}
+                                    </div>
+                                  ) : (
+                                    <pre className="text-[11px] font-mono text-cyan-200 overflow-x-auto whitespace-pre-wrap">
+                                      {JSON.stringify(cand.proposed_value, null, 2)}
+                                    </pre>
+                                  )
+                                ) : (
+                                  <span className="font-semibold text-white">{String(cand.proposed_value)}</span>
+                                )}
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Exact Source Evidence Citation */}
+                          {evidenceItem && (
+                            <div className="mt-3 p-3 rounded-xl bg-white/[0.02] border-l-2 border-l-indigo-500 border border-white/5 space-y-1 text-xs">
+                              <div className="flex items-center justify-between text-[11px]">
+                                <span className="font-bold text-indigo-300 font-mono flex items-center gap-1">
+                                  <span>Citation:</span>
+                                  <span className="text-white font-sans">{evidenceItem.section_heading || 'Official Website Excerpt'}</span>
+                                </span>
+                                {evidenceItem.source_url && (
+                                  <a
+                                    href={evidenceItem.source_url}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="text-cyan-400 hover:text-cyan-300 font-mono text-[10px] flex items-center gap-1 underline underline-offset-2"
+                                  >
+                                    <span>{evidenceItem.source_url.replace('https://', '')}</span>
+                                    <ExternalLink className="w-3 h-3" />
+                                  </a>
+                                )}
+                              </div>
+                              <p className="text-[11px] text-slate-300 italic leading-relaxed font-sans">
+                                "{evidenceItem.evidence_text}"
+                              </p>
+                            </div>
+                          )}
+
+                          {/* Review Action Footer */}
+                          <div className="mt-3.5 pt-2.5 border-t border-white/5 flex flex-wrap items-center justify-between gap-3">
+                            <div className="text-[10px] text-slate-500 font-mono">
+                              {cand.reviewed_by ? (
+                                <span>Reviewed by @{cand.reviewed_by} &bull; {cand.reviewed_at?.split('T')[0]}</span>
+                              ) : (
+                                <span>Awaiting human review decision &bull; Confidence: {Math.round((cand.extraction_confidence || 1) * 100)}%</span>
+                              )}
+                            </div>
+
+                            <div className="flex items-center gap-2">
+                              {!isApproved ? (
+                                <>
+                                  {isConflicting && (
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setReconcilingCandidate(cand);
+                                        setReconciledValueInput(
+                                          typeof cand.proposed_value === 'object'
+                                            ? JSON.stringify(cand.proposed_value, null, 2)
+                                            : String(cand.proposed_value)
+                                        );
+                                        setReconciledReasonInput(
+                                          cand.fact_key === 'regional_headcount'
+                                            ? 'Reconciled India headcount conflict: Recorded 1,592 as audited plant personnel with 1,700+ narrative context.'
+                                            : 'Reconciled conflicting source claims with verified reporting context.'
+                                        );
+                                      }}
+                                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 text-amber-200 text-xs font-bold cursor-pointer transition-all shadow-md shadow-amber-950/20"
+                                    >
+                                      <GitMerge className="w-3.5 h-3.5 text-amber-400" />
+                                      <span>Reconcile Claims</span>
+                                    </button>
+                                  )}
+                                  <button
+                                    type="button"
+                                    onClick={() => handleReviewCandidate(cand.id, 'rejected', null, 'Rejected by admin during candidate review')}
+                                    className="px-3 py-1.5 rounded-lg bg-rose-600/20 hover:bg-rose-600/30 border border-rose-500/30 text-rose-300 text-xs font-semibold cursor-pointer transition-all"
+                                  >
+                                    Reject
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleReviewCandidate(cand.id, 'needs_changes', null, 'Reconciliation or additional evidence required')}
+                                    className="px-3 py-1.5 rounded-lg bg-amber-600/20 hover:bg-amber-600/30 border border-amber-500/30 text-amber-300 text-xs font-semibold cursor-pointer transition-all"
+                                  >
+                                    Flag for Reconciliation
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleReviewCandidate(cand.id, 'approved')}
+                                    className="flex items-center gap-1.5 px-4 py-1.5 rounded-lg bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-xs font-bold shadow-md shadow-emerald-600/20 cursor-pointer transition-all"
+                                  >
+                                    <Check className="w-3.5 h-3.5" />
+                                    <span>Approve &amp; Enqueue Outbox</span>
+                                  </button>
+                                </>
+                              ) : (
+                                <div className="flex items-center gap-2">
+                                  <span className="text-[11px] text-emerald-400 font-mono flex items-center gap-1">
+                                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                                    <span>Active in Grounded Knowledge</span>
+                                  </span>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleReviewCandidate(cand.id, 'needs_changes', null, 'Revocation for re-review')}
+                                    className="px-2.5 py-1 rounded bg-white/5 hover:bg-white/10 text-[10px] text-slate-400 hover:text-white cursor-pointer"
+                                  >
+                                    Revoke / Re-evaluate
+                                  </button>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
                 </div>
+
+                {/* Conflict Reconciliation Modal */}
+                {reconcilingCandidate && (
+                  <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
+                    <div className="w-full max-w-2xl bg-[#0f1424] border border-amber-500/40 rounded-2xl p-6 shadow-2xl space-y-5 text-white">
+                      <div className="flex items-center justify-between border-b border-white/10 pb-3">
+                        <div className="flex items-center gap-2.5">
+                          <div className="p-2 rounded-xl bg-amber-500/20 text-amber-400 border border-amber-500/30">
+                            <GitMerge className="w-5 h-5" />
+                          </div>
+                          <div>
+                            <h3 className="text-sm font-bold text-white font-['Outfit']">
+                              Reconcile Conflicting Source Claims
+                            </h3>
+                            <p className="text-[11px] text-slate-400 font-mono">
+                              Field: {reconcilingCandidate.section_key} &gt; {reconcilingCandidate.fact_key} ({reconcilingCandidate.scope_key})
+                            </p>
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setReconcilingCandidate(null)}
+                          className="text-slate-400 hover:text-white text-lg cursor-pointer"
+                        >
+                          &times;
+                        </button>
+                      </div>
+
+                      {/* Conflicting Claims Side-by-Side Comparison */}
+                      <div className="space-y-2">
+                        <label className="text-[11px] font-bold text-amber-300 uppercase tracking-wider">
+                          Extracted Candidate &amp; Supporting Evidence
+                        </label>
+                        <div className="p-3.5 rounded-xl bg-black/50 border border-amber-500/20 space-y-2 text-xs">
+                          <div className="flex items-center justify-between text-[10px] text-amber-400 font-bold font-mono uppercase">
+                            <span>Candidate Dimension: {reconcilingCandidate.section_key} &bull; {reconcilingCandidate.fact_key}</span>
+                            <span className="px-1.5 py-0.5 rounded bg-amber-500/20">{reconcilingCandidate.validation_status}</span>
+                          </div>
+                          <div>
+                            <span className="text-slate-400 text-[11px] block font-mono">Proposed Value:</span>
+                            <pre className="text-xs text-white font-mono bg-black/60 p-2 rounded-lg mt-1 overflow-x-auto whitespace-pre-wrap">
+                              {typeof reconcilingCandidate.proposed_value === 'object'
+                                ? JSON.stringify(reconcilingCandidate.proposed_value, null, 2)
+                                : String(reconcilingCandidate.proposed_value)}
+                            </pre>
+                          </div>
+                          {reconcilingCandidate.evidence && reconcilingCandidate.evidence.length > 0 && (
+                            <div className="space-y-1 pt-1">
+                              <span className="text-slate-400 text-[11px] block font-mono">Source Citations:</span>
+                              {reconcilingCandidate.evidence.map((ev, evIdx) => (
+                                <div key={evIdx} className="text-[11px] text-slate-300 bg-white/5 p-2 rounded-lg italic">
+                                  "{ev.evidence_text}"
+                                  {ev.source_url && (
+                                    <div className="text-[10px] text-indigo-400 font-mono mt-0.5">{ev.source_url}</div>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Editable Reconciled Value */}
+                      <div className="space-y-1.5">
+                        <label className="text-[11px] font-bold text-slate-300 uppercase tracking-wider flex items-center justify-between">
+                          <span>Reconciled Value to Approve &amp; Publish</span>
+                          <span className="text-slate-500 font-mono text-[10px]">JSON or plain text</span>
+                        </label>
+                        <textarea
+                          rows={4}
+                          value={reconciledValueInput}
+                          onChange={(e) => setReconciledValueInput(e.target.value)}
+                          className="w-full px-3.5 py-2.5 bg-black/70 border border-white/10 rounded-xl text-xs font-mono text-cyan-200 focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500"
+                        />
+                      </div>
+
+                      {/* Audit Justification Note */}
+                      <div className="space-y-1.5">
+                        <label className="text-[11px] font-bold text-slate-300 uppercase tracking-wider">
+                          Reviewer Audit Justification Note
+                        </label>
+                        <input
+                          type="text"
+                          value={reconciledReasonInput}
+                          onChange={(e) => setReconciledReasonInput(e.target.value)}
+                          placeholder="Explain the reconciliation rationale for immutable audit trail..."
+                          className="w-full px-3.5 py-2 bg-black/70 border border-white/10 rounded-xl text-xs text-white focus:outline-none focus:border-indigo-500"
+                        />
+                      </div>
+
+                      {/* Modal Actions */}
+                      <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-white/10">
+                        <button
+                          type="button"
+                          onClick={() => setReconcilingCandidate(null)}
+                          className="px-4 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-xs text-slate-300 font-semibold cursor-pointer"
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            let parsed = reconciledValueInput;
+                            try {
+                              parsed = JSON.parse(reconciledValueInput);
+                            } catch (_) {}
+                            await handleReviewCandidate(
+                              reconcilingCandidate.id,
+                              'approved',
+                              parsed,
+                              reconciledReasonInput || 'Reconciled conflicting source claims.'
+                            );
+                            setReconcilingCandidate(null);
+                          }}
+                          className="flex items-center gap-1.5 px-5 py-2 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-xs font-bold shadow-lg shadow-emerald-600/30 cursor-pointer transition-all"
+                        >
+                          <Check className="w-4 h-4" />
+                          <span>Approve &amp; Enqueue to Outbox</span>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
+            )}
 
-              {/* SECTION B: Workforce & Headcount (500+ Employees) */}
-              <div className="p-4 rounded-xl bg-black/30 border border-white/5 space-y-3">
-                <div className="flex items-center justify-between">
-                  <div className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
-                    <Users className="w-3.5 h-3.5 text-cyan-400" />
-                    <span>2. Workforce &amp; Headcount (500+ Employees)</span>
+            {/* =================================================================
+                SUB-TAB 2: APPROVED KNOWLEDGE GROUNDING (ACTIVE POSTGRESQL TRUTH)
+                ================================================================= */}
+            {companyHubSubTab === 'approved' && (
+              <div className="space-y-4 animate-in fade-in duration-150">
+                <div className="p-4 rounded-xl bg-emerald-950/20 border border-emerald-500/30 flex items-center justify-between text-xs">
+                  <div className="flex items-center gap-2 text-emerald-300 font-semibold">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                    <span>Current Active PostgreSQL Company Facts ({approvedFacts.length} verified records)</span>
                   </div>
-                  <span className="text-[10px] px-2.5 py-0.5 rounded-full bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 font-mono font-bold">
-                    Headcount Metric
+                  <span className="text-slate-400 text-[11px]">
+                    Only approved, active facts feed the RAG assistant with high retrieval priority
                   </span>
                 </div>
-                <div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+                  {approvedFacts.map((fact) => (
+                    <div
+                      key={fact.id}
+                      className="p-4 rounded-xl bg-black/40 border border-emerald-500/20 space-y-2 hover:border-emerald-500/40 transition-all text-xs"
+                    >
+                      <div className="flex items-center justify-between border-b border-white/5 pb-2">
+                        <div className="flex items-center gap-2">
+                          <span className="px-2 py-0.5 rounded font-mono text-[10px] font-bold uppercase bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                            {fact.section_key}
+                          </span>
+                          <span className="font-bold text-white font-mono">{fact.fact_key}</span>
+                        </div>
+                        <span className="text-[10px] font-mono text-slate-400">
+                          v{fact.version} &bull; Scope: {fact.scope_key}
+                        </span>
+                      </div>
+
+                      <div className="text-slate-200">
+                        {typeof fact.approved_value === 'object' && fact.approved_value !== null ? (
+                          Array.isArray(fact.approved_value) ? (
+                            <div className="flex flex-wrap gap-1.5 pt-1">
+                              {fact.approved_value.map((val, idx) => (
+                                <span
+                                  key={idx}
+                                  className="px-2 py-0.5 rounded bg-white/5 border border-white/10 text-slate-200 font-mono text-[11px]"
+                                >
+                                  {typeof val === 'object' ? `${val.facility || val.city || val.name} (${val.country || val.type || ''})` : String(val)}
+                                </span>
+                              ))}
+                            </div>
+                          ) : (
+                            <pre className="text-[11px] font-mono text-emerald-200 overflow-x-auto whitespace-pre-wrap">
+                              {JSON.stringify(fact.approved_value, null, 2)}
+                            </pre>
+                          )
+                        ) : (
+                          <span className="font-bold text-white">{String(fact.approved_value)}</span>
+                        )}
+                      </div>
+
+                      <div className="pt-2 flex items-center justify-between text-[10px] text-slate-500 font-mono border-t border-white/5">
+                        <span>Approved by @{fact.approved_by || 'admin'}</span>
+                        <span>{fact.approved_at?.split('T')[0]}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* =================================================================
+                SUB-TAB 3: PUBLICATION OUTBOX & VECTOR SYNC
+                ================================================================= */}
+            {companyHubSubTab === 'outbox' && (
+              <div className="space-y-4 animate-in fade-in duration-150">
+                <div className="p-4 rounded-xl bg-cyan-950/20 border border-cyan-500/30 space-y-2 text-xs">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2 text-cyan-300 font-bold">
+                      <Database className="w-4 h-4 text-cyan-400" />
+                      <span>Transactional Publication Outbox ({outboxEvents.length} events)</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleProcessOutbox}
+                      disabled={isProcessingOutbox}
+                      className="px-4 py-1.5 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white font-bold text-xs cursor-pointer shadow-md shadow-cyan-600/30 flex items-center gap-1.5 disabled:opacity-50"
+                    >
+                      <RotateCw className={`w-3.5 h-3.5 ${isProcessingOutbox ? 'animate-spin' : ''}`} />
+                      <span>{isProcessingOutbox ? 'Syncing...' : 'Process Pending Events'}</span>
+                    </button>
+                  </div>
+                  <p className="text-[11px] text-slate-400 leading-relaxed font-sans">
+                    PostgreSQL and the ChromaDB vector index do not share a single distributed transaction. The outbox pattern commits the approved fact and its indexing job in the same PostgreSQL transaction. A worker then processes each outbox event idempotently, generating vector embeddings and updating ChromaDB.
+                  </p>
+                </div>
+
+                {/* Outbox Events Table */}
+                <div className="overflow-x-auto rounded-xl border border-white/10 bg-black/40">
+                  <table className="w-full text-left text-xs font-mono">
+                    <thead className="bg-white/5 border-b border-white/10 text-slate-400 text-[10px] uppercase tracking-wider">
+                      <tr>
+                        <th className="py-2.5 px-3">Entity Type</th>
+                        <th className="py-2.5 px-3">Entity ID</th>
+                        <th className="py-2.5 px-3">Version</th>
+                        <th className="py-2.5 px-3">Operation</th>
+                        <th className="py-2.5 px-3">Status</th>
+                        <th className="py-2.5 px-3">Attempts</th>
+                        <th className="py-2.5 px-3">Timestamp</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-white/5">
+                      {outboxEvents.map((evt) => (
+                        <tr key={evt.id} className="hover:bg-white/[0.02] text-slate-300">
+                          <td className="py-2.5 px-3 font-semibold text-white">{evt.entity_type}</td>
+                          <td className="py-2.5 px-3 text-cyan-300">{evt.entity_id.slice(0, 12)}...</td>
+                          <td className="py-2.5 px-3">v{evt.entity_version}</td>
+                          <td className="py-2.5 px-3 uppercase text-[10px]">{evt.operation}</td>
+                          <td className="py-2.5 px-3">
+                            <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
+                              evt.status === 'completed'
+                                ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                                : evt.status === 'processing'
+                                ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 animate-pulse'
+                                : evt.status === 'failed'
+                                ? 'bg-rose-500/20 text-rose-300 border border-rose-500/30'
+                                : 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+                            }`}>
+                              {evt.status}
+                            </span>
+                          </td>
+                          <td className="py-2.5 px-3">{evt.attempts}</td>
+                          <td className="py-2.5 px-3 text-slate-500 text-[10px]">{evt.created_at?.split('.')[0]?.replace('T', ' ')}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {/* =================================================================
+                SUB-TAB 4: MANUAL FORM (LEGACY PROFILE EDIT)
+                ================================================================= */}
+            {companyHubSubTab === 'edit_profile' && (
+              <div className="space-y-6 pt-1 animate-in fade-in duration-150">
+                <div className="flex items-center justify-between border-b border-white/5 pb-2">
+                  <div className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-2">
+                    <Edit3 className="w-4 h-4 text-purple-400" />
+                    <span>Direct Profile Editing &amp; Vector Embed</span>
+                  </div>
+                  <span className="text-[11px] text-slate-400 italic">
+                    Manually adjust corporate fields and re-embed all 5 profile grounding chunks
+                  </span>
+                </div>
+
+                {/* Section A: Legal Identity & Leadership */}
+                <div className="p-4 rounded-xl bg-black/30 border border-white/5 space-y-4">
+                  <div className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
+                    <Briefcase className="w-3.5 h-3.5 text-indigo-400" />
+                    <span>1. Company Legal Identity &amp; Leadership</span>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 text-xs">
+                    <div>
+                      <label className="block text-slate-400 font-semibold mb-1">Company Legal Name</label>
+                      <input
+                        type="text"
+                        value={companyForm.company_name || ''}
+                        onChange={(e) => setCompanyForm({ ...companyForm, company_name: e.target.value })}
+                        placeholder="e.g. Tata Motors Limited or Siemens AG"
+                        className="w-full px-3 py-2 bg-black/50 border border-white/10 rounded-xl text-white font-sans focus:outline-none focus:border-indigo-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-slate-400 font-semibold mb-1">Parent MNC / Group</label>
+                      <input
+                        type="text"
+                        value={companyForm.group_name || ''}
+                        onChange={(e) => setCompanyForm({ ...companyForm, group_name: e.target.value })}
+                        placeholder="e.g. Tata Group or Siemens Group"
+                        className="w-full px-3 py-2 bg-black/50 border border-white/10 rounded-xl text-white font-sans focus:outline-none focus:border-indigo-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-slate-400 font-semibold mb-1">Industry Sector</label>
+                      <input
+                        type="text"
+                        value={companyForm.industry || ''}
+                        onChange={(e) => setCompanyForm({ ...companyForm, industry: e.target.value })}
+                        placeholder="e.g. Automotive, Industrial Automation, Clean Tech"
+                        className="w-full px-3 py-2 bg-black/50 border border-white/10 rounded-xl text-white font-sans focus:outline-none focus:border-indigo-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-slate-400 font-semibold mb-1">Founded Year</label>
+                      <input
+                        type="text"
+                        value={companyForm.founded_year || ''}
+                        onChange={(e) => setCompanyForm({ ...companyForm, founded_year: e.target.value })}
+                        placeholder="e.g. 1945"
+                        className="w-full px-3 py-2 bg-black/50 border border-white/10 rounded-xl text-white font-sans focus:outline-none focus:border-indigo-500 font-mono"
+                      />
+                    </div>
+                    <div className="sm:col-span-2">
+                      <label className="block text-slate-400 font-semibold mb-1">Executive Leadership</label>
+                      <input
+                        type="text"
+                        value={companyForm.ceo || ''}
+                        onChange={(e) => setCompanyForm({ ...companyForm, ceo: e.target.value })}
+                        placeholder="e.g. Natarajan Chandrasekaran (Chairman), Roland Busch (CEO)"
+                        className="w-full px-3 py-2 bg-black/50 border border-white/10 rounded-xl text-white font-sans focus:outline-none focus:border-indigo-500"
+                      />
+                    </div>
+                    <div className="sm:col-span-2 lg:col-span-3">
+                      <label className="block text-slate-400 font-semibold mb-1">Corporate Overview &amp; Description</label>
+                      <textarea
+                        rows={2}
+                        value={companyForm.description || ''}
+                        onChange={(e) => setCompanyForm({ ...companyForm, description: e.target.value })}
+                        placeholder="Comprehensive overview of company operations..."
+                        className="w-full px-3 py-2 bg-black/50 border border-white/10 rounded-xl text-white font-sans focus:outline-none focus:border-indigo-500 resize-none"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Section B: Workforce */}
+                <div className="p-4 rounded-xl bg-black/30 border border-white/5 space-y-3">
+                  <div className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
+                    <Users className="w-3.5 h-3.5 text-cyan-400" />
+                    <span>2. Workforce &amp; Headcount</span>
+                  </div>
                   <input
                     type="text"
                     value={companyForm.employee_details || ''}
                     onChange={(e) => setCompanyForm({ ...companyForm, employee_details: e.target.value })}
-                    placeholder="e.g. 500+ employees (India Plant: 450+ engineers & manufacturing staff; Global Carraro: 3,500+)"
+                    placeholder="e.g. 3,795 employees globally (2025 company profile); India: 1,700+ narrative / 1,592 facility stat"
                     className="w-full px-3 py-2 bg-black/50 border border-white/10 rounded-xl text-white text-xs font-sans focus:outline-none focus:border-cyan-500"
                   />
-                  <p className="text-[11px] text-slate-500 mt-1">
-                    Directly grounds queries such as "How many employees work at the company?" and "What is the staff count?".
-                  </p>
-                </div>
-              </div>
-
-              {/* SECTION C: All Company Locations & Manufacturing Plants */}
-              <div className="p-4 rounded-xl bg-black/30 border border-white/5 space-y-4">
-                <div className="flex items-center justify-between">
-                  <div className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
-                    <MapPin className="w-3.5 h-3.5 text-emerald-400" />
-                    <span>3. All Company Locations, Plants &amp; Offices ({companyForm.locations?.length || 0})</span>
-                  </div>
-                  <span className="text-[11px] text-slate-400">
-                    City, state, country, facility type, and address
-                  </span>
                 </div>
 
-                {/* Locations Grid */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5 max-h-56 overflow-y-auto pr-1">
-                  {companyForm.locations && companyForm.locations.length > 0 ? (
-                    companyForm.locations.map((loc, idx) => {
-                      const isObj = typeof loc === 'object' && loc !== null;
-                      const city = isObj ? loc.city : loc;
-                      const state = isObj ? loc.state : '';
-                      const country = isObj ? (loc.country || 'India') : '';
-                      const type = isObj ? (loc.type || 'Manufacturing Plant') : 'Facility';
-                      const address = isObj ? loc.address : '';
-
-                      return (
-                        <div
-                          key={idx}
-                          className="flex items-start justify-between p-3 rounded-xl bg-white/[0.03] border border-white/5 hover:border-emerald-500/30 transition-all text-xs"
-                        >
-                          <div className="space-y-1">
-                            <div className="flex items-center gap-2">
-                              <span className="w-2 h-2 rounded-full bg-emerald-400 shrink-0" />
-                              <span className="text-white font-bold">{city}</span>
-                              {state && <span className="text-slate-400">, {state}</span>}
-                              {country && <span className="text-slate-500 font-mono text-[10px]">({country})</span>}
-                              <span className="text-[10px] px-2 py-0.5 rounded bg-emerald-500/15 text-emerald-300 border border-emerald-500/25 font-medium">
-                                {type}
-                              </span>
-                            </div>
-                            {address && (
-                              <p className="text-[11px] text-slate-400 pl-4 leading-relaxed font-sans">
-                                {address}
-                              </p>
-                            )}
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => handleDeleteLocationItem(idx)}
-                            className="text-slate-500 hover:text-rose-400 transition-colors cursor-pointer p-1 shrink-0 ml-2"
-                            title="Remove this location"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-                      );
-                    })
-                  ) : (
-                    <div className="col-span-2 text-xs text-slate-500 italic p-3 text-center bg-white/[0.01] rounded-xl border border-white/5">
-                      No locations listed yet. Add a location or plant below.
+                {/* Section C: Locations & Plants */}
+                <div className="p-4 rounded-xl bg-black/30 border border-white/5 space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
+                      <MapPin className="w-3.5 h-3.5 text-emerald-400" />
+                      <span>3. All Company Locations &amp; 8 Global Manufacturing Plants ({companyForm.locations?.length || 0})</span>
                     </div>
-                  )}
+                    <span className="text-[11px] text-slate-400">City, state, country, facility type</span>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5 max-h-56 overflow-y-auto pr-1">
+                    {companyForm.locations && companyForm.locations.length > 0 ? (
+                      companyForm.locations.map((loc, idx) => {
+                        const isObj = typeof loc === 'object' && loc !== null;
+                        const city = isObj ? (loc.city || loc.facility) : loc;
+                        const state = isObj ? loc.state : '';
+                        const country = isObj ? (loc.country || 'Italy') : '';
+                        const type = isObj ? (loc.type || loc.role || 'Manufacturing Plant') : 'Facility';
+                        const address = isObj ? loc.address : '';
+
+                        return (
+                          <div
+                            key={idx}
+                            className="flex items-start justify-between p-3 rounded-xl bg-white/[0.03] border border-white/5 hover:border-emerald-500/30 transition-all text-xs"
+                          >
+                            <div className="space-y-1">
+                              <div className="flex items-center gap-2">
+                                <span className="w-2 h-2 rounded-full bg-emerald-400 shrink-0" />
+                                <span className="text-white font-bold">{city}</span>
+                                {state && <span className="text-slate-400">, {state}</span>}
+                                {country && <span className="text-slate-500 font-mono text-[10px]">({country})</span>}
+                                <span className="text-[10px] px-2 py-0.5 rounded bg-emerald-500/15 text-emerald-300 border border-emerald-500/25 font-medium">
+                                  {type}
+                                </span>
+                              </div>
+                              {address && <p className="text-[11px] text-slate-400 pl-4 font-sans">{address}</p>}
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteLocationItem(idx)}
+                              className="text-slate-500 hover:text-rose-400 transition-colors cursor-pointer p-1 shrink-0 ml-2"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        );
+                      })
+                    ) : (
+                      <div className="col-span-2 text-xs text-slate-500 italic p-3 text-center">No locations listed.</div>
+                    )}
+                  </div>
+
+                  {/* Add Location Sub-Form */}
+                  <div className="p-3 rounded-xl bg-black/50 border border-white/10 space-y-2.5">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 text-xs">
+                      <input
+                        type="text"
+                        placeholder="City (e.g. Campodarsego, Rovigo, Pune)"
+                        value={newLocationInput.city}
+                        onChange={(e) => setNewLocationInput({ ...newLocationInput, city: e.target.value })}
+                        className="px-3 py-1.5 bg-black/60 border border-white/10 rounded-lg text-white font-sans"
+                      />
+                      <input
+                        type="text"
+                        placeholder="State / Region (e.g. Padua, Veneto)"
+                        value={newLocationInput.state}
+                        onChange={(e) => setNewLocationInput({ ...newLocationInput, state: e.target.value })}
+                        className="px-3 py-1.5 bg-black/60 border border-white/10 rounded-lg text-white font-sans"
+                      />
+                      <input
+                        type="text"
+                        placeholder="Country (e.g. Italy, India, China)"
+                        value={newLocationInput.country}
+                        onChange={(e) => setNewLocationInput({ ...newLocationInput, country: e.target.value })}
+                        className="px-3 py-1.5 bg-black/60 border border-white/10 rounded-lg text-white font-sans"
+                      />
+                      <input
+                        type="text"
+                        placeholder="Type (e.g. Global HQ, SIAP Plant)"
+                        value={newLocationInput.type}
+                        onChange={(e) => setNewLocationInput({ ...newLocationInput, type: e.target.value })}
+                        className="px-3 py-1.5 bg-black/60 border border-white/10 rounded-lg text-white font-sans"
+                      />
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="text"
+                        placeholder="Full Address / Industrial Zone..."
+                        value={newLocationInput.address}
+                        onChange={(e) => setNewLocationInput({ ...newLocationInput, address: e.target.value })}
+                        className="flex-1 px-3 py-1.5 bg-black/60 border border-white/10 rounded-lg text-white text-xs font-sans"
+                      />
+                      <button
+                        type="button"
+                        onClick={handleAddLocationItem}
+                        className="px-4 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs cursor-pointer flex items-center gap-1.5 shrink-0"
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                        <span>Add Location</span>
+                      </button>
+                    </div>
+                  </div>
                 </div>
 
-                {/* Add Location Sub-Form */}
-                <div className="p-3 rounded-xl bg-black/50 border border-white/10 space-y-2.5">
-                  <div className="text-[11px] font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
-                    <Plus className="w-3 h-3 text-emerald-400" />
-                    <span>Add New Plant / Office Location</span>
+                {/* Section D: Commercial Clients */}
+                <div className="p-4 rounded-xl bg-black/30 border border-white/5 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
+                      <Award className="w-3.5 h-3.5 text-amber-400" />
+                      <span>4. Commercial Clients &amp; OEM Partners ({companyForm.clients?.length || 0})</span>
+                    </div>
+                    <span className="text-[10px] text-amber-300 font-mono">Verified OEM Clients &amp; Partners</span>
                   </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 text-xs">
-                    <input
-                      type="text"
-                      placeholder="City (e.g. Pune, Ranjangaon)"
-                      value={newLocationInput.city}
-                      onChange={(e) => setNewLocationInput({ ...newLocationInput, city: e.target.value })}
-                      className="px-3 py-1.5 bg-black/60 border border-white/10 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500 font-sans"
-                    />
-                    <input
-                      type="text"
-                      placeholder="State / Region (e.g. Maharashtra)"
-                      value={newLocationInput.state}
-                      onChange={(e) => setNewLocationInput({ ...newLocationInput, state: e.target.value })}
-                      className="px-3 py-1.5 bg-black/60 border border-white/10 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500 font-sans"
-                    />
-                    <input
-                      type="text"
-                      placeholder="Country (e.g. India, Italy)"
-                      value={newLocationInput.country}
-                      onChange={(e) => setNewLocationInput({ ...newLocationInput, country: e.target.value })}
-                      className="px-3 py-1.5 bg-black/60 border border-white/10 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500 font-sans"
-                    />
-                    <input
-                      type="text"
-                      placeholder="Type (e.g. Plant 1, HQ, R&D)"
-                      value={newLocationInput.type}
-                      onChange={(e) => setNewLocationInput({ ...newLocationInput, type: e.target.value })}
-                      className="px-3 py-1.5 bg-black/60 border border-white/10 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500 font-sans"
-                    />
+                  <div className="flex flex-wrap items-center gap-2">
+                    {(companyForm.clients || []).map((client, cIdx) => (
+                      <span key={cIdx} className="px-3 py-1 rounded-lg bg-amber-500/10 border border-amber-500/25 text-amber-300 font-mono text-[11px] flex items-center gap-1.5">
+                        <span>{client}</span>
+                        <button type="button" onClick={() => handleDeleteClientItem(cIdx)} className="text-amber-400/60 hover:text-rose-400 cursor-pointer">&times;</button>
+                      </span>
+                    ))}
                   </div>
-                  <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                  <div className="flex items-center gap-2 pt-1">
                     <input
                       type="text"
-                      placeholder="Full Address / Industrial Estate (e.g. B-85, MIDC, Ranjangaon, Pune - 412209)..."
-                      value={newLocationInput.address}
-                      onChange={(e) => setNewLocationInput({ ...newLocationInput, address: e.target.value })}
-                      className="flex-1 px-3 py-1.5 bg-black/60 border border-white/10 rounded-lg text-white text-xs placeholder-slate-500 focus:outline-none focus:border-emerald-500 font-sans"
+                      placeholder="Add OEM Client (e.g. Cummins, Caterpillar, Bosch)..."
+                      value={newClientInput}
+                      onChange={(e) => setNewClientInput(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleAddClientItem(); } }}
+                      className="flex-1 px-3 py-1.5 bg-black/60 border border-white/10 rounded-lg text-white text-xs font-mono"
                     />
-                    <button
-                      type="button"
-                      onClick={handleAddLocationItem}
-                      className="px-4 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs cursor-pointer flex items-center justify-center gap-1.5 shrink-0 shadow-md shadow-emerald-600/20"
-                    >
+                    <button type="button" onClick={handleAddClientItem} className="px-3.5 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-500 text-white font-semibold text-xs cursor-pointer flex items-center gap-1 shrink-0">
                       <Plus className="w-3.5 h-3.5" />
-                      <span>Add Location</span>
+                      <span>Add</span>
                     </button>
                   </div>
                 </div>
-              </div>
 
-              {/* SECTION D: Commercial Clients & OEM Partners (100+ Clients) */}
-              <div className="p-4 rounded-xl bg-black/30 border border-white/5 space-y-3">
-                <div className="flex items-center justify-between">
-                  <div className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
-                    <Award className="w-3.5 h-3.5 text-amber-400" />
-                    <span>4. Commercial Clients &amp; OEM Partners ({companyForm.clients?.length || 0})</span>
+                {/* Section E: Logistics Hubs */}
+                <div className="p-4 rounded-xl bg-black/30 border border-white/5 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
+                      <Layers className="w-3.5 h-3.5 text-indigo-400" />
+                      <span>5. Regional Logistics &amp; Spares Hubs ({companyForm.hubs?.length || 0})</span>
+                    </div>
+                    <span className="text-[11px] text-slate-400">Driveservice in Poggiofiorito, Chieti, Italy</span>
                   </div>
-                  <span className="text-[10px] px-2.5 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30 font-mono font-bold">
-                    100+ Commercial Clients
-                  </span>
+                  <div className="flex flex-wrap items-center gap-2">
+                    {(companyForm.hubs || []).map((hub, hIdx) => (
+                      <span key={hIdx} className="px-3 py-1 rounded-lg bg-indigo-500/10 border border-indigo-500/25 text-indigo-300 font-mono text-[11px] flex items-center gap-1.5">
+                        <span>{hub}</span>
+                        <button type="button" onClick={() => handleDeleteHubItem(hIdx)} className="text-indigo-400/60 hover:text-rose-400 cursor-pointer">&times;</button>
+                      </span>
+                    ))}
+                  </div>
+                  <div className="flex items-center gap-2 pt-1">
+                    <input
+                      type="text"
+                      placeholder="Add logistics hub (e.g. Driveservice, Poggiofiorito, Chieti, Italy)..."
+                      value={newHubInput}
+                      onChange={(e) => setNewHubInput(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleAddHubItem(); } }}
+                      className="flex-1 px-3 py-1.5 bg-black/60 border border-white/10 rounded-lg text-white text-xs font-mono"
+                    />
+                    <button type="button" onClick={handleAddHubItem} className="px-3.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs cursor-pointer flex items-center gap-1 shrink-0">
+                      <Plus className="w-3.5 h-3.5" />
+                      <span>Add Hub</span>
+                    </button>
+                  </div>
                 </div>
 
-                {/* Client Tags */}
-                <div className="flex flex-wrap items-center gap-2">
-                  {(companyForm.clients || []).map((client, cIdx) => (
-                    <span
-                      key={cIdx}
-                      className="px-3 py-1 rounded-lg bg-amber-500/10 border border-amber-500/25 text-amber-300 font-mono text-[11px] font-semibold flex items-center gap-1.5"
-                    >
-                      <span>{client}</span>
-                      <button
-                        type="button"
-                        onClick={() => handleDeleteClientItem(cIdx)}
-                        className="text-amber-400/60 hover:text-rose-400 cursor-pointer ml-0.5"
-                        title="Remove client"
-                      >
-                        &times;
-                      </button>
-                    </span>
-                  ))}
+                {/* Section F: Products & Mechanical Solutions (7 Categories) */}
+                <div className="p-4 rounded-xl bg-black/30 border border-white/5 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
+                      <Zap className="w-3.5 h-3.5 text-cyan-400" />
+                      <span>6. Products &amp; Mechanical Solutions ({companyForm.products?.length || 0})</span>
+                    </div>
+                    <span className="text-[11px] text-slate-400">7 complete official categories</span>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    {(companyForm.products || []).map((prod, pIdx) => (
+                      <span key={pIdx} className="px-3 py-1 rounded-lg bg-cyan-500/10 border border-cyan-500/25 text-cyan-300 font-mono text-[11px] flex items-center gap-1.5">
+                        <span>{prod}</span>
+                        <button type="button" onClick={() => handleDeleteProductItem(pIdx)} className="text-cyan-400/60 hover:text-rose-400 cursor-pointer">&times;</button>
+                      </span>
+                    ))}
+                  </div>
+                  <div className="flex items-center gap-2 pt-1">
+                    <input
+                      type="text"
+                      placeholder="Add product category (e.g. Axles and transaxles, Specialized tractors, e-mobility)..."
+                      value={newProductInput}
+                      onChange={(e) => setNewProductInput(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleAddProductItem(); } }}
+                      className="flex-1 px-3 py-1.5 bg-black/60 border border-white/10 rounded-lg text-white text-xs font-mono"
+                    />
+                    <button type="button" onClick={handleAddProductItem} className="px-3.5 py-1.5 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white font-semibold text-xs cursor-pointer flex items-center gap-1 shrink-0">
+                      <Plus className="w-3.5 h-3.5" />
+                      <span>Add Product</span>
+                    </button>
+                  </div>
                 </div>
 
-                {/* Add Client Input */}
-                <div className="flex items-center gap-2 pt-1">
-                  <input
-                    type="text"
-                    placeholder="Add OEM Client (e.g. John Deere, CNH Industrial, Mahindra, Caterpillar, Escorts)..."
-                    value={newClientInput}
-                    onChange={(e) => setNewClientInput(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') {
-                        e.preventDefault();
-                        handleAddClientItem();
-                      }
-                    }}
-                    className="flex-1 px-3 py-1.5 bg-black/60 border border-white/10 rounded-lg text-white text-xs placeholder-slate-500 focus:outline-none focus:border-amber-500 font-mono"
-                  />
+                {/* Save Banner */}
+                <div className="p-4 rounded-xl bg-gradient-to-r from-emerald-950/40 via-black/40 to-indigo-950/40 border border-emerald-500/30 flex flex-wrap items-center justify-between gap-4">
+                  <div className="space-y-0.5">
+                    <div className="text-xs font-bold text-white flex items-center gap-2">
+                      <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                      <span>Save Changes to PostgreSQL &amp; Vector Index</span>
+                    </div>
+                    <p className="text-[11px] text-slate-400">
+                      Synchronizes modified fields into company_profiles and updates ChromaDB vector chunks.
+                    </p>
+                  </div>
                   <button
                     type="button"
-                    onClick={handleAddClientItem}
-                    disabled={!newClientInput.trim()}
-                    className="px-3.5 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-500 disabled:opacity-40 text-white font-semibold text-xs cursor-pointer flex items-center gap-1 shrink-0"
+                    onClick={handleSaveAndEmbedCompanyProfile}
+                    disabled={isApprovingProfile}
+                    className="flex items-center gap-2 px-6 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-500 hover:from-emerald-500 hover:to-teal-400 text-white text-xs font-bold shadow-lg shadow-emerald-600/30 cursor-pointer disabled:opacity-50 transition-all"
                   >
-                    <Plus className="w-3.5 h-3.5" />
-                    <span>Add Client</span>
+                    <Save className={`w-4 h-4 ${isApprovingProfile ? 'animate-spin' : ''}`} />
+                    <span>{isApprovingProfile ? 'Saving & Embedding...' : 'Save & Embed Grounding Profile'}</span>
                   </button>
                 </div>
               </div>
-
-              {/* SECTION E: Regional Logistics Hubs & Warehouses */}
-              <div className="p-4 rounded-xl bg-black/30 border border-white/5 space-y-3">
-                <div className="flex items-center justify-between">
-                  <div className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
-                    <Layers className="w-3.5 h-3.5 text-indigo-400" />
-                    <span>5. Regional Logistics &amp; Spares Hubs ({companyForm.hubs?.length || 0})</span>
-                  </div>
-                  <span className="text-[11px] text-slate-400">Parts distribution &amp; assembly centers</span>
-                </div>
-
-                <div className="flex flex-wrap items-center gap-2">
-                  {(companyForm.hubs || []).map((hub, hIdx) => (
-                    <span
-                      key={hIdx}
-                      className="px-3 py-1 rounded-lg bg-indigo-500/10 border border-indigo-500/25 text-indigo-300 font-mono text-[11px] font-semibold flex items-center gap-1.5"
-                    >
-                      <span>{hub}</span>
-                      <button
-                        type="button"
-                        onClick={() => handleDeleteHubItem(hIdx)}
-                        className="text-indigo-400/60 hover:text-rose-400 cursor-pointer ml-0.5"
-                      >
-                        &times;
-                      </button>
-                    </span>
-                  ))}
-                </div>
-
-                <div className="flex items-center gap-2 pt-1">
-                  <input
-                    type="text"
-                    placeholder="Add logistics hub (e.g. Pune Central Spares Hub, Padua Global Center)..."
-                    value={newHubInput}
-                    onChange={(e) => setNewHubInput(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') {
-                        e.preventDefault();
-                        handleAddHubItem();
-                      }
-                    }}
-                    className="flex-1 px-3 py-1.5 bg-black/60 border border-white/10 rounded-lg text-white text-xs placeholder-slate-500 focus:outline-none focus:border-indigo-500 font-mono"
-                  />
-                  <button
-                    type="button"
-                    onClick={handleAddHubItem}
-                    disabled={!newHubInput.trim()}
-                    className="px-3.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 text-white font-semibold text-xs cursor-pointer flex items-center gap-1 shrink-0"
-                  >
-                    <Plus className="w-3.5 h-3.5" />
-                    <span>Add Hub</span>
-                  </button>
-                </div>
-              </div>
-
-              {/* SECTION F: Precision Products & Engineering Solutions */}
-              <div className="p-4 rounded-xl bg-black/30 border border-white/5 space-y-3">
-                <div className="flex items-center justify-between">
-                  <div className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
-                    <Zap className="w-3.5 h-3.5 text-cyan-400" />
-                    <span>6. Products &amp; Mechanical Solutions ({companyForm.products?.length || 0})</span>
-                  </div>
-                  <span className="text-[11px] text-slate-400">Manufactured mechanical assemblies</span>
-                </div>
-
-                <div className="flex flex-wrap items-center gap-2">
-                  {(companyForm.products || []).map((prod, pIdx) => (
-                    <span
-                      key={pIdx}
-                      className="px-3 py-1 rounded-lg bg-cyan-500/10 border border-cyan-500/25 text-cyan-300 font-mono text-[11px] font-semibold flex items-center gap-1.5"
-                    >
-                      <span>{prod}</span>
-                      <button
-                        type="button"
-                        onClick={() => handleDeleteProductItem(pIdx)}
-                        className="text-cyan-400/60 hover:text-rose-400 cursor-pointer ml-0.5"
-                      >
-                        &times;
-                      </button>
-                    </span>
-                  ))}
-                </div>
-
-                <div className="flex items-center gap-2 pt-1">
-                  <input
-                    type="text"
-                    placeholder="Add product (e.g. Agricultural Axles, Transmission Systems, Drive Solutions)..."
-                    value={newProductInput}
-                    onChange={(e) => setNewProductInput(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') {
-                        e.preventDefault();
-                        handleAddProductItem();
-                      }
-                    }}
-                    className="flex-1 px-3 py-1.5 bg-black/60 border border-white/10 rounded-lg text-white text-xs placeholder-slate-500 focus:outline-none focus:border-cyan-500 font-mono"
-                  />
-                  <button
-                    type="button"
-                    onClick={handleAddProductItem}
-                    disabled={!newProductInput.trim()}
-                    className="px-3.5 py-1.5 rounded-lg bg-cyan-600 hover:bg-cyan-500 disabled:opacity-40 text-white font-semibold text-xs cursor-pointer flex items-center gap-1 shrink-0"
-                  >
-                    <Plus className="w-3.5 h-3.5" />
-                    <span>Add Product</span>
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            {/* SAVE BUTTON BANNER */}
-            <div className="p-4 rounded-xl bg-gradient-to-r from-emerald-950/40 via-black/40 to-indigo-950/40 border border-emerald-500/30 flex flex-wrap items-center justify-between gap-4">
-              <div className="space-y-0.5">
-                <div className="text-xs font-bold text-white flex items-center gap-2">
-                  <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-                  <span>Validation Complete? Commit &amp; Embed Knowledge</span>
-                </div>
-                <p className="text-[11px] text-slate-400">
-                  Stores verified facts in PostgreSQL (<code className="text-emerald-300 font-mono">company_profiles</code>) and re-indexes ChromaDB vectors so the AI can answer questions about all company locations, employees, and clients.
-                </p>
-              </div>
-
-              <div className="flex items-center gap-3">
-                <button
-                  type="button"
-                  onClick={handleSaveAndEmbedCompanyProfile}
-                  disabled={isApprovingProfile}
-                  className="flex items-center gap-2 px-6 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-500 hover:from-emerald-500 hover:to-teal-400 text-white text-xs font-bold shadow-lg shadow-emerald-600/30 cursor-pointer disabled:opacity-50 transition-all"
-                >
-                  <Save className={`w-4 h-4 ${isApprovingProfile ? 'animate-spin' : ''}`} />
-                  <span>{isApprovingProfile ? 'Saving & Embedding...' : 'Save & Embed Company Knowledge'}</span>
-                </button>
-              </div>
-            </div>
+            )}
           </div>
 
           {/* Section 2: Document Upload & Auto-Classification Zone (Directly Under Company Info) */}

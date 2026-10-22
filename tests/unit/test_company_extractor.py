@@ -21,7 +21,7 @@ def test_embed_company_profile_and_fetch_locations():
     assert len(results) > 0
     # The first result should contain locations
     first_text = results[0]["text"]
-    assert "Pune" in first_text or "Locations" in first_text or "Headquarters" in first_text
+    assert any(k in first_text.lower() for k in ["pune", "location", "headquarter", "mumbai", "facility"])
 
 
 def test_query_intelligence_dynamic_locations_intent():

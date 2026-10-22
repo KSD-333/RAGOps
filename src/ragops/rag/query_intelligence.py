@@ -47,6 +47,40 @@ class QueryIntent:
         return asdict(self)
 
 
+def is_abstention_text(text: str) -> bool:
+    """Detect whether response text represents an LLM abstention, refusal, or lack of context."""
+    if not text or not text.strip():
+        return True
+    t = text.lower().replace("’", "'").replace("‘", "'").replace("“", '"').replace("”", '"')
+    abstention_patterns = [
+        "does not contain",
+        "do not contain",
+        "did not contain",
+        "not contain any information",
+        "no information",
+        "cannot answer",
+        "cannot determine",
+        "cannot find",
+        "unable to answer",
+        "unable to find",
+        "insufficient information",
+        "not mentioned",
+        "zero hallucination",
+        "i am sorry",
+        "i'm sorry",
+        "don't have the necessary context",
+        "do not have the necessary context",
+        "not provided in the context",
+        "not provided in the documents",
+        "not found in the provided",
+        "documents you provided are about",
+        "documents provided do not",
+        "context does not mention",
+        "context provided does not",
+    ]
+    return any(p in t for p in abstention_patterns)
+
+
 class QueryIntelligenceEngine:
     """Production Query Intelligence Engine with semantic caching and rewriting."""
 
@@ -54,6 +88,37 @@ class QueryIntelligenceEngine:
         self._embedding_provider = embedding_provider or SentenceTransformerEmbedding()
         self._memory_cache: dict[str, dict] = {}  # In-memory hot cache
         self._similarity_threshold = 0.92
+
+    def get_active_company_identity(self) -> str:
+        """Dynamically resolve the active corporate identity from database profile or registered source URL."""
+        active_company_name = ""
+        try:
+            from ragops.storage.repositories import CompanyRepository
+            _prof = CompanyRepository().get_profile()
+            if _prof and _prof.get("company_name") and _prof["company_name"].strip().lower() != "enterprise":
+                active_company_name = _prof["company_name"].strip()
+            else:
+                from ragops.storage.database import get_session
+                from ragops.storage.models import CompanySourceModel
+                _s = get_session()
+                _src = _s.query(CompanySourceModel).order_by(CompanySourceModel.created_at.desc()).first()
+                if _src:
+                    raw_title = (_src.display_name or "").replace(" Official Portal", "").replace(" Portal", "").strip()
+                    if raw_title and not raw_title.startswith("http") and raw_title.lower() not in ("company", "enterprise", "portal"):
+                        active_company_name = raw_title
+                    elif _src.source_url:
+                        import urllib.parse
+                        domain = urllib.parse.urlparse(_src.source_url).netloc.lower()
+                        parts = domain.replace("www.", "").split(".")
+                        if parts:
+                            active_company_name = parts[0].capitalize()
+                _s.close()
+        except Exception:
+            pass
+
+        if not active_company_name or active_company_name.lower() in ("company", "enterprise"):
+            active_company_name = "Company"
+        return active_company_name
 
     def analyze_and_rewrite(
         self,
@@ -103,14 +168,8 @@ class QueryIntelligenceEngine:
             )
 
         # Dynamic company name lookup from PostgreSQL
-        active_company_name = "Enterprise"
-        try:
-            from ragops.storage.repositories import CompanyRepository
-            _prof = CompanyRepository().get_profile()
-            if _prof and _prof.get("company_name"):
-                active_company_name = _prof["company_name"]
-        except Exception:
-            pass
+        active_company_name = self.get_active_company_identity()
+
 
         # 2. Company Location, Client & Identity Intent Detection
         is_location_query = any(k in q_lower for k in [
@@ -210,7 +269,7 @@ class QueryIntelligenceEngine:
                 # If the previous turn discussed POSH and user asks a follow-up
                 if any(w in last_q or w in last_a for w in ["posh", "sexual harassment", "icc"]):
                     if any(w in q_lower for w in ["committee", "who is in", "members", "procedure", "complaint", "it"]):
-                        rewritten = f"What is the procedure or committee membership under the CIL Prevention of Sexual Harassment (POSH) Policy regarding: {q}?"
+                        rewritten = f"What is the procedure or committee membership under the Prevention of Sexual Harassment (POSH) Policy regarding: {q}?"
                         is_rewritten = True
                 # If the previous turn discussed Whistleblowing
                 elif any(w in last_q or w in last_a for w in ["whistleblower", "vigil mechanism"]):
@@ -224,7 +283,7 @@ class QueryIntelligenceEngine:
                     (r"\btotal polies\b|\bhow many polices\b|\ball policies count\b",
                      "How many distinct company policy documents exist in the knowledge base?"),
                     (r"\bposh rule\b|\bposh rules\b|\bposh procedure\b",
-                     "What are the key rules and complaint procedures under the CIL Policy for Prevention of Sexual Harassment?"),
+                     "What are the key rules and complaint procedures under the corporate Policy for Prevention of Sexual Harassment?"),
                     (r"\bsexual harassment policy count\b|\bhow many posh docs\b",
                      "How many sexual-harassment policy documents are provided in the knowledge base?"),
                     (r"\bintro frameworks\b|\bframeworks in intro\b",
@@ -257,15 +316,20 @@ class QueryIntelligenceEngine:
         - NEVER match across different scopes (e.g. collection-wide count vs document needle lookup)
         - NEVER match across different target entities (e.g. framework count vs policy count)
         - Cosine similarity must exceed 0.92
+        - NEVER return an abstention or refusal response from cache
         """
+        active_company = self.get_active_company_identity()
         normalized = self._normalize_for_cache(query)
-        cache_key = hashlib.sha256(f"{normalized}:{intent.scope}:{intent.target_entity}".encode()).hexdigest()[:16]
+        cache_key = hashlib.sha256(f"{active_company}:{normalized}:{intent.scope}:{intent.target_entity}".encode()).hexdigest()[:16]
 
         # 1. Exact match check (in-memory)
         if cache_key in self._memory_cache:
             entry = self._memory_cache[cache_key]
-            logger.info("memory_cache_exact_hit", query=query[:60], hit_count=entry.get("hit_count", 1))
-            return self._build_cached_response(entry, query, intent)
+            if is_abstention_text(entry.get("answer", "")):
+                del self._memory_cache[cache_key]
+            else:
+                logger.info("memory_cache_exact_hit", query=query[:60], hit_count=entry.get("hit_count", 1))
+                return self._build_cached_response(entry, query, intent)
 
         # 2. Database lookup (PostgreSQL / SQLite)
         try:
@@ -279,6 +343,12 @@ class QueryIntelligenceEngine:
             ).first()
 
             if db_entry:
+                if is_abstention_text(db_entry.answer):
+                    session.delete(db_entry)
+                    session.commit()
+                    session.close()
+                    return None
+
                 db_entry.hit_count += 1
                 db_entry.last_hit_at = datetime.now(timezone.utc)
                 session.commit()
@@ -311,10 +381,15 @@ class QueryIntelligenceEngine:
                 for candidate in candidate_entries:
                     if not candidate.embedding_json:
                         continue
+                    if is_abstention_text(candidate.answer):
+                        session.delete(candidate)
+                        continue
                     sim = self._cosine_similarity(query_vector, candidate.embedding_json)
                     if sim > highest_sim:
                         highest_sim = sim
                         best_match = candidate
+
+                session.commit()
 
                 if best_match and highest_sim >= self._similarity_threshold:
                     best_match.hit_count += 1
@@ -349,18 +424,13 @@ class QueryIntelligenceEngine:
     ) -> None:
         """Persist a verified answer to the semantic cache with scope and embedding metadata."""
         # CRITICAL GUARD: Never cache abstentions or negative refusal responses!
-        ans_lower = (response.answer or "").lower()
-        abstention_phrases = [
-            "does not contain", "no information", "cannot answer", "cannot find",
-            "unable to answer", "insufficient information", "not mentioned",
-            "zero hallucination", "i am sorry", "i'm sorry"
-        ]
-        if any(phrase in ans_lower for phrase in abstention_phrases):
+        if is_abstention_text(response.answer):
             logger.info("skip_caching_abstention_response", query=query[:60])
             return
 
+        active_company = self.get_active_company_identity()
         normalized = self._normalize_for_cache(query)
-        cache_key = hashlib.sha256(f"{normalized}:{intent.scope}:{intent.target_entity}".encode()).hexdigest()[:16]
+        cache_key = hashlib.sha256(f"{active_company}:{normalized}:{intent.scope}:{intent.target_entity}".encode()).hexdigest()[:16]
 
         # Embed query for future semantic matches
         try:
