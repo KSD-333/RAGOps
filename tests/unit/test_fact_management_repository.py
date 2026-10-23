@@ -100,3 +100,6 @@ def test_fact_management_lifecycle():
     # 10. Verify job is completed
     job_status_after = repo.get_ingestion_job(job_id=job_id, organization_id=test_org)
     assert job_status_after["status"] == "completed"
+
+    # 11. Cleanup test organization resources
+    repo.clear_company_knowledge(organization_id=test_org)

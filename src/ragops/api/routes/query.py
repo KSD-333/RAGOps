@@ -14,6 +14,8 @@ from ragops.ingestion.pipeline import IngestionPipeline
 from ragops.ingestion.schemas import IngestionRequest, IngestionResult
 
 from typing import Optional
+import time
+import uuid
 from ragops.storage.repositories import ChatRepository, UserRepository
 from ragops.core.logging import get_logger
 
@@ -51,11 +53,15 @@ async def query_rag(input: QueryInput):
     """
     pipeline = get_rag_pipeline()
 
+    session_id = input.session_id
+    if not session_id or session_id.strip() == "" or session_id in ("sess_admin", "sess_test1", "sess_test2", "sess_user", "sess_anon"):
+        session_id = f"sess_{int(time.time() * 1000)}_{uuid.uuid4().hex[:6]}"
+
     request = QueryRequest(
         query=input.query,
         top_k=input.top_k,
         filters=input.filters,
-        session_id=input.session_id or f"sess_{input.username or 'anon'}",
+        session_id=session_id,
     )
 
     try:
@@ -137,13 +143,15 @@ async def get_session_history(
     session_id: str,
     username: Optional[str] = None,
     role: Optional[str] = None,
+    session_user: Optional[str] = None,
 ):
     """Get all messages in a conversation session in chronological order.
     Enforces privacy: non-admin users can only view messages from their own sessions.
     """
     try:
         chat_repo = ChatRepository()
-        messages = chat_repo.get_session_messages(session_id=session_id)
+        filter_user = session_user or (username if role != "admin" else None)
+        messages = chat_repo.get_session_messages(session_id=session_id, username=filter_user)
         
         # Access control: If non-admin user tries to access another user's session
         if role != "admin" and username and messages:
@@ -228,18 +236,23 @@ async def ingest_documents(input: IngestInput):
 
 @router.get("/documents/count")
 async def get_document_count():
-    """Get the total number of indexed document chunks."""
+    """Get the total number of indexed document chunks, reconciling with disk first."""
+    try:
+        from ragops.storage.repositories import DocumentCatalogRepository
+        DocumentCatalogRepository().reconcile_with_disk(auto_embed=False)
+    except Exception:
+        pass
     retriever = get_retriever()
     return {"count": retriever.document_count}
 
 
 @router.get("/catalog")
 async def get_document_catalog(doc_type: Optional[str] = None):
-    """Get the auto-classified document inventory and classification summary."""
+    """Get the auto-classified document inventory and classification summary, auto-reconciled with data/raw."""
     try:
         from ragops.storage.repositories import DocumentCatalogRepository
         repo = DocumentCatalogRepository()
-        documents = repo.list_documents(doc_type=doc_type)
+        documents = repo.list_documents(doc_type=doc_type, auto_reconcile=True)
         summary = repo.get_summary()
         return {
             "summary": summary,
@@ -249,12 +262,59 @@ async def get_document_catalog(doc_type: Optional[str] = None):
         raise HTTPException(status_code=500, detail=f"Failed to fetch catalog: {str(e)}")
 
 
+@router.post("/catalog/sync")
+async def sync_catalog_with_disk(auto_embed: bool = False):
+    """Explicitly reconcile physical files in data/raw with PostgreSQL/SQLite and ChromaDB vector store."""
+    try:
+        from ragops.storage.repositories import DocumentCatalogRepository
+        repo = DocumentCatalogRepository()
+        reconcile_result = repo.reconcile_with_disk(auto_embed=auto_embed)
+        documents = repo.list_documents(auto_reconcile=False)
+        summary = repo.get_summary()
+        return {
+            "status": "success",
+            "reconciliation": reconcile_result,
+            "summary": summary,
+            "documents": documents,
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to sync catalog with disk: {str(e)}")
+
+
+@router.post("/catalog/embed/{document_source}")
+async def embed_single_document(document_source: str):
+    """Ingest, chunk, and embed a pending document from data/raw into ChromaDB."""
+    try:
+        from ragops.storage.repositories import DocumentCatalogRepository
+        repo = DocumentCatalogRepository()
+        result = repo.embed_document(document_source)
+        return result
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        logger.error("embed_single_document_failed", source=document_source, error=str(e))
+        raise HTTPException(status_code=500, detail=f"Failed to embed document: {str(e)}")
+
+
+@router.post("/catalog/embed-all")
+async def embed_all_pending_documents():
+    """Batch embed all unembedded / pending documents in data/raw into ChromaDB."""
+    try:
+        from ragops.storage.repositories import DocumentCatalogRepository
+        repo = DocumentCatalogRepository()
+        result = repo.embed_all_pending()
+        return result
+    except Exception as e:
+        logger.error("embed_all_pending_failed", error=str(e))
+        raise HTTPException(status_code=500, detail=f"Failed to embed pending documents: {str(e)}")
+
+
 @router.post("/catalog/upload")
 async def upload_and_classify_document(
     file: UploadFile = File(...),
     title: Optional[str] = Form(None),
 ):
-    """Upload a new document (.pdf, .md, .txt), auto-classify its governance/policy category, chunk, embed into ChromaDB, and record in PostgreSQL."""
+    """Upload a new document (.pdf, .md, .txt) into data/raw, auto-classify, chunk, embed into ChromaDB, and record in DB."""
     filename = file.filename
     if not filename:
         raise HTTPException(status_code=400, detail="Filename missing from upload request.")
@@ -263,25 +323,25 @@ async def upload_and_classify_document(
     effective_title = title.strip() if title and title.strip() else filename
 
     suffix = Path(filename).suffix.lower()
-    allowed_suffixes = {".pdf", ".md", ".markdown", ".txt", ".html", ".htm"}
+    allowed_suffixes = {".pdf", ".md", ".markdown", ".txt", ".html", ".htm", ".docx"}
     if suffix not in allowed_suffixes:
         raise HTTPException(
             status_code=400,
             detail=f"Unsupported file format '{suffix}'. Supported formats: {', '.join(sorted(allowed_suffixes))}"
         )
 
-    # 1. Save file to data directory
-    data_dir = Path("data").resolve()
-    data_dir.mkdir(parents=True, exist_ok=True)
-    target_path = data_dir / filename
+    # 1. Save file directly to data/raw directory
+    raw_dir = Path("data/raw").resolve()
+    raw_dir.mkdir(parents=True, exist_ok=True)
+    target_path = raw_dir / filename
 
     content = await file.read()
     with open(target_path, "wb") as f:
         f.write(content)
 
-    logger.info("document_uploaded_saving_to_disk", filename=filename, title=effective_title, size_bytes=len(content))
+    logger.info("document_uploaded_saving_to_raw", filename=filename, title=effective_title, size_bytes=len(content))
 
-    # 2. Ingest, auto-classify, chunk, and save metadata to PostgreSQL
+    # 2. Ingest, auto-classify, chunk, and save metadata to PostgreSQL/SQLite
     try:
         pipeline = IngestionPipeline()
         chunks = pipeline.ingest_file(target_path, metadata={"custom_title": effective_title})
@@ -297,7 +357,7 @@ async def upload_and_classify_document(
         logger.error("vector_indexing_failed", filename=filename, error=str(e))
         raise HTTPException(status_code=500, detail=f"Failed to index embeddings in ChromaDB: {str(e)}")
 
-    # 4. Fetch the synced classification record from PostgreSQL and persist custom title
+    # 4. Fetch the synced classification record from database and persist custom title
     from ragops.storage.database import get_session
     from ragops.storage.models import DocumentModel
     session = get_session()
@@ -306,6 +366,11 @@ async def upload_and_classify_document(
         doc_record = session.query(DocumentModel).filter(DocumentModel.source == filename).first()
         if doc_record:
             doc_record.title = effective_title
+            doc_record.chunk_count = indexed_count
+            meta = dict(doc_record.metadata_json or {})
+            meta["is_embedded"] = True
+            meta["file_size_bytes"] = len(content)
+            doc_record.metadata_json = meta
             session.commit()
     finally:
         session.close()
@@ -328,32 +393,20 @@ async def upload_and_classify_document(
 
 @router.delete("/catalog/{document_source}")
 async def delete_catalog_document(document_source: str):
-    """Delete a document from PostgreSQL and remove its chunks from ChromaDB."""
+    """Delete a document from physical disk (data/raw), remove its chunks from ChromaDB, and delete from DB."""
     try:
-        from ragops.storage.database import get_session
-        from ragops.storage.models import DocumentModel
-        session = get_session()
-        source_name = document_source
-        try:
-            doc = session.query(DocumentModel).filter(
-                (DocumentModel.source == document_source) | (DocumentModel.document_id == document_source)
-            ).first()
-            if doc:
-                source_name = doc.source
-                session.delete(doc)
-                session.commit()
-        finally:
-            session.close()
-
-        # Delete chunks from ChromaDB collection
-        retriever = get_retriever()
-        if hasattr(retriever._vector_store, "_collection") and retriever._vector_store._collection:
-            retriever._vector_store._collection.delete(where={"source": source_name})
-
-        return {"status": "success", "message": f"Deleted document '{source_name}' and its vector embeddings."}
+        from ragops.storage.repositories import DocumentCatalogRepository
+        repo = DocumentCatalogRepository()
+        result = repo.delete_document(document_source)
+        return {
+            "status": "success",
+            "message": f"Deleted document '{document_source}', purged physical file, vector embeddings, and invalidated semantic cache.",
+            "details": result,
+        }
     except Exception as e:
         logger.error("delete_catalog_document_failed", document=document_source, error=str(e))
         raise HTTPException(status_code=500, detail=f"Failed to delete document: {str(e)}")
+
 
 
 

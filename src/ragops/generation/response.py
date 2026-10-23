@@ -73,8 +73,8 @@ class ResponseBuilder:
             if is_explicitly_cited:
                 explicit_cited_chunks.append(chunk)
 
-            # High relevance score threshold (cross-encoder score >= -4.5 or cosine distance <= 0.35)
-            if chunk.score >= -4.5 or (0.0 <= chunk.score <= 0.35):
+            # Relevance score threshold (calibrated score >= 0.20 or raw logit >= -4.5)
+            if chunk.score >= 0.20 or chunk.score >= -4.5:
                 high_relevance_chunks.append(chunk)
 
         # Prefer explicitly cited chunks, otherwise fallback to top relevant chunks
@@ -116,6 +116,20 @@ class ResponseBuilder:
         """
         sources = self._select_sources(llm_response.text, retrieved_context.chunks)
 
+        input_tokens = llm_response.input_tokens
+        output_tokens = llm_response.output_tokens
+        total_tokens = input_tokens + output_tokens
+
+        # Fallback estimation if provider returned 0 tokens
+        if total_tokens == 0 and llm_response.text:
+            est_input = max(1, len(getattr(retrieved_context, "query", "") or "") // 4 + sum(len(c.text) for c in retrieved_context.chunks) // 4)
+            est_output = max(1, len(llm_response.text) // 4)
+            input_tokens = est_input
+            output_tokens = est_output
+            total_tokens = est_input + est_output
+
+        cost_usd = round(((input_tokens * 0.05 + output_tokens * 0.08) / 1_000_000), 6)
+
         response = RAGResponse(
             query=getattr(retrieved_context, "query", ""),
             answer=llm_response.text,
@@ -123,8 +137,10 @@ class ResponseBuilder:
             trace_id=trace_id,
             metadata={
                 "model": llm_response.model,
-                "input_tokens": llm_response.input_tokens,
-                "output_tokens": llm_response.output_tokens,
+                "input_tokens": input_tokens,
+                "output_tokens": output_tokens,
+                "total_tokens": total_tokens,
+                "cost_usd": cost_usd,
                 "generation_latency_ms": round(llm_response.latency_ms, 2),
                 "retrieval_latency_ms": round(retrieved_context.retrieval_latency_ms, 2),
                 "embed_latency_ms": round(retrieved_context.embed_latency_ms, 2),

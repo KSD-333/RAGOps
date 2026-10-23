@@ -8,6 +8,7 @@ It does NOT generate answers.
 
 from __future__ import annotations
 
+import math
 from typing import Protocol
 
 from ragops.core.config import get_settings
@@ -80,14 +81,24 @@ class CrossEncoderReranker:
         try:
             scores = self._model.predict(pairs)
 
-            # Attach reranker scores
+            # Attach reranker scores calibrated to [0.0, 1.0] probability via sigmoid
             scored_results = []
-            for result, score in zip(results, scores):
+            for result, raw_score in zip(results, scores):
+                s = float(raw_score)
+                # Calibrate logit if outside [0.0, 1.0]
+                if s > 1.0 or s < 0.0:
+                    try:
+                        calibrated = 1.0 / (1.0 + math.exp(-s))
+                    except OverflowError:
+                        calibrated = 1.0 if s > 0 else 0.0
+                else:
+                    calibrated = s
+
                 reranked = VectorSearchResult(
                     chunk_id=result.chunk_id,
                     text=result.text,
-                    score=float(score),
-                    metadata={**result.metadata, "original_score": result.score},
+                    score=round(calibrated, 4),
+                    metadata={**result.metadata, "original_score": result.score, "raw_logit": s},
                 )
                 scored_results.append(reranked)
 

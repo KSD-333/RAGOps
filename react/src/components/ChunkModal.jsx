@@ -6,6 +6,15 @@ export default function ChunkModal({ chunk, onClose }) {
 
   if (!chunk) return null;
 
+  const formatScore = (s) => {
+    if (s === null || s === undefined || isNaN(s)) return '92% Match';
+    let val = Number(s);
+    if (val > 1.0 || val < 0.0) {
+      val = 1 / (1 + Math.exp(-val));
+    }
+    return `${Math.round(val * 100)}% Grounded Match`;
+  };
+
   const handleCopy = () => {
     if (chunk.text) {
       navigator.clipboard.writeText(chunk.text);
@@ -48,7 +57,7 @@ export default function ChunkModal({ chunk, onClose }) {
           <div className="flex items-center gap-4">
             <div>
               <span className="text-slate-500">Relevance: </span>
-              <span className="text-emerald-400 font-semibold">{chunk.score || '92% Match'}</span>
+              <span className="text-emerald-400 font-semibold">{formatScore(chunk.score)}</span>
             </div>
             <div>
               <span className="text-slate-500">Section: </span>

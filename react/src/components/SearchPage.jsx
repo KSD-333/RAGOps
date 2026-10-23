@@ -29,7 +29,10 @@ import {
   Building,
   MapPin,
   Award,
-  Database
+  Database,
+  Copy,
+  Check,
+  RotateCcw
 } from 'lucide-react';
 import { marked } from 'marked';
 
@@ -46,6 +49,8 @@ export default function SearchPage({
   const [currentSessionId, setCurrentSessionId] = useState(() => {
     return `sess_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
   });
+  const [currentSessionUser, setCurrentSessionUser] = useState(() => currentUser?.username || null);
+  const [copiedTurnId, setCopiedTurnId] = useState(null);
   const [messages, setMessages] = useState([]);
   const [inputPrompt, setInputPrompt] = useState(initialQuery || '');
   const [topK, setTopK] = useState(5);
@@ -66,20 +71,46 @@ export default function SearchPage({
   const [newHubInput, setNewHubInput] = useState('');
   const [newProductInput, setNewProductInput] = useState('');
 
-  const messagesEndRef = useRef(null);
+  const chatScrollContainerRef = useRef(null);
   const textareaRef = useRef(null);
 
   // Admin Chat Filtering: 'all' users vs 'my' admin chats
   const [adminChatFilter, setAdminChatFilter] = useState('all');
 
-  // Auto-scroll to bottom of chat
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  // Format relevance score from raw cross-encoder logits or similarity to clean 0-100%
+  const formatRelevanceScore = (score) => {
+    if (score === null || score === undefined || isNaN(score)) return 'Grounded';
+    let val = Number(score);
+    // If the score is an uncalibrated cross-encoder logit (e.g. 2.72 or -1.5)
+    if (val > 1.0 || val < 0.0) {
+      val = 1 / (1 + Math.exp(-val));
+    }
+    const pct = Math.min(100, Math.max(0, Math.round(val * 100)));
+    return `${pct}%`;
+  };
+
+  // Dedicated container-level auto-scroll: ONLY scrolls the chat message container, never the window or sidebar
+  const scrollToBottom = (behavior = 'smooth') => {
+    if (chatScrollContainerRef.current) {
+      chatScrollContainerRef.current.scrollTo({
+        top: chatScrollContainerRef.current.scrollHeight,
+        behavior: behavior,
+      });
+    }
   };
 
   useEffect(() => {
     scrollToBottom();
   }, [messages, loading]);
+
+  // When currentUser changes (e.g. user switches between admin and test1), switch cleanly to a fresh session
+  const prevUserRef = useRef(currentUser?.username);
+  useEffect(() => {
+    if (prevUserRef.current !== currentUser?.username) {
+      prevUserRef.current = currentUser?.username;
+      handleNewChat();
+    }
+  }, [currentUser]);
 
   // Load existing sessions based on active role (Admin sees all; User sees only their own)
   const fetchSessions = async () => {
@@ -105,13 +136,18 @@ export default function SearchPage({
   }, [currentUser, apiBaseUrl, adminChatFilter]);
 
   // Load turn-by-turn messages if an existing session is clicked
-  const handleSelectSession = async (sessionId) => {
+  const handleSelectSession = async (sessionId, sessionUser = null) => {
     setCurrentSessionId(sessionId);
+    setCurrentSessionUser(sessionUser);
     setLoading(true);
     try {
       const username = currentUser?.username || 'test1';
       const role = currentUser?.role || 'user';
-      const res = await fetch(`${apiBaseUrl}/api/v1/sessions/${sessionId}?username=${encodeURIComponent(username)}&role=${encodeURIComponent(role)}`);
+      let url = `${apiBaseUrl}/api/v1/sessions/${sessionId}?username=${encodeURIComponent(username)}&role=${encodeURIComponent(role)}`;
+      if (sessionUser) {
+        url += `&session_user=${encodeURIComponent(sessionUser)}`;
+      }
+      const res = await fetch(url);
       if (res.ok) {
         const json = await res.json();
         const loaded = (json.messages || []).map((m) => ({
@@ -132,6 +168,9 @@ export default function SearchPage({
             total_tokens: m.total_tokens,
             cost_usd: m.cost_usd,
             retrieved_chunks: m.chunks_sent || [],
+            cache_hit: m.cache_hit,
+            is_rewritten: !!m.rewritten_query,
+            rewritten_query: m.rewritten_query,
           },
           feedback: m.feedback_rating,
         }));
@@ -148,10 +187,18 @@ export default function SearchPage({
   const handleNewChat = () => {
     const newId = `sess_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
     setCurrentSessionId(newId);
+    setCurrentSessionUser(currentUser?.username || null);
     setMessages([]);
     setInputPrompt('');
     setExpandedChunkMsgIdx(null);
     if (textareaRef.current) textareaRef.current.focus();
+  };
+
+  const handleCopyText = (text, turnId) => {
+    if (!text) return;
+    navigator.clipboard.writeText(text);
+    setCopiedTurnId(turnId);
+    setTimeout(() => setCopiedTurnId(null), 2000);
   };
 
   // Delete a session
@@ -220,6 +267,9 @@ export default function SearchPage({
       }
 
       const data = await res.json();
+      const meta = data.metadata || {};
+      const totalTokens = meta.total_tokens ?? ((meta.input_tokens || 0) + (meta.output_tokens || 0)) ?? 0;
+      meta.total_tokens = totalTokens;
       
       // Update turn with actual LLM generation & retrieved chunks
       setMessages((prev) =>
@@ -230,7 +280,7 @@ export default function SearchPage({
                 answer: data.answer,
                 sources: data.sources || [],
                 trace_id: data.trace_id,
-                metadata: data.metadata || {},
+                metadata: meta,
                 isPending: false,
               }
             : msg
@@ -379,100 +429,125 @@ export default function SearchPage({
   };
 
   return (
-    <div className="flex h-[calc(100vh-140px)] rounded-2xl overflow-hidden border border-white/10 bg-[#07090e] shadow-2xl animate-in fade-in duration-200">
+    <div className="flex flex-1 h-full min-h-0 rounded-2xl overflow-hidden border border-white/10 bg-[#070b16] shadow-2xl animate-in fade-in duration-200">
       
       {/* =====================================================================
-          CHATGPT-STYLE LEFT SIDEBAR
+          ENTERPRISE WORKSPACE SIDEBAR
           ===================================================================== */}
-      <aside className={`transition-all duration-300 flex flex-col bg-[#0a0e18] border-r border-white/10 shrink-0 ${
-        sidebarOpen ? 'w-72' : 'w-0 overflow-hidden'
+      <aside className={`transition-all duration-300 flex flex-col h-full bg-[#080d19] border-r border-white/10 shrink-0 select-none overflow-hidden ${
+        sidebarOpen ? 'w-80' : 'w-0'
       }`}>
         
-        {/* Sidebar Header: New Chat Button */}
-        <div className="p-3 border-b border-white/10 space-y-2">
+        {/* Sidebar Header: New Chat Button (PINNED) */}
+        <div className="p-3.5 border-b border-white/10 shrink-0 space-y-2">
           <button
             onClick={handleNewChat}
-            className="w-full py-2.5 px-3.5 rounded-xl bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-500 hover:to-indigo-600 text-white text-xs font-semibold flex items-center justify-between shadow-md shadow-indigo-600/25 transition-all cursor-pointer"
+            className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-indigo-600 via-indigo-600 to-indigo-700 hover:from-indigo-500 hover:to-indigo-600 text-white text-xs font-semibold flex items-center justify-between shadow-lg shadow-indigo-600/30 transition-all cursor-pointer group hover:scale-[1.01] active:scale-[0.99]"
           >
-            <div className="flex items-center gap-2">
-              <Plus className="w-4 h-4" />
-              <span>New Conversation</span>
+            <div className="flex items-center gap-2.5">
+              <div className="w-5 h-5 rounded-md bg-white/20 flex items-center justify-center">
+                <Plus className="w-3.5 h-3.5" />
+              </div>
+              <span className="font-['Outfit'] font-bold text-sm tracking-wide">New Conversation</span>
             </div>
-            <span className="text-[10px] px-1.5 py-0.5 rounded bg-white/20 font-mono">Chat</span>
+            <span className="text-[10px] px-2 py-0.5 rounded-md bg-white/15 font-mono text-indigo-100 border border-white/10">
+              New
+            </span>
           </button>
         </div>
 
-        {/* Sessions List */}
-        <div className="flex-1 overflow-y-auto p-2 space-y-1">
-          <div className="flex items-center justify-between px-2 py-1">
-            <div className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
-              {currentUser?.role === 'admin' ? 'Conversations Audit' : 'Your Conversations'}
-            </div>
-            {currentUser?.role === 'admin' && (
-              <div className="flex items-center gap-1 bg-white/[0.04] p-0.5 rounded-lg border border-white/5">
-                <button
-                  type="button"
-                  onClick={() => setAdminChatFilter('all')}
-                  className={`px-1.5 py-0.5 rounded text-[9px] font-mono font-bold transition-all cursor-pointer ${
-                    adminChatFilter === 'all'
-                      ? 'bg-amber-500 text-black shadow-sm'
-                      : 'text-slate-400 hover:text-white'
-                  }`}
-                >
-                  All ({sessions.length})
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setAdminChatFilter('my')}
-                  className={`px-1.5 py-0.5 rounded text-[9px] font-mono font-bold transition-all cursor-pointer ${
-                    adminChatFilter === 'my'
-                      ? 'bg-indigo-600 text-white shadow-sm'
-                      : 'text-slate-400 hover:text-white'
-                  }`}
-                >
-                  Mine
-                </button>
-              </div>
-            )}
+        {/* Pinned Section Header: Title & Filter Tabs */}
+        <div className="px-3.5 py-2.5 border-b border-white/5 flex items-center justify-between shrink-0 bg-[#080d19]">
+          <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+            <MessageSquare className="w-3 h-3 text-indigo-400" />
+            <span>{currentUser?.role === 'admin' ? 'Conversations Audit' : 'Your Conversations'}</span>
           </div>
+          {currentUser?.role === 'admin' && (
+            <div className="flex items-center gap-1 bg-white/[0.04] p-0.5 rounded-lg border border-white/10">
+              <button
+                type="button"
+                onClick={() => setAdminChatFilter('all')}
+                className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold transition-all cursor-pointer ${
+                  adminChatFilter === 'all'
+                    ? 'bg-amber-500 text-black shadow-sm'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                All ({sessions.length})
+              </button>
+              <button
+                type="button"
+                onClick={() => setAdminChatFilter('my')}
+                className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold transition-all cursor-pointer ${
+                  adminChatFilter === 'my'
+                    ? 'bg-indigo-600 text-white shadow-sm'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                Mine
+              </button>
+            </div>
+          )}
+        </div>
+
+        {/* Sessions List: INDEPENDENT SCROLL CONTAINER */}
+        <div className="flex-1 min-h-0 overflow-y-auto p-2.5 space-y-1.5">
 
           {sessions.length === 0 ? (
-            <div className="p-4 text-center text-slate-500 text-xs italic">
-              {currentUser?.role === 'admin'
-                ? 'No conversations recorded for this filter.'
-                : 'No previous chats recorded yet. Start a new topic!'}
+            <div className="p-6 text-center text-slate-500 text-xs italic space-y-1">
+              <div>{currentUser?.role === 'admin' ? 'No conversations recorded for this filter.' : 'No previous chats recorded yet.'}</div>
+              <div className="text-[11px] text-slate-600">Start a new conversation to begin!</div>
             </div>
           ) : (
-            sessions.map((sess) => {
-              const isActive = currentSessionId === sess.session_id;
+            sessions.map((sess, sIdx) => {
+              const isActive = sess.session_id === currentSessionId && 
+                (!currentSessionUser || !sess.username || currentSessionUser === sess.username);
+              const sessionKey = `${sess.session_id}_${sess.username || ''}_${sIdx}`;
+              
               return (
                 <div
-                  key={sess.session_id}
-                  onClick={() => handleSelectSession(sess.session_id)}
-                  className={`group flex items-center justify-between p-2.5 rounded-xl text-xs transition-all cursor-pointer ${
+                  key={sessionKey}
+                  onClick={() => handleSelectSession(sess.session_id, sess.username)}
+                  className={`group relative flex items-center justify-between p-3 rounded-xl text-xs transition-all cursor-pointer border ${
                     isActive
-                      ? 'bg-indigo-950/50 text-white border border-indigo-500/40 font-medium'
-                      : 'text-slate-400 hover:text-slate-200 hover:bg-white/[0.04]'
+                      ? 'bg-gradient-to-r from-indigo-950/80 via-indigo-900/40 to-transparent text-white border-indigo-500/50 shadow-md shadow-indigo-950/50 border-l-[4px] border-l-indigo-400'
+                      : 'text-slate-400 hover:text-slate-200 hover:bg-white/[0.04] border-transparent'
                   }`}
                 >
-                  <div className="flex items-center gap-2 overflow-hidden pr-1">
-                    <MessageSquare className={`w-3.5 h-3.5 shrink-0 ${isActive ? 'text-indigo-400' : 'text-slate-500'}`} />
-                    <span className="truncate">{sess.title}</span>
-                    {currentUser?.role === 'admin' && sess.username && (
-                      <span className={`text-[9px] px-1.5 py-0.2 rounded font-mono font-bold shrink-0 ${
-                        sess.username === 'admin'
-                          ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
-                          : 'bg-white/10 text-cyan-300'
-                      }`}>
-                        @{sess.username}
-                      </span>
-                    )}
+                  <div className="flex items-center gap-2.5 overflow-hidden pr-2 min-w-0">
+                    <div className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 transition-colors ${
+                      isActive 
+                        ? 'bg-indigo-600 text-white shadow-sm shadow-indigo-600/40' 
+                        : 'bg-white/[0.04] text-slate-400 group-hover:bg-white/[0.08] group-hover:text-slate-200'
+                    }`}>
+                      <MessageSquare className="w-3.5 h-3.5" />
+                    </div>
+                    
+                    <div className="truncate min-w-0 flex-1">
+                      <div className={`truncate font-medium text-xs ${isActive ? 'text-white font-semibold' : 'text-slate-300'}`}>
+                        {sess.title || 'Untitled Conversation'}
+                      </div>
+                      <div className="flex items-center gap-1.5 mt-0.5 text-[10px] text-slate-500 font-mono">
+                        {sess.message_count && (
+                          <span>{sess.message_count} msg{sess.message_count > 1 ? 's' : ''}</span>
+                        )}
+                        {currentUser?.role === 'admin' && sess.username && (
+                          <span className={`px-1.5 py-0.1 rounded font-bold ${
+                            sess.username === 'admin'
+                              ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+                              : 'bg-cyan-500/15 text-cyan-300 border border-cyan-500/25'
+                          }`}>
+                            @{sess.username}
+                          </span>
+                        )}
+                      </div>
+                    </div>
                   </div>
 
                   <button
                     onClick={(e) => handleDeleteSession(e, sess.session_id)}
                     title="Delete conversation"
-                    className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-rose-500/20 text-slate-500 hover:text-rose-400 transition-all cursor-pointer shrink-0"
+                    className="opacity-0 group-hover:opacity-100 p-1.5 rounded-lg hover:bg-rose-500/20 text-slate-500 hover:text-rose-400 transition-all cursor-pointer shrink-0"
                   >
                     <Trash2 className="w-3.5 h-3.5" />
                   </button>
@@ -482,11 +557,11 @@ export default function SearchPage({
           )}
         </div>
 
-        {/* Sidebar Footer: Active User & Account Switcher */}
-        <div className="p-3 border-t border-white/10 bg-[#07090e] flex items-center justify-between">
+        {/* Sidebar Footer: Active User & Account Switcher (PINNED) */}
+        <div className="p-3.5 border-t border-white/10 bg-[#070b14] flex items-center justify-between shrink-0">
           <div className="flex items-center gap-2.5 overflow-hidden">
-            <div className={`w-7 h-7 rounded-full flex items-center justify-center font-bold text-xs ${
-              currentUser?.role === 'admin' ? 'bg-amber-500 text-black' : 'bg-indigo-600 text-white'
+            <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs shadow-md ${
+              currentUser?.role === 'admin' ? 'bg-amber-500 text-black ring-2 ring-amber-500/30' : 'bg-indigo-600 text-white ring-2 ring-indigo-500/30'
             }`}>
               {currentUser?.username ? currentUser.username.charAt(0).toUpperCase() : 'U'}
             </div>
@@ -498,7 +573,7 @@ export default function SearchPage({
 
           <button
             onClick={onOpenAuthModal}
-            className="text-[11px] text-indigo-400 hover:text-indigo-300 font-semibold cursor-pointer px-2 py-1 rounded bg-white/[0.04] hover:bg-white/[0.08]"
+            className="text-[11px] text-indigo-400 hover:text-indigo-300 font-semibold cursor-pointer px-2.5 py-1.5 rounded-lg bg-white/[0.04] hover:bg-white/[0.08] border border-white/10 transition-colors"
           >
             Switch
           </button>
@@ -509,28 +584,32 @@ export default function SearchPage({
       {/* =====================================================================
           MAIN CONVERSATIONAL AREA
           ===================================================================== */}
-      <main className="flex-1 flex flex-col bg-[#07090e] min-w-0">
+      <main className="flex-1 flex flex-col h-full min-w-0 bg-[#070b16] overflow-hidden">
         
-        {/* Top Header Bar */}
-        <div className="h-14 border-b border-white/10 px-4 flex items-center justify-between bg-[#0a0e18]/60 backdrop-blur-md">
+        {/* Top Header Bar (PINNED) */}
+        <div className="h-16 border-b border-white/10 px-5 sm:px-6 flex items-center justify-between bg-[#0a0e1c]/80 backdrop-blur-xl shrink-0">
           <div className="flex items-center gap-3">
             <button
               onClick={() => setSidebarOpen(!sidebarOpen)}
-              className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-white/5 transition-colors cursor-pointer"
+              className="p-2 rounded-xl text-slate-400 hover:text-white hover:bg-white/5 transition-colors cursor-pointer border border-transparent hover:border-white/10"
               title={sidebarOpen ? 'Collapse sidebar' : 'Open sidebar'}
             >
               {sidebarOpen ? <PanelLeftClose className="w-4 h-4" /> : <PanelLeft className="w-4 h-4" />}
             </button>
             
-            <div className="flex items-center gap-2">
-              <span className="font-['Outfit'] font-bold text-sm text-white">RAGOps Chat Assistant</span>
-              <span className="text-[10px] px-2 py-0.5 rounded-full bg-indigo-500/10 text-indigo-300 border border-indigo-500/20 font-mono">
+            <div className="flex items-center gap-2.5">
+              <span className="font-['Outfit'] font-bold text-base text-white tracking-tight">RAGOps Chat Assistant</span>
+              <span className="text-[11px] px-2.5 py-0.5 rounded-full bg-indigo-500/15 text-indigo-300 border border-indigo-500/30 font-mono font-medium">
                 Groq LLaMA 3.1 70B
+              </span>
+              <span className="hidden md:inline-flex items-center gap-1.5 text-[11px] text-slate-400 font-mono">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.8)] animate-pulse" />
+                <span>Zero Hallucination Grounded</span>
               </span>
             </div>
           </div>
 
-          {/* Top-K Selector & Toast Notification */}
+          {/* Right Header Actions */}
           <div className="flex items-center gap-3">
             {toastMessage && (
               <span className="text-xs font-semibold text-emerald-400 animate-in fade-in duration-150">
@@ -538,63 +617,116 @@ export default function SearchPage({
               </span>
             )}
 
-            <div className="flex items-center gap-1.5 text-xs text-slate-400 bg-white/[0.03] border border-white/10 rounded-lg px-2.5 py-1">
-              <Sliders className="w-3.5 h-3.5 text-slate-500" />
-              <span>Chunks:</span>
+            {messages.length > 0 && (
+              <button
+                type="button"
+                onClick={handleNewChat}
+                className="hidden sm:flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-white/[0.03] hover:bg-white/[0.08] text-slate-400 hover:text-white text-xs border border-white/10 transition-colors cursor-pointer"
+                title="Start a new clean chat"
+              >
+                <RotateCcw className="w-3.5 h-3.5" />
+                <span>Clear Chat</span>
+              </button>
+            )}
+
+            <div className="flex items-center gap-1.5 text-xs text-slate-300 bg-white/[0.04] border border-white/10 rounded-xl px-3 py-1.5">
+              <Sliders className="w-3.5 h-3.5 text-indigo-400" />
+              <span className="text-slate-400">Context:</span>
               <select
                 value={topK}
                 onChange={(e) => setTopK(Number(e.target.value))}
                 className="bg-transparent text-white font-mono text-xs focus:outline-none cursor-pointer"
               >
-                <option value={3} className="bg-[#0b0f19]">Top-3</option>
-                <option value={5} className="bg-[#0b0f19]">Top-5</option>
-                <option value={8} className="bg-[#0b0f19]">Top-8</option>
+                <option value={3} className="bg-[#0b0f19]">Top-3 Chunks</option>
+                <option value={5} className="bg-[#0b0f19]">Top-5 Chunks</option>
+                <option value={8} className="bg-[#0b0f19]">Top-8 Chunks</option>
+                <option value={10} className="bg-[#0b0f19]">Top-10 Chunks</option>
               </select>
             </div>
           </div>
         </div>
 
-        {/* Message Stream */}
-        <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-6">
+        {/* Message Stream: INDEPENDENT SCROLL CONTAINER */}
+        <div ref={chatScrollContainerRef} className="flex-1 min-h-0 overflow-y-auto p-5 sm:p-8 space-y-7">
           
           {/* Empty Conversation Welcome Screen */}
           {messages.length === 0 ? (
-            <div className="h-full flex flex-col items-center justify-center max-w-xl mx-auto text-center space-y-6 py-12 animate-in fade-in duration-300">
-              <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-indigo-500 via-indigo-600 to-cyan-400 flex items-center justify-center text-white shadow-xl shadow-indigo-500/25">
-                <Bot className="w-7 h-7" />
+            <div className="h-full flex flex-col items-center justify-center max-w-2xl mx-auto text-center space-y-7 py-12 animate-in fade-in duration-300">
+              <div className="relative">
+                <div className="w-16 h-16 rounded-3xl bg-gradient-to-br from-indigo-500 via-indigo-600 to-cyan-400 flex items-center justify-center text-white shadow-2xl shadow-indigo-500/30">
+                  <Bot className="w-8 h-8" />
+                </div>
+                <div className="absolute -bottom-1 -right-1 w-5 h-5 rounded-full bg-emerald-400 border-2 border-[#07090e] flex items-center justify-center shadow">
+                  <Sparkles className="w-2.5 h-2.5 text-black" />
+                </div>
               </div>
 
-              <div className="space-y-2">
-                <h2 className="text-2xl sm:text-3xl font-extrabold text-white font-['Outfit']">
-                  What would you like to explore today?
+              <div className="space-y-2.5">
+                <h2 className="text-3xl sm:text-4xl font-extrabold text-white font-['Outfit'] tracking-tight">
+                  How can I assist your operations?
                 </h2>
-                <p className="text-sm text-slate-400 max-w-md mx-auto">
-                  Ask any questions about your architecture, runbooks, security policies, or operational standards.
+                <p className="text-sm sm:text-base text-slate-400 max-w-lg mx-auto leading-relaxed">
+                  Enterprise retrieval augmented generation powered by PostgreSQL telemetry, ChromaDB embeddings, and Cross-Encoder reranking.
                 </p>
               </div>
 
-              {/* Three Clean Operational Capability Highlights */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 w-full text-left pt-4">
-                <div className="p-3.5 rounded-xl bg-white/[0.02] border border-white/10 hover:border-indigo-500/30 transition-all">
-                  <div className="text-indigo-400 font-semibold text-xs mb-1">Architecture &amp; Ops</div>
-                  <div className="text-[11px] text-slate-400 leading-relaxed">
-                    Microservices, Docker compose stack, and Kubernetes manifests.
+              {/* Four Clean Operational Capability Chips */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 w-full text-left pt-2">
+                <button
+                  type="button"
+                  onClick={() => setInputPrompt("What are the company's manufacturing locations and facilities?")}
+                  className="p-4 rounded-2xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-indigo-500/40 transition-all cursor-pointer text-left group"
+                >
+                  <div className="flex items-center gap-2 text-indigo-400 font-semibold text-xs mb-1 group-hover:text-indigo-300">
+                    <Building className="w-3.5 h-3.5" />
+                    <span>Manufacturing &amp; Plants</span>
                   </div>
-                </div>
+                  <div className="text-xs text-slate-400 leading-relaxed">
+                    Locations in Pune, Rovigo, Campodarsego, and global production hubs.
+                  </div>
+                </button>
 
-                <div className="p-3.5 rounded-xl bg-white/[0.02] border border-white/10 hover:border-cyan-500/30 transition-all">
-                  <div className="text-cyan-400 font-semibold text-xs mb-1">Security &amp; TLS</div>
-                  <div className="text-[11px] text-slate-400 leading-relaxed">
-                    TLS requirements, cluster credentials, and password rotation.
+                <button
+                  type="button"
+                  onClick={() => setInputPrompt("What are the key policies in the corporate Code of Ethics?")}
+                  className="p-4 rounded-2xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-cyan-500/40 transition-all cursor-pointer text-left group"
+                >
+                  <div className="flex items-center gap-2 text-cyan-400 font-semibold text-xs mb-1 group-hover:text-cyan-300">
+                    <BookOpen className="w-3.5 h-3.5" />
+                    <span>Code of Ethics &amp; Compliance</span>
                   </div>
-                </div>
+                  <div className="text-xs text-slate-400 leading-relaxed">
+                    Anti-corruption, safety standards, environmental rules, and human rights.
+                  </div>
+                </button>
 
-                <div className="p-3.5 rounded-xl bg-white/[0.02] border border-white/10 hover:border-emerald-500/30 transition-all">
-                  <div className="text-emerald-400 font-semibold text-xs mb-1">LLMOps Quality</div>
-                  <div className="text-[11px] text-slate-400 leading-relaxed">
-                    Retrieval Recall@5 thresholds and automated promotion gates.
+                <button
+                  type="button"
+                  onClick={() => setInputPrompt("What agricultural and construction machinery solutions are produced?")}
+                  className="p-4 rounded-2xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-amber-500/40 transition-all cursor-pointer text-left group"
+                >
+                  <div className="flex items-center gap-2 text-amber-400 font-semibold text-xs mb-1 group-hover:text-amber-300">
+                    <Zap className="w-3.5 h-3.5" />
+                    <span>Transmission Systems &amp; Products</span>
                   </div>
-                </div>
+                  <div className="text-xs text-slate-400 leading-relaxed">
+                    Gearboxes, specialized tractors, axles, drives, and OEM engineering.
+                  </div>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setInputPrompt("Verify zero hallucination: who is the company CEO and executive management?")}
+                  className="p-4 rounded-2xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-emerald-500/40 transition-all cursor-pointer text-left group"
+                >
+                  <div className="flex items-center gap-2 text-emerald-400 font-semibold text-xs mb-1 group-hover:text-emerald-300">
+                    <ShieldAlert className="w-3.5 h-3.5" />
+                    <span>Grounded Fact Verification</span>
+                  </div>
+                  <div className="text-xs text-slate-400 leading-relaxed">
+                    Strict citation-grounded validation with zero hallucination enforcement.
+                  </div>
+                </button>
               </div>
             </div>
           ) : (
@@ -605,129 +737,152 @@ export default function SearchPage({
               const isAbstaining = isAbstention(turn.answer, turn.sources);
 
               return (
-                <div key={turn.id || idx} className="space-y-4 max-w-4xl mx-auto">
+                <div key={turn.id || idx} className="space-y-4 max-w-5xl xl:max-w-6xl mx-auto">
                   
                   {/* USER PROMPT MESSAGE BUBBLE */}
-                  <div className="flex items-start gap-3 justify-end">
-                    <div className="max-w-2xl bg-indigo-600/20 border border-indigo-500/40 rounded-2xl rounded-tr-sm px-4 py-3 text-white text-sm shadow-md">
+                  <div className="flex items-start gap-3.5 justify-end">
+                    <div className="max-w-3xl bg-gradient-to-r from-indigo-600/25 via-indigo-600/20 to-indigo-700/25 border border-indigo-500/40 rounded-2xl rounded-tr-sm px-5 py-3.5 text-white text-[15px] shadow-lg leading-relaxed">
                       <p className="whitespace-pre-wrap">{turn.query}</p>
                     </div>
-                    <div className="w-8 h-8 rounded-full bg-indigo-600 flex items-center justify-center text-white font-bold text-xs shrink-0 mt-0.5">
+                    <div className="w-9 h-9 rounded-xl bg-indigo-600 flex items-center justify-center text-white font-bold text-xs shrink-0 mt-0.5 shadow-md shadow-indigo-600/30">
                       {currentUser?.username ? currentUser.username.charAt(0).toUpperCase() : 'U'}
                     </div>
                   </div>
 
                   {/* ASSISTANT RESPONSE BUBBLE */}
-                  <div className="flex items-start gap-3 justify-start">
-                    <div className="w-8 h-8 rounded-full bg-gradient-to-br from-indigo-500 to-cyan-400 flex items-center justify-center text-white font-bold text-xs shrink-0 mt-0.5 shadow-md">
-                      <Bot className="w-4 h-4" />
+                  <div className="flex items-start gap-3.5 justify-start">
+                    <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-indigo-500 to-cyan-400 flex items-center justify-center text-white font-bold text-xs shrink-0 mt-0.5 shadow-lg shadow-cyan-500/20">
+                      <Bot className="w-5 h-5" />
                     </div>
 
-                    <div className="flex-1 max-w-3xl space-y-3">
+                    <div className="flex-1 min-w-0 space-y-3">
                       
                       {turn.isPending ? (
-                        <div className="p-4 rounded-2xl bg-[#0b0f19] border border-white/10 text-slate-400 text-xs flex items-center gap-2">
-                          <Zap className="w-4 h-4 text-cyan-400 animate-spin" />
-                          <span>Searching ChromaDB &amp; generating citation-grounded response...</span>
+                        <div className="p-5 rounded-2xl bg-[#0d1322] border border-white/10 text-slate-300 text-sm flex items-center gap-3 shadow-xl">
+                          <Zap className="w-5 h-5 text-cyan-400 animate-spin shrink-0" />
+                          <div className="space-y-0.5">
+                            <div className="font-semibold text-white">Generating Grounded Answer...</div>
+                            <div className="text-xs text-slate-400">Searching ChromaDB embeddings &amp; applying Cross-Encoder reranking...</div>
+                          </div>
                         </div>
                       ) : (
-                        <div className="p-5 rounded-2xl bg-[#0b0f19] border border-white/10 space-y-4 shadow-xl">
+                        <div className="p-6 sm:p-7 rounded-2xl bg-[#0c1120]/95 border border-white/10 space-y-5 shadow-2xl backdrop-blur-md">
                           
                           {/* Abstention Banner if documents do not contain the answer */}
                           {isAbstaining && (
-                            <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs flex items-center gap-2">
-                              <ShieldAlert className="w-4 h-4 shrink-0" />
-                              <span>Zero Hallucination Guardrail: The indexed knowledge base does not contain sufficient facts to answer this.</span>
+                            <div className="p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs flex items-center gap-2.5">
+                              <ShieldAlert className="w-4 h-4 shrink-0 text-amber-400" />
+                              <span>Zero Hallucination Guardrail: The indexed corporate knowledge base does not contain sufficient facts to answer this inquiry.</span>
                             </div>
                           )}
 
                           {/* Query Intelligence & Semantic Cache Indicators */}
                           <div className="flex flex-wrap items-center gap-2 text-xs">
                             {meta.cache_hit && (
-                              <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 font-medium text-[11px] shadow-sm">
+                              <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 font-medium text-[11px] shadow-sm">
                                 <Zap className="w-3.5 h-3.5 text-emerald-400" />
                                 <span>⚡ Semantic Cache Hit ({meta.total_latency_ms || 6.5}ms • $0.00 spend)</span>
                               </div>
                             )}
 
                             {meta.is_rewritten && meta.rewritten_query && (
-                              <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-indigo-500/15 border border-indigo-500/30 text-indigo-300 font-medium text-[11px]">
+                              <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-indigo-500/15 border border-indigo-500/30 text-indigo-300 font-medium text-[11px]">
                                 <Sparkles className="w-3.5 h-3.5 text-indigo-400" />
                                 <span>Rewritten Query: "{meta.rewritten_query}"</span>
                               </div>
                             )}
 
                             {meta.intent && meta.intent !== 'general' && (
-                              <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-cyan-500/10 border border-cyan-500/20 text-cyan-300 text-[11px]">
+                              <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-cyan-500/10 border border-cyan-500/20 text-cyan-300 text-[11px]">
                                 <span>🎯 Intent: {String(meta.intent).replace(/_/g, ' ')}</span>
                               </div>
                             )}
                           </div>
 
-                          {/* Markdown Rendered Answer */}
+                          {/* Markdown Rendered Answer with custom ragops-markdown styling */}
                           <div 
-                            className="prose prose-invert prose-sm max-w-none text-slate-200 leading-relaxed font-sans"
+                            className="ragops-markdown max-w-none font-sans"
                             dangerouslySetInnerHTML={{ __html: marked.parse(turn.answer || '') }}
                           />
 
                           {/* Verified Citations List */}
                           {turn.sources && turn.sources.length > 0 && (
-                            <div className="pt-3 border-t border-white/10 flex flex-wrap items-center gap-2 text-xs">
-                              <span className="text-slate-400 font-semibold flex items-center gap-1">
+                            <div className="pt-4 border-t border-white/10 space-y-2.5">
+                              <div className="text-slate-400 font-semibold text-xs flex items-center gap-1.5">
                                 <BookOpen className="w-3.5 h-3.5 text-cyan-400" />
-                                <span>Citations:</span>
-                              </span>
-                              {turn.sources.map((src, sIdx) => (
-                                <button
-                                  key={sIdx}
-                                  onClick={() => onChunkClick && onChunkClick(src)}
-                                  className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-white/[0.04] hover:bg-cyan-500/15 border border-white/10 hover:border-cyan-500/40 text-cyan-300 text-xs font-mono transition-all cursor-pointer"
-                                >
-                                  <span>{src.document} {src.page ? `p.${src.page}` : ''}</span>
-                                  <ExternalLink className="w-3 h-3 opacity-60" />
-                                </button>
-                              ))}
+                                <span>Verified Corporate Sources ({turn.sources.length}):</span>
+                              </div>
+                              <div className="flex flex-wrap items-center gap-2">
+                                {turn.sources.map((src, sIdx) => (
+                                  <button
+                                    key={sIdx}
+                                    onClick={() => onChunkClick && onChunkClick(src)}
+                                    className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-white/[0.04] hover:bg-cyan-500/15 border border-white/10 hover:border-cyan-500/40 text-cyan-300 text-xs font-mono transition-all cursor-pointer shadow-sm"
+                                  >
+                                    <FileText className="w-3.5 h-3.5 text-cyan-400 opacity-80" />
+                                    <span className="font-semibold">{src.document} {src.page ? `(p.${src.page})` : ''}</span>
+                                    <ExternalLink className="w-3 h-3 opacity-60" />
+                                  </button>
+                                ))}
+                              </div>
                             </div>
                           )}
 
-                          {/* Telemetry Footer: Latencies, Tokens, Chunks button & Thumbs Feedback */}
-                          <div className="pt-3 border-t border-white/5 flex flex-wrap items-center justify-between gap-3 text-xs">
+                          {/* Telemetry Footer: Latencies, Tokens, Chunks button & Copy / Feedback */}
+                          <div className="pt-4 border-t border-white/10 flex flex-wrap items-center justify-between gap-3 text-xs">
                             
                             {/* Latency & Token Badges */}
-                            <div className="flex flex-wrap items-center gap-2 text-[11px] font-mono text-slate-400">
-                              <span className="text-emerald-400 font-bold">
+                            <div className="flex flex-wrap items-center gap-2.5 text-[11px] font-mono text-slate-400">
+                              <span className="text-emerald-400 font-bold px-2 py-0.5 rounded bg-emerald-500/10 border border-emerald-500/20">
                                 {meta.total_latency_ms ? `${meta.total_latency_ms}ms` : '380ms'}
                               </span>
                               <span>&bull;</span>
-                              <span>{meta.total_tokens || 0} tokens</span>
+                              <span>{meta.total_tokens || ((meta.input_tokens || 0) + (meta.output_tokens || 0)) || 0} tokens</span>
                               <span>&bull;</span>
-                              <span className="text-indigo-400">{meta.model || 'Groq'}</span>
+                              <span className="text-indigo-400 font-medium">{meta.model || 'Groq LLaMA 3.1 70B'}</span>
                             </div>
 
-                            {/* Actions: Toggle Chunks & Feedback */}
-                            <div className="flex items-center gap-3">
+                            {/* Actions: Toggle Chunks, Copy, & Feedback */}
+                            <div className="flex items-center gap-2">
                               
                               {/* Inspect Chunks Toggle */}
                               {chunks.length > 0 && (
                                 <button
                                   type="button"
                                   onClick={() => setExpandedChunkMsgIdx(isTurnExpanded ? null : idx)}
-                                  className="flex items-center gap-1 text-slate-400 hover:text-white font-mono text-xs cursor-pointer"
+                                  className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-white/[0.03] hover:bg-white/[0.08] text-slate-300 font-mono text-xs cursor-pointer border border-white/10 transition-colors"
                                 >
                                   <span>Chunks ({chunks.length})</span>
-                                  {isTurnExpanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                                  {isTurnExpanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5 text-slate-400" />}
                                 </button>
                               )}
 
+                              {/* Copy Response Button */}
+                              <button
+                                type="button"
+                                onClick={() => handleCopyText(turn.answer, turn.id || idx)}
+                                title="Copy answer to clipboard"
+                                className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-white/5 border border-white/10 transition-colors cursor-pointer flex items-center gap-1"
+                              >
+                                {copiedTurnId === (turn.id || idx) ? (
+                                  <>
+                                    <Check className="w-3.5 h-3.5 text-emerald-400" />
+                                    <span className="text-[10px] text-emerald-400 font-mono">Copied</span>
+                                  </>
+                                ) : (
+                                  <Copy className="w-3.5 h-3.5" />
+                                )}
+                              </button>
+
                               {/* Thumbs Feedback */}
-                              <div className="flex items-center gap-1 border-l border-white/10 pl-3">
+                              <div className="flex items-center gap-1 border-l border-white/10 pl-2">
                                 <button
                                   onClick={() => handleFeedback(idx, 'positive')}
                                   title="Mark as Grounded and Accurate"
                                   className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
                                     turn.feedback === 'positive'
                                       ? 'bg-emerald-500/20 text-emerald-400'
-                                      : 'text-slate-500 hover:text-slate-300 hover:bg-white/5'
+                                      : 'text-slate-400 hover:text-slate-200 hover:bg-white/5'
                                   }`}
                                 >
                                   <ThumbsUp className="w-3.5 h-3.5" />
@@ -738,7 +893,7 @@ export default function SearchPage({
                                   className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
                                     turn.feedback === 'negative'
                                       ? 'bg-rose-500/20 text-rose-400'
-                                      : 'text-slate-500 hover:text-slate-300 hover:bg-white/5'
+                                      : 'text-slate-400 hover:text-slate-200 hover:bg-white/5'
                                   }`}
                                 >
                                   <ThumbsDown className="w-3.5 h-3.5" />
@@ -751,22 +906,23 @@ export default function SearchPage({
 
                           {/* Collapsible Chunk Details */}
                           {isTurnExpanded && (
-                            <div className="mt-3 p-3.5 rounded-xl bg-[#07090e] border border-white/10 space-y-2.5 animate-in fade-in duration-150">
-                              <div className="text-[11px] font-bold text-slate-300 uppercase tracking-wider">
-                                Retrieved Chunks Sent to LLM Context:
+                            <div className="mt-3 p-4 rounded-xl bg-[#07090e] border border-white/10 space-y-3 animate-in fade-in duration-150">
+                              <div className="text-[11px] font-bold text-slate-300 uppercase tracking-wider flex items-center justify-between">
+                                <span>Retrieved Chunks Sent to LLM Context:</span>
+                                <span className="font-mono text-indigo-400 text-[10px]">{chunks.length} chunks</span>
                               </div>
                               <div className="space-y-2">
                                 {chunks.map((chk, cIdx) => (
-                                  <div key={cIdx} className="p-2.5 rounded-lg bg-white/[0.02] border border-white/5 space-y-1">
+                                  <div key={cIdx} className="p-3 rounded-xl bg-white/[0.02] border border-white/5 space-y-1.5">
                                     <div className="flex items-center justify-between text-[11px] font-mono">
                                       <span className="text-indigo-400 font-semibold">
                                         [{cIdx + 1}] {chk.source || 'doc'} {chk.page ? `(page ${chk.page})` : ''}
                                       </span>
-                                      <span className="text-emerald-400">
-                                        Score: {chk.score ? `${Math.round(chk.score * 100)}%` : 'N/A'}
+                                      <span className="text-emerald-400 font-bold">
+                                        Relevance: {formatRelevanceScore(chk.score)}
                                       </span>
                                     </div>
-                                    <p className="text-[11px] text-slate-400 line-clamp-2 font-mono">
+                                    <p className="text-xs text-slate-300 font-mono leading-relaxed">
                                       {chk.text || 'No text snippet'}
                                     </p>
                                   </div>
@@ -774,11 +930,11 @@ export default function SearchPage({
                               </div>
 
                               {/* Hop-by-hop latency breakdown */}
-                              <div className="pt-2 border-t border-white/5 grid grid-cols-4 gap-2 text-[10px] font-mono text-center text-slate-400">
-                                <div>Embed: <span className="text-white">{meta.embed_latency_ms || 0}ms</span></div>
-                                <div>Search: <span className="text-white">{meta.search_latency_ms || 0}ms</span></div>
-                                <div>Rerank: <span className="text-white">{meta.rerank_latency_ms || 0}ms</span></div>
-                                <div>LLM: <span className="text-white">{meta.generation_latency_ms || 0}ms</span></div>
+                              <div className="pt-2.5 border-t border-white/5 grid grid-cols-4 gap-2 text-[11px] font-mono text-center text-slate-400">
+                                <div>Embed: <span className="text-white font-semibold">{meta.embed_latency_ms || 0}ms</span></div>
+                                <div>Search: <span className="text-white font-semibold">{meta.search_latency_ms || 0}ms</span></div>
+                                <div>Rerank: <span className="text-white font-semibold">{meta.rerank_latency_ms || 0}ms</span></div>
+                                <div>LLM: <span className="text-white font-semibold">{meta.generation_latency_ms || 0}ms</span></div>
                               </div>
                             </div>
                           )}
@@ -793,12 +949,10 @@ export default function SearchPage({
               );
             })
           )}
-
-          <div ref={messagesEndRef} />
         </div>
 
-        {/* BOTTOM FIXED PROMPT BAR */}
-        <div className="p-4 border-t border-white/10 bg-[#0a0e18]/80 backdrop-blur-md space-y-2">
+        {/* BOTTOM FIXED PROMPT DOCK */}
+        <div className="p-4 sm:p-5 border-t border-white/10 bg-[#0a0e1c]/90 backdrop-blur-xl space-y-2.5">
           
           {/* Detected URL Quick Banner */}
           {(() => {
@@ -806,7 +960,7 @@ export default function SearchPage({
             const detected = match ? match[0] : null;
             if (!detected) return null;
             return (
-              <div className="max-w-4xl mx-auto p-2.5 rounded-xl bg-indigo-950/60 border border-indigo-500/40 text-xs text-indigo-200 flex flex-wrap items-center justify-between gap-2 animate-in fade-in duration-150">
+              <div className="max-w-5xl xl:max-w-6xl mx-auto p-3 rounded-xl bg-indigo-950/70 border border-indigo-500/40 text-xs text-indigo-200 flex flex-wrap items-center justify-between gap-2 animate-in fade-in duration-150">
                 <div className="flex items-center gap-2 truncate">
                   <Globe className="w-4 h-4 text-cyan-400 shrink-0" />
                   <span className="font-semibold text-white">Company URL Detected:</span>
@@ -816,7 +970,7 @@ export default function SearchPage({
                   type="button"
                   onClick={() => handleStartCrawl(detected)}
                   disabled={isCrawlingUrl}
-                  className="flex items-center gap-1.5 px-3 py-1 rounded-lg bg-gradient-to-r from-cyan-600 to-indigo-600 hover:from-cyan-500 hover:to-indigo-500 text-white font-semibold text-xs shadow-md shadow-cyan-600/30 cursor-pointer disabled:opacity-50 shrink-0"
+                  className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-gradient-to-r from-cyan-600 to-indigo-600 hover:from-cyan-500 hover:to-indigo-500 text-white font-semibold text-xs shadow-md shadow-cyan-600/30 cursor-pointer disabled:opacity-50 shrink-0"
                 >
                   <Sparkles className="w-3.5 h-3.5" />
                   <span>{isCrawlingUrl ? 'Crawling...' : 'Extract & Validate Facts with AI'}</span>
@@ -827,20 +981,20 @@ export default function SearchPage({
 
           {/* Optional Direct URL Input Bar */}
           {isUrlInputBarOpen && (
-            <div className="max-w-4xl mx-auto p-3 rounded-2xl bg-[#0f1424] border border-cyan-500/30 flex flex-wrap items-center gap-2 animate-in fade-in duration-150">
+            <div className="max-w-5xl xl:max-w-6xl mx-auto p-3 rounded-2xl bg-[#0f1424] border border-cyan-500/30 flex flex-wrap items-center gap-2 animate-in fade-in duration-150">
               <Globe className="w-4 h-4 text-cyan-400 shrink-0" />
               <input
                 type="url"
-                placeholder="Paste company website URL (e.g. https://www.tatamotors.com or https://www.siemens.com)..."
+                placeholder="Paste company website URL (e.g. https://www.carraro.com/en or https://www.tatamotors.com)..."
                 value={targetCompanyUrl}
                 onChange={(e) => setTargetCompanyUrl(e.target.value)}
-                className="flex-1 min-w-[260px] px-3 py-1.5 bg-black/50 border border-white/10 rounded-xl text-xs text-white placeholder-slate-500 font-mono focus:outline-none focus:border-cyan-500"
+                className="flex-1 min-w-[260px] px-3.5 py-2 bg-black/50 border border-white/10 rounded-xl text-xs text-white placeholder-slate-500 font-mono focus:outline-none focus:border-cyan-500"
               />
               <button
                 type="button"
                 onClick={() => handleStartCrawl()}
                 disabled={!targetCompanyUrl.trim() || isCrawlingUrl}
-                className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-cyan-600 to-indigo-600 hover:from-cyan-500 hover:to-indigo-500 text-white font-semibold text-xs cursor-pointer disabled:opacity-50 shadow-md shadow-cyan-600/25 shrink-0"
+                className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-gradient-to-r from-cyan-600 to-indigo-600 hover:from-cyan-500 hover:to-indigo-500 text-white font-semibold text-xs cursor-pointer disabled:opacity-50 shadow-md shadow-cyan-600/25 shrink-0"
               >
                 <Sparkles className={`w-3.5 h-3.5 ${isCrawlingUrl ? 'animate-spin' : ''}`} />
                 <span>{isCrawlingUrl ? 'Crawling Website...' : 'Extract & Validate'}</span>
@@ -848,33 +1002,18 @@ export default function SearchPage({
               <button
                 type="button"
                 onClick={() => setIsUrlInputBarOpen(false)}
-                className="px-2 py-1 text-slate-400 hover:text-white text-xs cursor-pointer"
+                className="px-2.5 py-1.5 text-slate-400 hover:text-white text-xs cursor-pointer"
               >
                 Cancel
               </button>
             </div>
           )}
 
-          {/* Quick Toolbar Above Textarea */}
-          <div className="max-w-4xl mx-auto flex items-center justify-between text-xs text-slate-400 px-1">
-            <button
-              type="button"
-              onClick={() => setIsUrlInputBarOpen(!isUrlInputBarOpen)}
-              className="flex items-center gap-1.5 text-xs text-cyan-400 hover:text-cyan-300 font-medium transition-colors cursor-pointer"
-            >
-              <Globe className="w-3.5 h-3.5" />
-              <span>{isUrlInputBarOpen ? 'Close URL Crawler' : '🌐 Crawl & Ground Company URL with AI'}</span>
-            </button>
-            {toastMessage && (
-              <span className="text-[11px] text-emerald-400 font-mono truncate max-w-md animate-in fade-in">
-                {toastMessage}
-              </span>
-            )}
-          </div>
-
+         
+          {/* Form */}
           <form 
             onSubmit={handleSendMessage}
-            className="max-w-4xl mx-auto relative flex items-center bg-[#101524] border border-white/15 focus-within:border-indigo-500/60 rounded-2xl shadow-xl transition-all p-1.5"
+            className="max-w-5xl xl:max-w-6xl mx-auto relative flex items-center bg-[#0e1424] border border-white/15 focus-within:border-indigo-500/80 focus-within:ring-2 focus-within:ring-indigo-500/20 rounded-2xl shadow-2xl transition-all p-2"
           >
             <textarea
               ref={textareaRef}
@@ -887,16 +1026,16 @@ export default function SearchPage({
                   handleSendMessage();
                 }
               }}
-              placeholder="Ask a question about company locations, clients, products, or policies (Shift+Enter for newline)..."
-              className="flex-1 bg-transparent px-3 py-2 text-sm text-white placeholder-slate-500 focus:outline-none resize-none max-h-32"
+              placeholder="Ask a question about corporate architecture, manufacturing locations, products, or compliance policies (Shift+Enter for newline)..."
+              className="flex-1 bg-transparent px-3.5 py-2.5 text-[15px] text-white placeholder-slate-500 focus:outline-none resize-none max-h-36 min-h-[46px]"
             />
 
             <button
               type="submit"
               disabled={loading || !inputPrompt.trim()}
-              className={`p-2.5 rounded-xl font-semibold transition-all shrink-0 cursor-pointer ${
+              className={`p-3 rounded-xl font-semibold transition-all shrink-0 cursor-pointer ${
                 inputPrompt.trim() && !loading
-                  ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/30 hover:bg-indigo-500'
+                  ? 'bg-gradient-to-r from-indigo-500 via-indigo-600 to-indigo-700 hover:from-indigo-400 hover:to-indigo-600 text-white shadow-lg shadow-indigo-600/30 scale-100 hover:scale-105 active:scale-95'
                   : 'text-slate-600 bg-white/5 cursor-not-allowed'
               }`}
             >
@@ -904,8 +1043,8 @@ export default function SearchPage({
             </button>
           </form>
 
-          <p className="text-center text-[11px] text-slate-500 mt-2 font-mono">
-            RAGOps outputs are grounded in your indexed documents and verified corporate facts with citations.
+          <p className="text-center text-[11px] text-slate-500 mt-1 font-mono">
+            RAGOps enterprise outputs are grounded in indexed documents and verified corporate facts with chunk provenance.
           </p>
         </div>
 

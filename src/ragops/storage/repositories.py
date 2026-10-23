@@ -324,16 +324,14 @@ class ChatRepository:
         finally:
             session.close()
 
-    def get_session_messages(self, session_id: str) -> list[dict[str, Any]]:
+    def get_session_messages(self, session_id: str, username: Optional[str] = None) -> list[dict[str, Any]]:
         """Get all messages in a conversation session in chronological order (turn-by-turn)."""
         session = get_session()
         try:
-            records = (
-                session.query(ChatMessageModel)
-                .filter(ChatMessageModel.session_id == session_id)
-                .order_by(ChatMessageModel.created_at.asc())
-                .all()
-            )
+            q = session.query(ChatMessageModel).filter(ChatMessageModel.session_id == session_id)
+            if username:
+                q = q.filter(ChatMessageModel.username == username)
+            records = q.order_by(ChatMessageModel.created_at.asc()).all()
             return [self._to_dict(m) for m in records]
         finally:
             session.close()
@@ -627,10 +625,305 @@ class TraceRepository:
 # -----------------------------------------------------------------------------
 
 class DocumentCatalogRepository:
-    """Repository for querying auto-classified document inventory and statistics."""
+    """Repository for querying auto-classified document inventory, disk reconciliation, and vector sync."""
 
-    def list_documents(self, doc_type: str | None = None) -> list[dict[str, Any]]:
-        """List all indexed documents with classification metadata."""
+    @staticmethod
+    def get_raw_files() -> dict[str, Any]:
+        """Scan data/raw (and data) for physical document files."""
+        from pathlib import Path
+        raw_files = {}
+        # Priority: data/raw directory
+        raw_dir = Path("data/raw").resolve()
+        if not raw_dir.exists():
+            raw_dir.mkdir(parents=True, exist_ok=True)
+
+        for p in raw_dir.iterdir():
+            if p.is_file() and not p.name.startswith((".", "~")) and p.name != ".gitkeep":
+                if p.suffix.lower() in {".pdf", ".md", ".markdown", ".txt", ".html", ".htm", ".docx"}:
+                    raw_files[p.name] = p
+
+        # Secondary: check data/ directly for documents that aren't system files
+        data_dir = Path("data").resolve()
+        if data_dir.exists() and data_dir.is_dir():
+            for p in data_dir.iterdir():
+                if p.is_file() and not p.name.startswith((".", "~")):
+                    if p.name.lower() not in {"readme.md", "ragops.db", "feedback.jsonl", "version_registry.json"} and p.suffix.lower() in {".pdf", ".md", ".markdown", ".txt", ".html", ".htm"}:
+                        if p.name not in raw_files:
+                            raw_files[p.name] = p
+        return raw_files
+
+    def reconcile_with_disk(self, auto_embed: bool = False) -> dict[str, Any]:
+        """Reconcile physical disk files (data/raw), PostgreSQL/SQLite DocumentModel, and ChromaDB chunks.
+        
+        1. If a file was deleted from disk, remove its record from DB and remove its chunks from ChromaDB.
+        2. If a file exists in data/raw, ensure it has a record in DB with accurate chunk counts from ChromaDB.
+        3. If auto_embed=True and a file is not yet embedded, chunk and index it into ChromaDB.
+        """
+        from ragops.retrieval.retriever import RAGRetriever
+        from ragops.ingestion.classifier import DocumentClassifier
+
+        raw_files = self.get_raw_files()
+        retriever = RAGRetriever(use_reranker=False)
+        chroma_counts = retriever.get_document_chunk_counts()
+
+        session = get_session()
+        purged_sources = []
+        added_sources = []
+        updated_sources = []
+        embedded_sources = []
+
+        try:
+            # 1. Purge DB records and ChromaDB chunks for files no longer on disk
+            all_db_docs = session.query(DocumentModel).all()
+            for doc in all_db_docs:
+                if doc.source not in raw_files:
+                    # File was deleted from physical disk! Delete its chunks and its DB row.
+                    retriever.delete_document_chunks(doc.source)
+                    session.delete(doc)
+                    purged_sources.append(doc.source)
+
+            # 2. Register new files or update chunk counts for files on disk
+            for filename, path in raw_files.items():
+                chunk_cnt = chroma_counts.get(filename, 0)
+                file_size = path.stat().st_size if path.exists() else 0
+
+                # Auto-embed if requested and not yet embedded
+                if auto_embed and chunk_cnt == 0:
+                    try:
+                        from ragops.ingestion.pipeline import IngestionPipeline
+                        pipeline = IngestionPipeline()
+                        chunks = pipeline.ingest_file(path)
+                        indexed = retriever.index(chunks)
+                        chunk_cnt = indexed
+                        chroma_counts[filename] = chunk_cnt
+                        embedded_sources.append(filename)
+                    except Exception as e:
+                        logger.error("auto_embed_failed_during_reconciliation", source=filename, error=str(e))
+
+                is_embedded = (chunk_cnt > 0)
+                existing = session.query(DocumentModel).filter(DocumentModel.source == filename).first()
+                if not existing:
+                    classification = DocumentClassifier.classify(path)
+                    new_doc = DocumentModel(
+                        document_id=f"doc_{abs(hash(filename)) % 100000000:08d}",
+                        source=filename,
+                        title=classification.title or filename,
+                        doc_type=classification.doc_type,
+                        category=classification.category,
+                        is_policy=classification.is_policy,
+                        governance_level=classification.governance_level,
+                        version="v1",
+                        chunk_count=chunk_cnt,
+                        metadata_json={
+                            **classification.to_dict(),
+                            "file_size_bytes": file_size,
+                            "is_embedded": is_embedded,
+                        },
+                    )
+                    session.add(new_doc)
+                    added_sources.append(filename)
+                else:
+                    existing.chunk_count = chunk_cnt
+                    meta = dict(existing.metadata_json or {})
+                    meta["file_size_bytes"] = file_size
+                    meta["is_embedded"] = is_embedded
+                    existing.metadata_json = meta
+                    updated_sources.append(filename)
+
+            session.commit()
+
+            # 3. Invalidate caches if anything changed
+            if purged_sources or embedded_sources:
+                try:
+                    from ragops.storage.models import SemanticCacheModel
+                    session.query(SemanticCacheModel).delete(synchronize_session=False)
+                    session.commit()
+                except Exception:
+                    pass
+                try:
+                    from ragops.rag.pipeline import get_rag_pipeline
+                    p = get_rag_pipeline()
+                    if hasattr(p, "_query_intel") and hasattr(p._query_intel, "_memory_cache"):
+                        p._query_intel._memory_cache.clear()
+                except Exception:
+                    pass
+
+            return {
+                "status": "reconciled",
+                "total_disk_files": len(raw_files),
+                "purged_missing_files": purged_sources,
+                "added_new_files": added_sources,
+                "updated_files": len(updated_sources),
+                "embedded_files": embedded_sources,
+            }
+        except Exception as e:
+            session.rollback()
+            logger.error("document_reconciliation_failed", error=str(e))
+            raise
+        finally:
+            session.close()
+
+    def embed_document(self, source: str) -> dict[str, Any]:
+        """Ingest, chunk, and embed a specific document from disk into ChromaDB."""
+        raw_files = self.get_raw_files()
+        if source not in raw_files:
+            raise FileNotFoundError(f"Document '{source}' not found in data/raw or data storage.")
+
+        target_path = raw_files[source]
+        from ragops.ingestion.pipeline import IngestionPipeline
+        from ragops.retrieval.retriever import RAGRetriever
+
+        pipeline = IngestionPipeline()
+        chunks = pipeline.ingest_file(target_path)
+
+        retriever = RAGRetriever(use_reranker=False)
+        indexed_count = retriever.index(chunks)
+
+        session = get_session()
+        try:
+            doc = session.query(DocumentModel).filter(DocumentModel.source == source).first()
+            if doc:
+                doc.chunk_count = indexed_count
+                meta = dict(doc.metadata_json or {})
+                meta["is_embedded"] = True
+                meta["file_size_bytes"] = target_path.stat().st_size
+                doc.metadata_json = meta
+                session.commit()
+
+            # Invalidate semantic cache
+            try:
+                from ragops.storage.models import SemanticCacheModel
+                session.query(SemanticCacheModel).delete(synchronize_session=False)
+                session.commit()
+            except Exception:
+                pass
+
+            try:
+                from ragops.rag.pipeline import get_rag_pipeline
+                p = get_rag_pipeline()
+                if hasattr(p, "_query_intel") and hasattr(p._query_intel, "_memory_cache"):
+                    p._query_intel._memory_cache.clear()
+            except Exception:
+                pass
+
+            return {
+                "status": "success",
+                "source": source,
+                "chunks_indexed": indexed_count,
+                "file_size_bytes": target_path.stat().st_size,
+            }
+        finally:
+            session.close()
+
+    def embed_all_pending(self) -> dict[str, Any]:
+        """Embed all documents that are currently pending in data/raw."""
+        # Reconcile first
+        self.reconcile_with_disk(auto_embed=False)
+        session = get_session()
+        pending_sources = []
+        try:
+            pending_docs = session.query(DocumentModel).filter(
+                (DocumentModel.chunk_count == 0) | (DocumentModel.chunk_count == None)
+            ).all()
+            pending_sources = [d.source for d in pending_docs]
+        finally:
+            session.close()
+
+        total_chunks = 0
+        embedded_list = []
+        for src in pending_sources:
+            try:
+                res = self.embed_document(src)
+                total_chunks += res.get("chunks_indexed", 0)
+                embedded_list.append(src)
+            except Exception as e:
+                logger.error("failed_to_embed_pending_doc", source=src, error=str(e))
+
+        return {
+            "status": "success",
+            "total_embedded_files": len(embedded_list),
+            "total_chunks_indexed": total_chunks,
+            "embedded_files": embedded_list,
+        }
+
+    def delete_document(self, source: str) -> dict[str, Any]:
+        """Delete document from disk, remove its chunks from ChromaDB, and delete from DB."""
+        from ragops.retrieval.retriever import RAGRetriever
+        from pathlib import Path
+
+        # 1. Delete physical file from data/raw/ or data/
+        deleted_from_disk = False
+        raw_files = self.get_raw_files()
+        if source in raw_files:
+            file_path = raw_files[source]
+            try:
+                if file_path.exists():
+                    file_path.unlink()
+                    deleted_from_disk = True
+                    logger.info("physical_file_deleted", path=str(file_path))
+            except Exception as e:
+                logger.warning("failed_to_delete_physical_file", path=str(file_path), error=str(e))
+
+        # Check secondary paths as safety
+        for base_dir in ["data/raw", "data"]:
+            cand = Path(base_dir) / source
+            if cand.exists():
+                try:
+                    cand.unlink()
+                    deleted_from_disk = True
+                except Exception:
+                    pass
+
+        # 2. Delete chunks from ChromaDB
+        retriever = RAGRetriever(use_reranker=False)
+        chunks_deleted = retriever.delete_document_chunks(source)
+
+        # 3. Delete from DocumentModel in DB
+        session = get_session()
+        db_deleted = False
+        try:
+            doc = session.query(DocumentModel).filter(
+                (DocumentModel.source == source) | (DocumentModel.document_id == source)
+            ).first()
+            if doc:
+                session.delete(doc)
+                session.commit()
+                db_deleted = True
+
+            # Invalidate semantic cache
+            try:
+                from ragops.storage.models import SemanticCacheModel
+                session.query(SemanticCacheModel).delete(synchronize_session=False)
+                session.commit()
+            except Exception:
+                pass
+
+            try:
+                from ragops.rag.pipeline import get_rag_pipeline
+                p = get_rag_pipeline()
+                if hasattr(p, "_query_intel") and hasattr(p._query_intel, "_memory_cache"):
+                    p._query_intel._memory_cache.clear()
+            except Exception:
+                pass
+        finally:
+            session.close()
+
+        return {
+            "status": "success",
+            "source": source,
+            "physical_file_deleted": deleted_from_disk,
+            "chunks_deleted": chunks_deleted,
+            "db_record_deleted": db_deleted,
+        }
+
+    def list_documents(self, doc_type: str | None = None, auto_reconcile: bool = True) -> list[dict[str, Any]]:
+        """List all indexed documents with classification metadata and embedding status."""
+        if auto_reconcile:
+            try:
+                self.reconcile_with_disk(auto_embed=False)
+            except Exception as e:
+                logger.warning("auto_reconcile_failed", error=str(e))
+
         session = get_session()
         try:
             query = session.query(DocumentModel)
@@ -648,7 +941,9 @@ class DocumentCatalogRepository:
                     "is_policy": d.is_policy,
                     "governance_level": d.governance_level,
                     "version": d.version,
-                    "chunk_count": d.chunk_count,
+                    "chunk_count": d.chunk_count or 0,
+                    "is_embedded": bool(d.chunk_count and d.chunk_count > 0),
+                    "file_size_bytes": (d.metadata_json or {}).get("file_size_bytes", 0),
                     "created_at": str(d.created_at),
                 }
                 for d in docs
@@ -656,8 +951,14 @@ class DocumentCatalogRepository:
         finally:
             session.close()
 
-    def get_summary(self) -> dict[str, Any]:
-        """Get high-level count of documents broken down by classification."""
+    def get_summary(self, auto_reconcile: bool = False) -> dict[str, Any]:
+        """Get high-level count of documents broken down by classification and embedding state."""
+        if auto_reconcile:
+            try:
+                self.reconcile_with_disk(auto_embed=False)
+            except Exception as e:
+                logger.warning("auto_reconcile_summary_failed", error=str(e))
+
         session = get_session()
         try:
             docs = session.query(DocumentModel).all()
@@ -668,6 +969,9 @@ class DocumentCatalogRepository:
             governance = sum(1 for d in docs if d.doc_type == "governance")
             manuals = sum(1 for d in docs if d.doc_type == "manual")
             others = total - (policies + codes + programmes + governance + manuals)
+            embedded_docs = sum(1 for d in docs if (d.chunk_count or 0) > 0)
+            pending_docs = total - embedded_docs
+            total_chunks = sum(d.chunk_count or 0 for d in docs)
 
             return {
                 "total_documents": total,
@@ -677,9 +981,13 @@ class DocumentCatalogRepository:
                 "governance": governance,
                 "manuals": manuals,
                 "others": max(0, others),
+                "embedded_documents": embedded_docs,
+                "pending_documents": pending_docs,
+                "total_chunks": total_chunks,
             }
         finally:
             session.close()
+
 
 
 # -----------------------------------------------------------------------------
@@ -856,30 +1164,89 @@ class CompanyRepository:
             session.close()
 
     def remove_domain_url(self, url: str) -> dict[str, Any]:
-        """Remove a domain/URL from the profile."""
+        """Remove a domain/URL from the profile and purge all related sources, vector chunks, and caches."""
         session = get_session()
         try:
-            from ragops.storage.models import CompanyProfileModel
+            from ragops.storage.models import CompanyProfileModel, CompanySourceModel, SemanticCacheModel
+            clean_url = url.strip()
+
+            # 1. Purge matching sources from CompanySourceModel
+            session.query(CompanySourceModel).filter(
+                (CompanySourceModel.source_url == clean_url) |
+                (CompanySourceModel.source_url == clean_url + "/") |
+                (CompanySourceModel.source_url == clean_url.rstrip("/")) |
+                (CompanySourceModel.display_name.ilike(f"%{clean_url}%"))
+            ).delete(synchronize_session=False)
+
+            # 2. Invalidate semantic cache so stale answers for this URL disappear
+            session.query(SemanticCacheModel).delete(synchronize_session=False)
+
+            # 3. Purge vector chunks from ChromaDB
+            try:
+                from ragops.retrieval.retriever import get_retriever
+                retriever = get_retriever()
+                if hasattr(retriever._vector_store, "_collection") and retriever._vector_store._collection:
+                    try:
+                        retriever._vector_store._collection.delete(where={"url": clean_url})
+                    except Exception:
+                        pass
+                    try:
+                        retriever._vector_store._collection.delete(where={"source": f"Corporate Grounded Knowledge ({clean_url})"})
+                    except Exception:
+                        pass
+            except Exception as emb_e:
+                logger.debug("vector_store_remove_url_skipped", error=str(emb_e))
+
+            # 4. Update CompanyProfileModel
             profile = session.query(CompanyProfileModel).first()
-            if profile and profile.domains_urls:
-                urls = [u for u in profile.domains_urls if u.strip() != url.strip()]
-                profile.domains_urls = urls
+            if profile:
+                if profile.domains_urls:
+                    urls = [u for u in profile.domains_urls if u.strip().rstrip("/") != clean_url.rstrip("/")]
+                    profile.domains_urls = urls
+                # If all registered URLs are gone, reset company profile to clean state
+                if not profile.domains_urls:
+                    profile.company_name = "Enterprise"
+                    profile.group_name = ""
+                    profile.industry = ""
+                    profile.description = ""
+                    profile.products = []
+                    profile.employee_details = ""
+                    profile.locations = []
+                    profile.ceo = ""
+                    profile.directors = []
+                    profile.metadata_json = {}
                 profile.updated_at = datetime.now(timezone.utc)
                 session.commit()
                 session.refresh(profile)
+
+            # 5. Clear in-memory query intelligence cache
+            try:
+                from ragops.rag.pipeline import get_rag_pipeline
+                pipeline = get_rag_pipeline()
+                if hasattr(pipeline, "_query_intel") and hasattr(pipeline._query_intel, "_memory_cache"):
+                    pipeline._query_intel._memory_cache.clear()
+            except Exception:
+                pass
+
             return self._to_dict(profile) if profile else {}
+        except Exception as e:
+            session.rollback()
+            logger.error("remove_domain_url_failed", error=str(e))
+            raise
         finally:
             session.close()
 
     def clear_profile(self) -> dict[str, Any]:
-        """Reset the active company profile to an empty blank state."""
+        """Reset the active company profile to an empty blank state and purge all sources and caches."""
         session = get_session()
         try:
-            from ragops.storage.models import CompanyProfileModel, SemanticCacheModel
-            session.query(SemanticCacheModel).delete()
+            from ragops.storage.models import CompanyProfileModel, CompanySourceModel, SemanticCacheModel
+            session.query(SemanticCacheModel).delete(synchronize_session=False)
+            session.query(CompanySourceModel).delete(synchronize_session=False)
+
             profile = session.query(CompanyProfileModel).first()
             if profile:
-                profile.company_name = ""
+                profile.company_name = "Enterprise"
                 profile.group_name = ""
                 profile.industry = ""
                 profile.description = ""
@@ -899,6 +1266,15 @@ class CompanyRepository:
                     CompanyWebExtractor().clear_company_embeddings()
                 except Exception as emb_e:
                     logger.debug("vector_store_clear_profile_skipped", error=str(emb_e))
+
+                # Clear in-memory query intelligence cache
+                try:
+                    from ragops.rag.pipeline import get_rag_pipeline
+                    pipeline = get_rag_pipeline()
+                    if hasattr(pipeline, "_query_intel") and hasattr(pipeline._query_intel, "_memory_cache"):
+                        pipeline._query_intel._memory_cache.clear()
+                except Exception:
+                    pass
 
                 return self._to_dict(profile)
             return {}

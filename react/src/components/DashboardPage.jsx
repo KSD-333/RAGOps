@@ -147,6 +147,11 @@ export default function DashboardPage({ onRerunQuery, apiBaseUrl = '', currentUs
   const [selectedUploadFile, setSelectedUploadFile] = useState(null);
   const fileInputRef = useRef(null);
 
+  // Storage Reconciliation & Embedding States
+  const [isSyncingDisk, setIsSyncingDisk] = useState(false);
+  const [isEmbeddingAll, setIsEmbeddingAll] = useState(false);
+  const [embeddingSources, setEmbeddingSources] = useState({});
+
   // Billing Configuration (stored in localStorage)
   const [planTokens, setPlanTokens] = useState(() => {
     return Number(localStorage.getItem('ragops_plan_tokens')) || 5000000;
@@ -745,8 +750,99 @@ export default function DashboardPage({ onRerunQuery, apiBaseUrl = '', currentUs
     }
   };
 
+  const formatFileSize = (bytes) => {
+    if (!bytes || bytes === 0) return '0 B';
+    const k = 1024;
+    const sizes = ['B', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return `${parseFloat((bytes / Math.pow(k, i)).toFixed(1))} ${sizes[i]}`;
+  };
+
+  const handleSyncWithDisk = async () => {
+    setIsSyncingDisk(true);
+    try {
+      const res = await fetch(`${apiBaseUrl}/api/v1/catalog/sync`, { method: 'POST' });
+      if (res.ok) {
+        const json = await res.json();
+        setCatalogData({
+          summary: json.summary,
+          documents: json.documents,
+        });
+        setUploadFeedback({
+          type: 'success',
+          message: `Storage reconciled: ${json.summary?.total_documents ?? 0} files detected (${json.summary?.embedded_documents ?? 0} embedded, ${json.summary?.pending_documents ?? 0} pending).`,
+        });
+      } else {
+        throw new Error(`Sync failed with status ${res.status}`);
+      }
+    } catch (err) {
+      console.error('Failed to sync catalog with disk:', err);
+      setUploadFeedback({
+        type: 'error',
+        message: `Failed to sync with disk: ${err.message}`,
+      });
+    } finally {
+      setIsSyncingDisk(false);
+    }
+  };
+
+  const handleEmbedSingle = async (source) => {
+    setEmbeddingSources((prev) => ({ ...prev, [source]: true }));
+    try {
+      const res = await fetch(`${apiBaseUrl}/api/v1/catalog/embed/${encodeURIComponent(source)}`, {
+        method: 'POST',
+      });
+      if (res.ok) {
+        const result = await res.json();
+        const resCatalog = await fetch(`${apiBaseUrl}/api/v1/catalog`);
+        if (resCatalog.ok) setCatalogData(await resCatalog.json());
+        setUploadFeedback({
+          type: 'success',
+          message: `Successfully indexed "${source}" (${result.chunks_indexed} vector chunks created in ChromaDB).`,
+        });
+      } else {
+        const errJson = await res.json().catch(() => ({}));
+        throw new Error(errJson.detail || `Embedding failed with status ${res.status}`);
+      }
+    } catch (err) {
+      console.error(`Failed to embed ${source}:`, err);
+      setUploadFeedback({
+        type: 'error',
+        message: `Failed to embed "${source}": ${err.message}`,
+      });
+    } finally {
+      setEmbeddingSources((prev) => ({ ...prev, [source]: false }));
+    }
+  };
+
+  const handleEmbedAllPending = async () => {
+    setIsEmbeddingAll(true);
+    try {
+      const res = await fetch(`${apiBaseUrl}/api/v1/catalog/embed-all`, { method: 'POST' });
+      if (res.ok) {
+        const result = await res.json();
+        const resCatalog = await fetch(`${apiBaseUrl}/api/v1/catalog`);
+        if (resCatalog.ok) setCatalogData(await resCatalog.json());
+        setUploadFeedback({
+          type: 'success',
+          message: `Batch indexing complete: ${result.total_embedded_files} documents embedded (${result.total_chunks_indexed} total vector chunks in ChromaDB).`,
+        });
+      } else {
+        throw new Error(`Batch embedding failed with status ${res.status}`);
+      }
+    } catch (err) {
+      console.error('Failed to embed all pending documents:', err);
+      setUploadFeedback({
+        type: 'error',
+        message: `Batch embedding failed: ${err.message}`,
+      });
+    } finally {
+      setIsEmbeddingAll(false);
+    }
+  };
+
   const handleDeleteDocument = async (source) => {
-    if (!confirm(`Are you sure you want to remove "${source}" from PostgreSQL and vector index?`)) return;
+    if (!confirm(`Are you sure you want to permanently delete "${source}" from data/raw disk storage, remove its vector embeddings from ChromaDB, and delete its database record?`)) return;
     try {
       const res = await fetch(`${apiBaseUrl}/api/v1/catalog/${encodeURIComponent(source)}`, {
         method: 'DELETE',
@@ -754,9 +850,19 @@ export default function DashboardPage({ onRerunQuery, apiBaseUrl = '', currentUs
       if (res.ok) {
         const resCatalog = await fetch(`${apiBaseUrl}/api/v1/catalog`);
         if (resCatalog.ok) setCatalogData(await resCatalog.json());
+        setUploadFeedback({
+          type: 'success',
+          message: `Deleted "${source}", purged physical file from disk, and removed its vector chunks from ChromaDB.`,
+        });
+      } else {
+        throw new Error(`Delete failed with status ${res.status}`);
       }
     } catch (err) {
       console.error('Failed to delete document:', err);
+      setUploadFeedback({
+        type: 'error',
+        message: `Failed to delete document: ${err.message}`,
+      });
     }
   };
 
@@ -3090,51 +3196,65 @@ export default function DashboardPage({ onRerunQuery, apiBaseUrl = '', currentUs
           </div>
 
           {/* Section 3: Classification Breakdown Summary Cards */}
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-3">
             <div className="p-4 rounded-xl bg-[#0f1422] border border-white/10">
               <div className="text-[11px] font-semibold text-slate-400 uppercase">Total Files</div>
               <div className="text-2xl font-bold text-white font-mono mt-1">
-                {catalogData?.summary?.total_documents || 33}
+                {catalogData?.summary?.total_documents ?? 0}
+              </div>
+              <div className="text-[10px] text-slate-400 mt-1 flex items-center gap-1 font-mono">
+                <span className="text-emerald-400 font-semibold">{catalogData?.summary?.embedded_documents ?? 0}</span> embedded · 
+                <span className="text-amber-400 font-semibold">{catalogData?.summary?.pending_documents ?? 0}</span> pending
               </div>
             </div>
 
             <div className="p-4 rounded-xl bg-indigo-500/10 border border-indigo-500/30">
               <div className="text-[11px] font-semibold text-indigo-300 uppercase">Policies</div>
               <div className="text-2xl font-bold text-indigo-400 font-mono mt-1">
-                {catalogData?.summary?.policies || 21}
+                {catalogData?.summary?.policies ?? 0}
               </div>
             </div>
 
             <div className="p-4 rounded-xl bg-cyan-500/10 border border-cyan-500/30">
               <div className="text-[11px] font-semibold text-cyan-300 uppercase">Codes</div>
               <div className="text-2xl font-bold text-cyan-400 font-mono mt-1">
-                {catalogData?.summary?.codes || 4}
+                {catalogData?.summary?.codes ?? 0}
               </div>
             </div>
 
             <div className="p-4 rounded-xl bg-purple-500/10 border border-purple-500/30">
               <div className="text-[11px] font-semibold text-purple-300 uppercase">Programmes</div>
               <div className="text-2xl font-bold text-purple-400 font-mono mt-1">
-                {catalogData?.summary?.programmes || 3}
+                {catalogData?.summary?.programmes ?? 0}
               </div>
             </div>
 
             <div className="p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/30">
               <div className="text-[11px] font-semibold text-emerald-300 uppercase">Governance</div>
               <div className="text-2xl font-bold text-emerald-400 font-mono mt-1">
-                {catalogData?.summary?.governance || 1}
+                {catalogData?.summary?.governance ?? 0}
               </div>
             </div>
 
             <div className="p-4 rounded-xl bg-amber-500/10 border border-amber-500/30">
               <div className="text-[11px] font-semibold text-amber-300 uppercase">Manuals &amp; Guides</div>
               <div className="text-2xl font-bold text-amber-400 font-mono mt-1">
-                {catalogData?.summary?.manuals || 4}
+                {catalogData?.summary?.manuals ?? 0}
+              </div>
+            </div>
+
+            <div className="p-4 rounded-xl bg-blue-500/10 border border-blue-500/30">
+              <div className="text-[11px] font-semibold text-blue-300 uppercase flex items-center gap-1">
+                <Database className="w-3 h-3 text-blue-400" />
+                <span>Vector Chunks</span>
+              </div>
+              <div className="text-2xl font-bold text-blue-400 font-mono mt-1">
+                {catalogData?.summary?.total_chunks ?? 0}
               </div>
             </div>
           </div>
 
-          {/* Section 4: Filter Bar & Search */}
+          {/* Section 4: Filter Bar, Search, and Storage Sync & Batch Embed Actions */}
           <div className="p-4 rounded-2xl bg-[#0f1422] border border-white/10 flex flex-wrap items-center justify-between gap-4">
             <div className="flex flex-wrap items-center gap-2">
               <span className="text-xs font-semibold text-slate-400 flex items-center gap-1.5 mr-2">
@@ -3163,19 +3283,47 @@ export default function DashboardPage({ onRerunQuery, apiBaseUrl = '', currentUs
               ))}
             </div>
 
-            <div className="relative w-full sm:w-64">
-              <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-              <input
-                type="text"
-                placeholder="Search titles or filenames..."
-                value={catalogSearch}
-                onChange={(e) => setCatalogSearch(e.target.value)}
-                className="w-full pl-9 pr-3 py-1.5 bg-white/[0.04] border border-white/10 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500"
-              />
+            <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
+              {/* Sync with Disk button */}
+              <button
+                type="button"
+                onClick={handleSyncWithDisk}
+                disabled={isSyncingDisk}
+                title="Scan data/raw directory, purge deleted files from ChromaDB & DB, and detect new files"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white/[0.06] hover:bg-white/[0.1] border border-white/10 text-xs font-semibold text-slate-200 transition-colors cursor-pointer disabled:opacity-50"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 text-cyan-400 ${isSyncingDisk ? 'animate-spin' : ''}`} />
+                <span>{isSyncingDisk ? 'Syncing...' : 'Sync with Disk'}</span>
+              </button>
+
+              {/* Embed All Pending button */}
+              {(catalogData?.summary?.pending_documents ?? 0) > 0 && (
+                <button
+                  type="button"
+                  onClick={handleEmbedAllPending}
+                  disabled={isEmbeddingAll}
+                  title="Ingest, chunk, and embed all pending documents into ChromaDB"
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gradient-to-r from-amber-600 to-indigo-600 hover:from-amber-500 hover:to-indigo-500 text-xs font-semibold text-white shadow-sm transition-all cursor-pointer disabled:opacity-50"
+                >
+                  <Zap className={`w-3.5 h-3.5 text-amber-200 ${isEmbeddingAll ? 'animate-spin' : ''}`} />
+                  <span>{isEmbeddingAll ? 'Embedding...' : `Embed All Pending (${catalogData?.summary?.pending_documents})`}</span>
+                </button>
+              )}
+
+              <div className="relative w-full sm:w-60">
+                <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                <input
+                  type="text"
+                  placeholder="Search titles or filenames..."
+                  value={catalogSearch}
+                  onChange={(e) => setCatalogSearch(e.target.value)}
+                  className="w-full pl-9 pr-3 py-1.5 bg-white/[0.04] border border-white/10 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500"
+                />
+              </div>
             </div>
           </div>
 
-          {/* Section 5: Document Inventory Table with Delete Action */}
+          {/* Section 5: Document Inventory Table with Embed Status, Chunks & Actions */}
           <div className="rounded-2xl bg-[#0f1422] border border-white/10 overflow-hidden shadow-xl">
             <div className="overflow-x-auto">
               <table className="w-full text-left text-xs">
@@ -3187,6 +3335,8 @@ export default function DashboardPage({ onRerunQuery, apiBaseUrl = '', currentUs
                     <th className="py-3.5 px-4">Business Category</th>
                     <th className="py-3.5 px-4">Governance Level</th>
                     <th className="py-3.5 px-4">Source Filename</th>
+                    <th className="py-3.5 px-4">Size</th>
+                    <th className="py-3.5 px-4">Vector Chunks / Status</th>
                     <th className="py-3.5 px-4 text-right">Actions</th>
                   </tr>
                 </thead>
@@ -3232,15 +3382,45 @@ export default function DashboardPage({ onRerunQuery, apiBaseUrl = '', currentUs
                         <td className="py-3 px-4 font-mono text-[11px] text-slate-400 truncate max-w-xs">
                           {doc.source}
                         </td>
-                        <td className="py-3 px-4 text-right">
-                          <button
-                            type="button"
-                            onClick={() => handleDeleteDocument(doc.source)}
-                            title={`Delete ${doc.source}`}
-                            className="p-1.5 rounded-lg text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 transition-colors cursor-pointer"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
+                        <td className="py-3 px-4 font-mono text-[11px] text-slate-400 whitespace-nowrap">
+                          {formatFileSize(doc.file_size_bytes)}
+                        </td>
+                        <td className="py-3 px-4 whitespace-nowrap">
+                          {doc.is_embedded || (doc.chunk_count && doc.chunk_count > 0) ? (
+                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                              <CheckCircle2 className="w-3 h-3 text-emerald-400" />
+                              <span>Embedded ({doc.chunk_count} {doc.chunk_count === 1 ? 'chunk' : 'chunks'})</span>
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                              <AlertTriangle className="w-3 h-3 text-amber-400" />
+                              <span>Pending Indexing (0 chunks)</span>
+                            </span>
+                          )}
+                        </td>
+                        <td className="py-3 px-4 text-right whitespace-nowrap">
+                          <div className="flex items-center justify-end gap-1.5">
+                            {(!doc.is_embedded || doc.chunk_count === 0) && (
+                              <button
+                                type="button"
+                                onClick={() => handleEmbedSingle(doc.source)}
+                                disabled={embeddingSources[doc.source]}
+                                title={`Embed ${doc.source} into ChromaDB`}
+                                className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-indigo-600/30 hover:bg-indigo-600/50 border border-indigo-500/40 text-indigo-200 text-[11px] font-medium transition-colors cursor-pointer disabled:opacity-50"
+                              >
+                                <Zap className={`w-3 h-3 text-amber-400 ${embeddingSources[doc.source] ? 'animate-spin' : ''}`} />
+                                <span>{embeddingSources[doc.source] ? 'Embedding...' : 'Embed'}</span>
+                              </button>
+                            )}
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteDocument(doc.source)}
+                              title={`Delete ${doc.source} from disk and vector index`}
+                              className="p-1.5 rounded-lg text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 transition-colors cursor-pointer"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     ))}

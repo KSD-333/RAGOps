@@ -43,38 +43,51 @@ class WebSearchTool:
         logger.info("web_search_initiated", query=clean_query, limit=limit)
         results = []
 
-        # 1. Authoritative Corporate Entity & Registry Search via Wikipedia API
-        try:
-            wiki_resp = requests.get(
-                "https://en.wikipedia.org/w/api.php",
-                params={
-                    "action": "query",
-                    "list": "search",
-                    "srsearch": clean_query,
-                    "format": "json",
-                    "utf8": 1,
-                    "srlimit": limit,
-                },
-                headers={"User-Agent": "RAGOps-Corporate-Intelligence/1.0 (admin@ragops.local)"},
-                timeout=self.timeout_sec,
-            )
-            if wiki_resp.status_code == 200:
-                wiki_data = wiki_resp.json()
-                items = wiki_data.get("query", {}).get("search", [])
-                for item in items:
-                    raw_snippet = item.get("snippet", "")
-                    clean_snippet = BeautifulSoup(raw_snippet, "html.parser").get_text(strip=True)
-                    title = item.get("title", "")
-                    url = f"https://en.wikipedia.org/wiki/{urllib.parse.quote(title.replace(' ', '_'))}"
-                    if title and clean_snippet:
-                        results.append({
-                            "title": title,
-                            "url": url,
-                            "snippet": clean_snippet,
-                            "source": "wikipedia_corporate_registry",
-                        })
-        except Exception as wiki_err:
-            logger.debug("wiki_search_failed", query=clean_query, error=str(wiki_err))
+        # Corporate Entity validation keywords
+        corporate_keywords = [
+            "company", "corporation", "manufacturer", "business", "enterprise",
+            "group", "ltd", "limited", "inc", "s.p.a", "firm", "supplier", "automotive",
+            "technology", "solutions", "products", "operations", "headquarters"
+        ]
+
+        # 1. Authoritative Corporate Entity & Registry Search via Wikipedia API (only for queries mentioning company/enterprise)
+        if any(w in clean_query.lower() for w in ("company", "group", "corp", "inc", "ltd", "technologies", "motors", "systems")):
+            try:
+                wiki_resp = requests.get(
+                    "https://en.wikipedia.org/w/api.php",
+                    params={
+                        "action": "query",
+                        "list": "search",
+                        "srsearch": clean_query,
+                        "format": "json",
+                        "utf8": 1,
+                        "srlimit": limit,
+                    },
+                    headers={"User-Agent": "RAGOps-Corporate-Intelligence/1.0 (admin@ragops.local)"},
+                    timeout=self.timeout_sec,
+                )
+                if wiki_resp.status_code == 200:
+                    wiki_data = wiki_resp.json()
+                    items = wiki_data.get("query", {}).get("search", [])
+                    for item in items:
+                        raw_snippet = item.get("snippet", "")
+                        clean_snippet = BeautifulSoup(raw_snippet, "html.parser").get_text(strip=True)
+                        title = item.get("title", "")
+                        url = f"https://en.wikipedia.org/wiki/{urllib.parse.quote(title.replace(' ', '_'))}"
+                        # Strict Corporate Guard: Ignore astronomy (galaxies, stars), sports, politicians, TV shows
+                        snippet_lower = clean_snippet.lower()
+                        title_lower = title.lower()
+                        if any(bad in snippet_lower or bad in title_lower for bad in ("galaxy", "galaxies", "serpens", "championship", "season", "politician", "actor", "song", "album", "film", "series")):
+                            continue
+                        if title and clean_snippet and any(ck in snippet_lower or ck in title_lower for ck in corporate_keywords):
+                            results.append({
+                                "title": title,
+                                "url": url,
+                                "snippet": clean_snippet,
+                                "source": "wikipedia_corporate_registry",
+                            })
+            except Exception as wiki_err:
+                logger.debug("wiki_search_failed", query=clean_query, error=str(wiki_err))
 
         if len(results) >= limit:
             logger.info("web_search_completed", query=clean_query, results_found=len(results))

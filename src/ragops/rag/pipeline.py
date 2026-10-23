@@ -102,24 +102,26 @@ class RAGPipeline:
         # 1. Query Intelligence Layer (Intent, scope, multi-turn rewriting)
         intent = self._query_intel.analyze_and_rewrite(request.query, chat_history=chat_history)
 
-        # Conversational Chitchat & Acknowledgment handling (e.g. "ohk", "thanks", "hello")
+        # Conversational Chitchat & Acknowledgment handling (e.g. "hi", "hii", "how are you", "thanks")
         if intent.scope == "conversational":
-            comp_name = "Enterprise"
+            comp_name = ""
             try:
                 from ragops.storage.repositories import CompanyRepository
                 prof = CompanyRepository().get_profile()
-                if prof and prof.get("company_name"):
-                    comp_name = prof["company_name"]
+                if prof and prof.get("company_name") and prof["company_name"].strip().lower() not in ("enterprise", "company", ""):
+                    comp_name = f" for {prof['company_name'].strip()}"
             except Exception:
                 pass
 
             if intent.intent_type == "conversational_greeting":
-                reply = f"Hello! I am your RAGOps corporate assistant for {comp_name}. How can I help you navigate our company facts, locations, policies, codes of conduct, or governance guidelines today?"
+                reply = f"Hello! I am your RAGOps corporate assistant{comp_name}. How can I help you navigate company policies, locations, guidelines, or procedures today?"
             elif intent.intent_type == "conversational_acknowledgment":
-                reply = "You're welcome! Feel free to ask if you have any questions about company operations, locations, clients, policies, or procedures."
+                reply = "You're welcome! Feel free to ask if you have any questions about company policies, documents, or procedures."
             else:
-                reply = "Please enter a specific question or topic to search across the knowledge base (e.g. 'What are all company locations?', 'Who are key clients?', or 'POSH complaint procedure')."
+                reply = "Hello! Please feel free to ask any specific question across the corporate knowledge base (e.g. 'What is the POSH complaint procedure?', 'What are the travel policy rules?', or 'Who are key clients?')."
 
+            est_out_toks = max(15, len(reply) // 4)
+            est_in_toks = max(2, len(request.query) // 4)
             return RAGResponse(
                 query=request.query,
                 answer=reply,
@@ -130,8 +132,11 @@ class RAGPipeline:
                     "intent": intent.intent_type,
                     "scope": intent.scope,
                     "cache_hit": False,
+                    "model": "assistant-direct",
                     "total_latency_ms": 1.0,
-                    "total_tokens": 0,
+                    "input_tokens": est_in_toks,
+                    "output_tokens": est_out_toks,
+                    "total_tokens": est_in_toks + est_out_toks,
                     "cost_usd": 0.0,
                     "session_id": request.session_id,
                 },
@@ -166,25 +171,37 @@ class RAGPipeline:
         # If user asks about locations, clients, products, employees, founding background, or live facts,
         # synthesize dynamic context from PostgreSQL profile and registered MNC URLs
         try:
-            from ragops.tools.web_extractor import CompanyWebExtractor
-            from ragops.core.types import RetrievedChunk
-            web_tool = CompanyWebExtractor()
             active_q = intent.rewritten_query if intent.is_rewritten else processed_query.original
-            web_chunks = web_tool.fetch_dynamic_web_context(query=active_q, top_n_chunks=4)
-            if web_chunks:
-                priority_chunks = [
-                    RetrievedChunk(
-                        chunk_id=f"web_{abs(hash(wc['text'][:40])) % 1000000}",
-                        document_id=wc.get("document", "Corporate Profile"),
-                        text=wc["text"],
-                        score=wc.get("score", 0.98),
-                        source=wc["source"],
-                        metadata={"url": wc.get("url", ""), "provenance": "dynamic_corporate_tool", "is_priority": True},
-                    )
-                    for wc in web_chunks
-                ]
-                # Prepend dynamic corporate chunks to top of context so they are never sliced away
-                retrieved_context.chunks = priority_chunks + retrieved_context.chunks
+            active_q_lower = active_q.lower()
+            company_triggers = [
+                "location", "locations", "plant", "plants", "facility", "facilities",
+                "headquarter", "headquarters", "hq", "city", "cities", "address",
+                "client", "clients", "customer", "customers", "oem", "partner", "partners",
+                "distributor", "distributors", "hub", "hubs", "spares",
+                "employee", "employees", "headcount", "workforce", "revenue", "turnover",
+                "ceo", "chairman", "founder", "founded", "history", "leadership",
+                "carraro", "hcl", "tcs", "infosys", "wipro", "company profile",
+                "official website", "domain", "catalog", "portfolio"
+            ]
+            if any(k in active_q_lower for k in company_triggers):
+                from ragops.tools.web_extractor import CompanyWebExtractor
+                from ragops.core.types import RetrievedChunk
+                web_tool = CompanyWebExtractor()
+                web_chunks = web_tool.fetch_dynamic_web_context(query=active_q, top_n_chunks=4)
+                if web_chunks:
+                    priority_chunks = [
+                        RetrievedChunk(
+                            chunk_id=f"web_{abs(hash(wc['text'][:40])) % 1000000}",
+                            document_id=wc.get("document", "Corporate Profile"),
+                            text=wc["text"],
+                            score=wc.get("score", 0.98),
+                            source=wc["source"],
+                            metadata={"url": wc.get("url", ""), "provenance": "dynamic_corporate_tool", "is_priority": True},
+                        )
+                        for wc in web_chunks
+                    ]
+                    # Prepend dynamic corporate chunks to top of context so they are never sliced away
+                    retrieved_context.chunks = priority_chunks + retrieved_context.chunks
         except Exception as web_err:
             logger.debug("dynamic_web_lookup_skipped", error=str(web_err))
 
@@ -207,6 +224,57 @@ class RAGPipeline:
         if is_collection_query:
             inventory = self._retriever.get_document_inventory()
             logger.info("collection_inventory_injected", count=len(inventory))
+
+        # Strict Relevance Quality Gate:
+        # Evaluate calibrated relevance score of retrieved context.
+        # If the highest chunk score is below threshold (0.10 / 10%) and it's not a collection inventory query:
+        # Strictly abstain! Never send irrelevant chunks (e.g. 0% or 5%) to LLM, and never trigger random web search tool hallucinations!
+        max_chunk_score = max((float(getattr(c, "score", 0.0)) for c in retrieved_context.chunks), default=0.0)
+        has_sufficient_relevance = (len(retrieved_context.chunks) > 0 and max_chunk_score >= 0.10) or is_collection_query
+
+        if not has_sufficient_relevance:
+            logger.info(
+                "strict_relevance_gate_abstaining",
+                query=request.query[:80],
+                max_score=max_chunk_score,
+                chunks_retrieved=len(retrieved_context.chunks),
+            )
+            abstain_answer = (
+                f"I searched the corporate knowledge base, but could not locate verified documents or policies "
+                f"with sufficient relevance to answer your question regarding '{request.query}'.\n\n"
+                "Please verify that the relevant company policy or document has been uploaded to the catalog, "
+                "or rephrase your question with more specific keywords."
+            )
+            est_in = max(2, len(request.query) // 4)
+            est_out = max(15, len(abstain_answer) // 4)
+            return RAGResponse(
+                query=request.query,
+                answer=abstain_answer,
+                sources=[],
+                trace_id=trace_id,
+                metadata={
+                    "retrieval_method": "strict_relevance_gate_abstention",
+                    "max_relevance_score": round(max_chunk_score, 4),
+                    "relevance_threshold": 0.10,
+                    "chunks_retrieved": len(retrieved_context.chunks),
+                    "total_latency_ms": round(retrieved_context.retrieval_latency_ms, 2),
+                    "model": getattr(self._llm_client, "model_name", "groq"),
+                    "input_tokens": est_in,
+                    "output_tokens": est_out,
+                    "total_tokens": est_in + est_out,
+                    "cost_usd": 0.0,
+                    "session_id": request.session_id or "",
+                    "intent": intent.intent_type,
+                    "scope": intent.scope,
+                    "abstention": True,
+                },
+            )
+
+        # Context relevance filtering: keep only chunks that are genuinely relevant (score >= 0.10)
+        if not is_collection_query and len(retrieved_context.chunks) > 1:
+            filtered_chunks = [c for c in retrieved_context.chunks if float(getattr(c, "score", 0.0)) >= 0.10]
+            if filtered_chunks:
+                retrieved_context.chunks = filtered_chunks
 
         # 6. Build context for the prompt (including chat history for multi-turn coherence)
         prompt_context = self._context_builder.build(
@@ -233,15 +301,22 @@ class RAGPipeline:
             trace_id=trace_id,
         )
 
-        # Check for abstention / refusal -> Trigger Autonomous Search Tool Fallback (Corrective RAG)
+        # Check for abstention / refusal -> Trigger Autonomous Search Tool Fallback ONLY if explicit company URLs are registered
         if self._is_abstention(rag_response.answer):
-            logger.info("abstention_detected_triggering_search_tool_fallback", trace_id=trace_id, query=request.query[:80])
-            rag_response = self._execute_search_tool_fallback(
-                request=request,
-                intent=intent,
-                trace_id=trace_id,
-                retrieved_context=retrieved_context,
-            )
+            active_enterprise, enterprise_urls = self._resolve_active_enterprise(request.query)
+            company_triggers = [
+                "location", "locations", "plant", "plants", "headquarter", "hq",
+                "client", "clients", "customer", "customers", "oem",
+                "product", "products", "ceo", "director", "chairman", "workforce", "employee"
+            ]
+            if enterprise_urls and any(k in q_lower for k in company_triggers):
+                logger.info("triggering_gated_search_fallback", enterprise=active_enterprise, urls=enterprise_urls)
+                rag_response = self._execute_search_tool_fallback(
+                    request=request,
+                    intent=intent,
+                    trace_id=trace_id,
+                    retrieved_context=retrieved_context,
+                )
 
         # Attach Query Intelligence metadata
         rag_response.metadata["intent"] = intent.intent_type
@@ -487,20 +562,15 @@ class RAGPipeline:
                 + "\n\n".join([f"• {ev['snippet']}" for ev in evidence_snippets[:2]])
             )
 
-        # 5. Persist discovered facts to PostgreSQL profile if profile is currently empty
-        try:
-            from ragops.storage.database import get_session
-            from ragops.storage.models import CompanyProfileModel
-            session = get_session()
-            profile = session.query(CompanyProfileModel).first()
-            if profile and (not profile.company_name or profile.company_name == "Enterprise"):
-                profile.company_name = enterprise_name
-                if urls and not profile.domains_urls:
-                    profile.domains_urls = urls
-                session.commit()
-            session.close()
-        except Exception as e_prof:
-            logger.debug("company_profile_update_skipped", error=str(e_prof))
+
+        fb_in_tokens = getattr(llm_res, "input_tokens", 0) if 'llm_res' in locals() and hasattr(llm_res, "input_tokens") else 0
+        fb_out_tokens = getattr(llm_res, "output_tokens", 0) if 'llm_res' in locals() and hasattr(llm_res, "output_tokens") else 0
+        if fb_in_tokens + fb_out_tokens == 0:
+            fb_in_tokens = max(2, len(request.query) // 4 + len(search_context_str) // 4)
+            fb_out_tokens = max(15, len(fallback_answer) // 4)
+        fb_total_tokens = fb_in_tokens + fb_out_tokens
+        fb_cost = round(((fb_in_tokens * 0.05 + fb_out_tokens * 0.08) / 1_000_000), 6)
+        fb_model = getattr(llm_res, "model", getattr(self._llm_client, "model_name", "groq")) if 'llm_res' in locals() else getattr(self._llm_client, "model_name", "groq")
 
         return RAGResponse(
             query=request.query,
@@ -512,6 +582,11 @@ class RAGPipeline:
                 "search_fallback_applied": True,
                 "active_enterprise": enterprise_name,
                 "evidence_sources_count": len(evidence_snippets),
+                "model": fb_model,
+                "input_tokens": fb_in_tokens,
+                "output_tokens": fb_out_tokens,
+                "total_tokens": fb_total_tokens,
+                "cost_usd": fb_cost,
                 "total_latency_ms": 450.0,
                 "intent": getattr(intent, "intent_type", "general"),
                 "scope": getattr(intent, "scope", "company_overview"),

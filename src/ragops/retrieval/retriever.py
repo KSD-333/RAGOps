@@ -179,3 +179,46 @@ class RAGRetriever:
             except Exception as e:
                 logger.warning("failed_to_fetch_collection_inventory", error=str(e))
         return []
+
+    def get_document_chunk_counts(self) -> dict[str, int]:
+        """Get mapping of document filename -> count of chunks in vector store."""
+        counts: dict[str, int] = {}
+        if hasattr(self._vector_store, "_collection") and self._vector_store._collection is not None:
+            try:
+                from pathlib import Path
+                from collections import Counter
+                data = self._vector_store._collection.get(include=["metadatas"])
+                tally = Counter()
+                for m in data.get("metadatas", []):
+                    if m and "source" in m:
+                        tally[Path(m["source"]).name] += 1
+                return dict(tally)
+            except Exception as e:
+                logger.warning("failed_to_fetch_collection_chunk_counts", error=str(e))
+        return counts
+
+    def delete_document_chunks(self, source: str) -> int:
+        """Delete all chunks belonging to a document from ChromaDB vector store.
+        
+        Matches exact source, basename, or path variants.
+        """
+        deleted = 0
+        if hasattr(self._vector_store, "_collection") and self._vector_store._collection is not None:
+            try:
+                from pathlib import Path
+                target_name = Path(source).name.lower()
+                data = self._vector_store._collection.get(include=["metadatas"])
+                ids_to_delete = []
+                for chunk_id, m in zip(data.get("ids", []), data.get("metadatas", [])):
+                    if m and "source" in m:
+                        src_name = Path(m["source"]).name.lower()
+                        if src_name == target_name or m["source"] == source:
+                            ids_to_delete.append(chunk_id)
+                if ids_to_delete:
+                    self._vector_store._collection.delete(ids=ids_to_delete)
+                    deleted = len(ids_to_delete)
+                    logger.info("deleted_chunks_for_document", source=source, count=deleted)
+            except Exception as e:
+                logger.warning("failed_to_delete_document_chunks", source=source, error=str(e))
+        return deleted
+

@@ -129,17 +129,17 @@ class QueryIntelligenceEngine:
         q = raw_query.strip()
         q_lower = q.lower()
 
-        # 1. Conversational Chitchat & Acknowledgment Detection (e.g. "ohk", "thanks", "hello")
+        # 1. Conversational Chitchat & Acknowledgment Detection (e.g. "hi", "hii", "how are you", "thanks")
         cleaned_no_punct = re.sub(r"[^\w\s]", "", q_lower).strip()
-        chitchat_acknowledgments = {
-            "ok", "ohk", "okay", "k", "cool", "got it", "fine", "alright", "sure",
-            "thanks", "thank you", "thx", "ty", "cheers", "appreciate it", "great", "awesome"
-        }
-        chitchat_greetings = {
-            "hi", "hello", "hey", "greetings", "good morning", "good afternoon", "good evening"
-        }
 
-        if cleaned_no_punct in chitchat_acknowledgments:
+        is_greeting = bool(
+            re.match(r"^(h+i+|h+e+y+|h+e+l+l+o+|howdy|sup|greetings|good\s+(morning|afternoon|evening)|how\s+are\s+you|who\s+are\s+you|what\s+can\s+you\s+do|help|what\s+are\s+you)$", cleaned_no_punct)
+        )
+        is_acknowledgment = bool(
+            re.match(r"^(ok|ohk|okay|k|cool|got\s+it|fine|alright|sure|thanks|thank\s+you|thx|ty|cheers|appreciate\s+it|great|awesome)$", cleaned_no_punct)
+        )
+
+        if is_acknowledgment:
             return QueryIntent(
                 intent_type="conversational_acknowledgment",
                 scope="conversational",
@@ -148,7 +148,7 @@ class QueryIntelligenceEngine:
                 original_query=q,
                 rewritten_query=q,
             )
-        elif cleaned_no_punct in chitchat_greetings:
+        elif is_greeting or cleaned_no_punct in ("hi", "hii", "hiii", "hello", "hey", "how are you"):
             return QueryIntent(
                 intent_type="conversational_greeting",
                 scope="conversational",
@@ -157,7 +157,7 @@ class QueryIntelligenceEngine:
                 original_query=q,
                 rewritten_query=q,
             )
-        elif len(cleaned_no_punct) <= 2:
+        elif len(cleaned_no_punct) <= 2 and not any(c.isdigit() for c in cleaned_no_punct):
             return QueryIntent(
                 intent_type="conversational_short",
                 scope="conversational",
@@ -457,6 +457,7 @@ class QueryIntelligenceEngine:
             "hit_count": 1,
             "intent": intent.intent_type,
             "scope": intent.scope,
+            "model": response.metadata.get("model", "semantic-cache"),
         }
         self._memory_cache[cache_key] = entry_dict
 
@@ -537,6 +538,7 @@ class QueryIntelligenceEngine:
             metadata={
                 "cache_hit": True,
                 "cached": True,
+                "model": entry.get("model", "semantic-cache"),
                 "retrieval_method": "semantic_cache_hit",
                 "similarity_score": similarity,
                 "intent": intent.intent_type,

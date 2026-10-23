@@ -32,3 +32,138 @@
 ::-webkit-scrollbar-thumb:hover {
   background: rgba(99, 102, 241, 0.4);
 }
+
+/* Rich Markdown Typography for AI Responses */
+.ragops-markdown {
+  color: #e2e8f0;
+  font-size: 0.95rem;
+  line-height: 1.75;
+}
+
+.ragops-markdown p {
+  margin-top: 0;
+  margin-bottom: 1rem;
+}
+
+.ragops-markdown p:last-child {
+  margin-bottom: 0;
+}
+
+.ragops-markdown h1,
+.ragops-markdown h2,
+.ragops-markdown h3,
+.ragops-markdown h4 {
+  color: #ffffff;
+  font-family: 'Outfit', sans-serif;
+  font-weight: 700;
+  letter-spacing: -0.015em;
+  margin-top: 1.25rem;
+  margin-bottom: 0.625rem;
+}
+
+.ragops-markdown h1 { font-size: 1.4rem; }
+.ragops-markdown h2 { font-size: 1.2rem; }
+.ragops-markdown h3 { font-size: 1.05rem; }
+.ragops-markdown h4 { font-size: 0.95rem; }
+
+.ragops-markdown ul {
+  list-style-type: disc;
+  padding-left: 1.4rem;
+  margin-top: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.ragops-markdown ol {
+  list-style-type: decimal;
+  padding-left: 1.4rem;
+  margin-top: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.ragops-markdown li {
+  margin-bottom: 0.375rem;
+  padding-left: 0.2rem;
+}
+
+.ragops-markdown li::marker {
+  color: #818cf8;
+}
+
+.ragops-markdown table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 1rem;
+  margin-bottom: 1.25rem;
+  border-radius: 0.75rem;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(15, 20, 32, 0.7);
+}
+
+.ragops-markdown th {
+  background: rgba(30, 41, 59, 0.8);
+  color: #f8fafc;
+  font-weight: 600;
+  font-size: 0.85rem;
+  text-align: left;
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.ragops-markdown td {
+  padding: 0.75rem 1rem;
+  font-size: 0.875rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  color: #cbd5e1;
+}
+
+.ragops-markdown tr:last-child td {
+  border-bottom: none;
+}
+
+.ragops-markdown tr:hover td {
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.ragops-markdown strong,
+.ragops-markdown b {
+  color: #ffffff;
+  font-weight: 600;
+}
+
+.ragops-markdown blockquote {
+  border-left: 3px solid #6366f1;
+  padding: 0.75rem 1rem;
+  margin: 1rem 0;
+  color: #94a3b8;
+  font-style: italic;
+  background: rgba(99, 102, 241, 0.06);
+  border-radius: 0 0.5rem 0.5rem 0;
+}
+
+.ragops-markdown code {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  padding: 0.15rem 0.4rem;
+  border-radius: 0.375rem;
+  font-size: 0.825em;
+  font-family: 'JetBrains Mono', monospace;
+  color: #a5b4fc;
+}
+
+.ragops-markdown pre {
+  background: #05070d;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  padding: 1rem;
+  border-radius: 0.75rem;
+  overflow-x: auto;
+  margin: 1rem 0;
+}
+
+.ragops-markdown pre code {
+  background: transparent;
+  border: none;
+  padding: 0;
+  color: #f1f5f9;
+  font-size: 0.85rem;
+}

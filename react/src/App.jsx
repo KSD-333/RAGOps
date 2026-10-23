@@ -96,7 +96,7 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen bg-[#07090e] text-slate-100 flex flex-col font-['Inter'] selection:bg-indigo-500 selection:text-white">
+    <div className={`${activePage === 'search' ? 'h-screen overflow-hidden' : 'min-h-screen'} bg-[#07090e] text-slate-100 flex flex-col font-['Inter'] selection:bg-indigo-500 selection:text-white`}>
       {/* Top Navigation */}
       <Navbar
         activePage={activePage}
@@ -109,7 +109,11 @@ export default function App() {
       />
 
       {/* Main Content Area */}
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <main className={`flex-1 w-full flex flex-col min-h-0 ${
+        activePage === 'search' 
+          ? 'max-w-[1720px] w-full mx-auto px-2 sm:px-4 lg:px-6 py-2 overflow-hidden' 
+          : 'max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8'
+      }`}>
         {activePage === 'search' && (
           <SearchPage
             onChunkClick={(chunk) => setSelectedChunk(chunk)}
@@ -177,10 +181,14 @@ export default function App() {
       </main>
 
       {/* Enterprise Footer */}
-      <footer className="border-t border-white/5 py-6 bg-[#05070a] text-center text-xs text-slate-400">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-3">
+      <footer className={`border-t border-white/5 bg-[#05070a] text-center text-slate-400 shrink-0 ${
+        activePage === 'search' ? 'py-2 text-[11px]' : 'py-6 text-xs'
+      }`}>
+        <div className={`mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-2 ${
+          activePage === 'search' ? 'max-w-[1720px]' : 'max-w-7xl'
+        }`}>
           <div className="flex items-center gap-2">
-            <span className="w-2 h-2 rounded-full bg-emerald-400" />
+            <span className="w-2 h-2 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.6)]" />
             <span>RAGOps Enterprise Production Stack &bull; PostgreSQL Telemetry + ChromaDB + Cross-Encoder</span>
           </div>
           <div>
