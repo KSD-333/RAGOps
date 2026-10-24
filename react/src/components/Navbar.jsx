@@ -20,7 +20,7 @@ export default function Navbar({ activePage, setActivePage, isOnline, modelName,
   return (
     <header className="sticky top-0 z-50 bg-[#07090e]/85 backdrop-blur-xl border-b border-white/[0.08] shadow-lg shadow-black/40">
       <div className={`mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-4 ${
-        activePage === 'search' ? 'max-w-[1720px]' : 'max-w-7xl'
+        activePage === 'search' ? 'max-w-[1720px]' : (activePage === 'dashboard' ? 'max-w-7xl 2xl:max-w-[1680px]' : 'max-w-7xl')
       }`}>
         
         {/* Brand Logo & Name */}

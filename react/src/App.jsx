@@ -112,7 +112,7 @@ export default function App() {
       <main className={`flex-1 w-full flex flex-col min-h-0 ${
         activePage === 'search' 
           ? 'max-w-[1720px] w-full mx-auto px-2 sm:px-4 lg:px-6 py-2 overflow-hidden' 
-          : 'max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8'
+          : 'max-w-7xl 2xl:max-w-[1680px] mx-auto px-4 sm:px-6 lg:px-8 py-8'
       }`}>
         {activePage === 'search' && (
           <SearchPage
@@ -129,6 +129,7 @@ export default function App() {
           currentUser?.role === 'admin' ? (
             <DashboardPage 
               onRerunQuery={handleRerunQuery}
+              onChunkClick={(chunk) => setSelectedChunk(chunk)}
               apiBaseUrl={apiBaseUrl}
               currentUser={currentUser}
               onOpenAuthModal={() => setIsAuthModalOpen(true)}
@@ -185,7 +186,7 @@ export default function App() {
         activePage === 'search' ? 'py-2 text-[11px]' : 'py-6 text-xs'
       }`}>
         <div className={`mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-2 ${
-          activePage === 'search' ? 'max-w-[1720px]' : 'max-w-7xl'
+          activePage === 'search' ? 'max-w-[1720px]' : (activePage === 'dashboard' ? 'max-w-7xl 2xl:max-w-[1680px]' : 'max-w-7xl')
         }`}>
           <div className="flex items-center gap-2">
             <span className="w-2 h-2 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.6)]" />

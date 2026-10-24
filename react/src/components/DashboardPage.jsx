@@ -43,10 +43,17 @@ import {
   XCircle,
   Tag,
   Eye,
-  GitMerge
+  GitMerge,
+  Copy,
+  ChevronRight,
+  ArrowLeft,
+  Bot,
+  Maximize2,
+  Minimize2
 } from 'lucide-react';
+import { marked } from 'marked';
 
-export default function DashboardPage({ onRerunQuery, apiBaseUrl = '', currentUser, onOpenAuthModal }) {
+export default function DashboardPage({ onRerunQuery, apiBaseUrl = '', currentUser, onOpenAuthModal, onChunkClick }) {
   // Navigation tabs within Dashboard (support deep-linking to company knowledge hub)
   const [activeTab, setActiveTab] = useState(() => {
     if (typeof window !== 'undefined') {
@@ -68,6 +75,19 @@ export default function DashboardPage({ onRerunQuery, apiBaseUrl = '', currentUs
   const [historyLoading, setHistoryLoading] = useState(false);
   const [expandedMessageId, setExpandedMessageId] = useState(null);
   const [riskFilter, setRiskFilter] = useState(false);
+
+  // Tab 2: User Directory & Side-by-Side Chat Audit States
+  const [selectedSessionId, setSelectedSessionId] = useState(null);
+  const [chatSearchQuery, setChatSearchQuery] = useState('');
+  const [chatRiskFilterOnly, setChatRiskFilterOnly] = useState(false);
+  const [copiedAuditText, setCopiedAuditText] = useState(null);
+  const [mobileChatView, setMobileChatView] = useState('list'); // 'list' | 'chat'
+
+  // Tab 3: Trace Viewer & Retrieval Inspector States
+  const [expandedTraceIds, setExpandedTraceIds] = useState({});
+  const [traceSearchQuery, setTraceSearchQuery] = useState('');
+  const [traceLatencyFilter, setTraceLatencyFilter] = useState('all'); // 'all' | 'risk' | 'slow'
+  const [copiedTraceText, setCopiedTraceText] = useState(null);
 
   // Document Catalog & Semantic Cache States
   const [catalogData, setCatalogData] = useState(null);
@@ -879,7 +899,14 @@ export default function DashboardPage({ onRerunQuery, apiBaseUrl = '', currentUs
         const res = await fetch(`${apiBaseUrl}/api/v1/admin/users/${selectedUser}/history?limit=50`);
         if (res.ok) {
           const json = await res.json();
-          setUserChatHistory(json.history || []);
+          const history = json.history || [];
+          setUserChatHistory(history);
+          if (history.length > 0) {
+            setSelectedSessionId(history[0].session_id || 'default_session');
+          } else {
+            setSelectedSessionId(null);
+          }
+          setMobileChatView('list');
         }
       } catch (err) {
         console.error('Failed to load user chat history:', err);
@@ -889,6 +916,40 @@ export default function DashboardPage({ onRerunQuery, apiBaseUrl = '', currentUs
     };
     fetchUserHistory();
   }, [selectedUser]);
+
+  const handleCopyAuditText = (text, id) => {
+    if (!text) return;
+    navigator.clipboard.writeText(text);
+    setCopiedAuditText(id);
+    setTimeout(() => setCopiedAuditText(null), 2000);
+  };
+
+  const handleCopyTraceText = (text, id) => {
+    if (!text) return;
+    navigator.clipboard.writeText(text);
+    setCopiedTraceText(id);
+    setTimeout(() => setCopiedTraceText(null), 2000);
+  };
+
+  const toggleTraceExpand = (traceId) => {
+    setExpandedTraceIds((prev) => ({
+      ...prev,
+      [traceId]: !prev[traceId],
+    }));
+  };
+
+  const handleExpandAllTraces = (tracesList) => {
+    const nextMap = {};
+    (tracesList || []).forEach((t) => {
+      const k = t.id || t.trace_id;
+      if (k) nextMap[k] = true;
+    });
+    setExpandedTraceIds(nextMap);
+  };
+
+  const handleCollapseAllTraces = () => {
+    setExpandedTraceIds({});
+  };
 
   const handleExportTrainingData = async () => {
     try {
@@ -1284,16 +1345,18 @@ export default function DashboardPage({ onRerunQuery, apiBaseUrl = '', currentUs
       {activeTab === 'users' && (
         <div className="space-y-6 animate-in fade-in duration-150">
           
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
             
             {/* User Directory Column */}
-            <div className="lg:col-span-1 space-y-4">
-              <div className="flex items-center justify-between">
+            <div className="lg:col-span-4 xl:col-span-3 space-y-4">
+              <div className="flex items-center justify-between pb-1">
                 <h3 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
                   <Users className="w-4 h-4 text-indigo-400" />
                   <span>Registered Users ({userList.length})</span>
                 </h3>
-                <span className="text-xs text-slate-400 font-mono">PostgreSQL</span>
+                <span className="text-[10px] px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-300 font-mono border border-blue-500/20">
+                  PostgreSQL
+                </span>
               </div>
 
               <div className="space-y-2">
@@ -1302,24 +1365,27 @@ export default function DashboardPage({ onRerunQuery, apiBaseUrl = '', currentUs
                   return (
                     <div
                       key={u.id}
-                      onClick={() => setSelectedUser(u.username)}
-                      className={`p-3.5 rounded-xl border transition-all cursor-pointer flex items-center justify-between ${
+                      onClick={() => {
+                        setSelectedUser(u.username);
+                        setMobileChatView('list');
+                      }}
+                      className={`p-3.5 rounded-xl border transition-all cursor-pointer flex items-center justify-between group ${
                         isSelected
-                          ? 'bg-indigo-950/40 border-indigo-500 shadow-md shadow-indigo-950/50'
+                          ? 'bg-gradient-to-r from-indigo-950/70 to-indigo-900/40 border-indigo-500 shadow-lg shadow-indigo-950/50 ring-1 ring-indigo-500/30'
                           : 'bg-[#0b0f19] border-white/10 hover:border-white/20 hover:bg-white/[0.02]'
                       }`}
                     >
-                      <div className="flex items-center gap-3">
-                        <div className={`w-9 h-9 rounded-full flex items-center justify-center font-bold text-sm ${
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className={`w-9 h-9 rounded-xl flex items-center justify-center font-bold text-sm shrink-0 shadow-sm ${
                           u.role === 'admin'
                             ? 'bg-amber-500 text-black'
                             : 'bg-indigo-600 text-white'
                         }`}>
                           {u.username.charAt(0).toUpperCase()}
                         </div>
-                        <div>
-                          <div className="flex items-center gap-1.5">
-                            <span className="text-sm font-bold text-white">{u.username}</span>
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="text-sm font-bold text-white truncate">{u.username}</span>
                             <span className={`text-[9px] px-1.5 py-0.2 rounded font-mono font-bold uppercase ${
                               u.role === 'admin'
                                 ? 'bg-amber-500/20 text-amber-300'
@@ -1328,11 +1394,11 @@ export default function DashboardPage({ onRerunQuery, apiBaseUrl = '', currentUs
                               {u.role}
                             </span>
                           </div>
-                          <span className="text-[11px] text-slate-400 font-mono">{u.email}</span>
+                          <span className="text-[11px] text-slate-400 font-mono truncate block">{u.email}</span>
                         </div>
                       </div>
 
-                      <div className="text-right">
+                      <div className="text-right shrink-0 ml-2">
                         <div className="text-xs font-bold text-cyan-400 font-mono">
                           {u.total_tokens.toLocaleString()} tok
                         </div>
@@ -1365,214 +1431,464 @@ export default function DashboardPage({ onRerunQuery, apiBaseUrl = '', currentUs
 
             </div>
 
-            {/* Individual User Chat History Column */}
-            <div className="lg:col-span-2 space-y-4">
+            {/* Individual User Chat History Column: Side-by-Side Master-Detail */}
+            <div className="lg:col-span-8 xl:col-span-9 space-y-4">
               
-              <div className="flex items-center justify-between border-b border-white/10 pb-3">
-                <div className="flex items-center gap-2">
-                  <MessageSquare className="w-4 h-4 text-cyan-400" />
-                  <h3 className="text-sm font-bold text-white uppercase tracking-wider">
-                    Full Chat Audit for <span className="text-indigo-400 font-mono">@{selectedUser}</span>
-                  </h3>
+              {/* Header Bar for Selected User */}
+              <div className="p-4 rounded-2xl bg-[#0b0f19] border border-white/10 flex flex-wrap items-center justify-between gap-3 shadow-lg">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-500 to-cyan-500 flex items-center justify-center text-white font-bold text-sm shadow-md">
+                    <MessageSquare className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h3 className="text-sm font-bold text-white uppercase tracking-wider">
+                        Chat Provenance for <span className="text-indigo-400 font-mono">@{selectedUser}</span>
+                      </h3>
+                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 font-mono font-bold">
+                        {userChatHistory.length} turns
+                      </span>
+                    </div>
+                    <p className="text-xs text-slate-400">
+                      Select any conversation from the list to inspect turn-by-turn queries, AI answers, and chunk attribution side-by-side.
+                    </p>
+                  </div>
                 </div>
-                <span className="text-xs text-slate-400 font-mono">
-                  {userChatHistory.length} total recorded turns
-                </span>
+
+                {/* Search & Filter Toolbar */}
+                <div className="flex items-center gap-2 flex-wrap">
+                  <div className="relative">
+                    <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                    <input
+                      type="text"
+                      placeholder="Filter conversations..."
+                      value={chatSearchQuery}
+                      onChange={(e) => setChatSearchQuery(e.target.value)}
+                      className="pl-8 pr-3 py-1.5 bg-black/40 border border-white/10 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 font-mono w-48 sm:w-56"
+                    />
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => setChatRiskFilterOnly(!chatRiskFilterOnly)}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold border transition-all cursor-pointer ${
+                      chatRiskFilterOnly
+                        ? 'bg-rose-500/20 text-rose-300 border-rose-500/40 shadow-sm'
+                        : 'bg-white/[0.04] text-slate-400 border-white/10 hover:text-white hover:bg-white/[0.08]'
+                    }`}
+                  >
+                    <ShieldAlert className="w-3.5 h-3.5" />
+                    <span>Risk Only</span>
+                  </button>
+                </div>
               </div>
 
               {historyLoading ? (
-                <div className="p-12 text-center text-slate-400 text-xs flex items-center justify-center gap-2">
-                  <RotateCw className="w-4 h-4 animate-spin text-indigo-400" />
-                  <span>Loading chat history from PostgreSQL...</span>
+                <div className="p-16 rounded-2xl bg-[#0b0f19] border border-white/10 text-center text-slate-400 text-xs flex flex-col items-center justify-center gap-3">
+                  <RotateCw className="w-6 h-6 animate-spin text-indigo-400" />
+                  <span className="font-medium">Loading chat history from PostgreSQL...</span>
                 </div>
               ) : userChatHistory.length === 0 ? (
-                <div className="p-12 rounded-2xl bg-[#0b0f19] border border-white/10 text-center space-y-2">
-                  <p className="text-slate-300 text-sm font-semibold">No queries recorded yet for @{selectedUser}</p>
-                  <p className="text-slate-400 text-xs">
-                    Switch to this account in the Search page to ask questions and see their full provenance here.
+                <div className="p-16 rounded-2xl bg-[#0b0f19] border border-white/10 text-center space-y-3">
+                  <div className="w-12 h-12 rounded-2xl bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 flex items-center justify-center mx-auto">
+                    <MessageSquare className="w-6 h-6" />
+                  </div>
+                  <h4 className="text-white text-base font-semibold">No queries recorded yet for @{selectedUser}</h4>
+                  <p className="text-slate-400 text-xs max-w-md mx-auto">
+                    Switch to this account in the Search page to ask questions and review their multi-turn traces and citations here.
                   </p>
                 </div>
               ) : (
-                <div className="space-y-6">
-                  {/* Group messages by session_id to render multi-prompt conversational threads */}
-                  {(() => {
-                    const sessionMap = {};
-                    userChatHistory.forEach((msg) => {
-                      const sid = msg.session_id || 'default_session';
-                      if (!sessionMap[sid]) {
-                        sessionMap[sid] = {
-                          sessionId: sid,
-                          turns: [],
-                          totalTokens: 0,
-                          totalCost: 0,
-                          lastActivity: msg.created_at,
-                          hasRisk: false,
-                        };
-                      }
-                      sessionMap[sid].turns.push(msg);
-                      sessionMap[sid].totalTokens += (msg.total_tokens || 0);
-                      sessionMap[sid].totalCost += (msg.cost_usd || 0);
-                      if (msg.policy_risk_flag || msg.churn_risk_flag) {
-                        sessionMap[sid].hasRisk = true;
-                      }
-                    });
+                (() => {
+                  // Process session threads
+                  const sessionMap = {};
+                  userChatHistory.forEach((msg) => {
+                    const sid = msg.session_id || 'default_session';
+                    if (!sessionMap[sid]) {
+                      sessionMap[sid] = {
+                        sessionId: sid,
+                        turns: [],
+                        totalTokens: 0,
+                        totalCost: 0,
+                        lastActivity: msg.created_at,
+                        hasRisk: false,
+                      };
+                    }
+                    sessionMap[sid].turns.push(msg);
+                    sessionMap[sid].totalTokens += (msg.total_tokens || 0);
+                    sessionMap[sid].totalCost += (msg.cost_usd || 0);
+                    if (msg.policy_risk_flag || msg.churn_risk_flag) {
+                      sessionMap[sid].hasRisk = true;
+                    }
+                  });
 
-                    const sessionThreads = Object.values(sessionMap);
-                    sessionThreads.forEach((sess) => {
-                      sess.turns.sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
-                      sess.firstQuery = sess.turns[0]?.query || 'Conversation';
-                    });
-                    sessionThreads.sort((a, b) => new Date(b.lastActivity) - new Date(a.lastActivity));
+                  const allSessionThreads = Object.values(sessionMap);
+                  allSessionThreads.forEach((sess) => {
+                    sess.turns.sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+                    sess.firstQuery = sess.turns[0]?.query || 'Conversation';
+                  });
+                  allSessionThreads.sort((a, b) => new Date(b.lastActivity) - new Date(a.lastActivity));
 
-                    return sessionThreads.map((thread, tIdx) => (
-                      <div 
-                        key={thread.sessionId || tIdx}
-                        className="rounded-2xl bg-[#0b0f19] border border-white/10 overflow-hidden shadow-xl hover:border-indigo-500/30 transition-all space-y-4"
-                      >
-                        {/* Conversation Session Header */}
-                        <div className="px-5 py-3.5 bg-white/[0.02] border-b border-white/10 flex flex-wrap items-center justify-between gap-3">
-                          <div className="space-y-0.5">
-                            <div className="flex items-center gap-2">
-                              <span className="text-[10px] px-2 py-0.5 rounded bg-indigo-500/20 text-indigo-300 font-mono font-bold">
-                                Session: {thread.sessionId}
-                              </span>
-                              <span className="text-[10px] text-slate-400 font-mono">
-                                {thread.lastActivity?.split('T')[0]} {thread.lastActivity?.split('T')[1]?.slice(0, 5)}
-                              </span>
-                              {thread.hasRisk && (
-                                <span className="text-[10px] px-2 py-0.5 rounded bg-rose-500/20 text-rose-300 border border-rose-500/30 font-mono font-bold">
-                                  RISK SIGNAL IN THREAD
-                                </span>
-                              )}
-                            </div>
-                            <h4 className="text-sm font-bold text-white flex items-center gap-2">
-                              <MessageSquare className="w-4 h-4 text-cyan-400 shrink-0" />
-                              <span className="truncate">"{thread.firstQuery}"</span>
-                            </h4>
-                          </div>
+                  const filteredSessionThreads = allSessionThreads.filter((sess) => {
+                    if (chatRiskFilterOnly && !sess.hasRisk) return false;
+                    if (chatSearchQuery.trim()) {
+                      const q = chatSearchQuery.toLowerCase();
+                      const queryMatch = sess.turns.some(
+                        (t) => (t.query && t.query.toLowerCase().includes(q)) || (t.answer && t.answer.toLowerCase().includes(q))
+                      );
+                      const idMatch = sess.sessionId.toLowerCase().includes(q);
+                      return queryMatch || idMatch;
+                    }
+                    return true;
+                  });
 
-                          <div className="flex items-center gap-3 text-right text-xs font-mono">
-                            <span className="px-2.5 py-1 rounded-lg bg-white/[0.04] text-slate-300 font-semibold">
-                              💬 {thread.turns.length} {thread.turns.length === 1 ? 'Prompt' : 'Prompts'}
-                            </span>
-                            <span className="text-cyan-400 font-bold">
-                              {thread.totalTokens.toLocaleString()} tokens
-                            </span>
-                          </div>
+                  // Active selected thread (side way view)
+                  const activeSession = filteredSessionThreads.find((s) => s.sessionId === selectedSessionId)
+                    || filteredSessionThreads[0]
+                    || allSessionThreads.find((s) => s.sessionId === selectedSessionId)
+                    || allSessionThreads[0]
+                    || null;
+
+                  return (
+                    <div className="grid grid-cols-1 md:grid-cols-12 gap-5 items-start">
+                      
+                      {/* Left: Interactive List of Conversations */}
+                      <div className={`md:col-span-5 lg:col-span-5 xl:col-span-4 space-y-3 ${
+                        mobileChatView === 'chat' ? 'hidden md:block' : 'block'
+                      }`}>
+                        <div className="flex items-center justify-between text-xs font-semibold text-slate-300 px-1">
+                          <span className="uppercase tracking-wider flex items-center gap-1.5 text-slate-400">
+                            <Layers className="w-3.5 h-3.5 text-indigo-400" />
+                            <span>Conversations ({filteredSessionThreads.length})</span>
+                          </span>
+                          <span className="text-[11px] text-slate-500 font-mono">
+                            {allSessionThreads.length} total
+                          </span>
                         </div>
 
-                        {/* Turn-by-turn prompts and responses in this session */}
-                        <div className="p-5 space-y-5">
-                          {thread.turns.map((item, turnIdx) => {
-                            const isExpanded = expandedMessageId === item.id;
-                            const chunks = item.chunks_sent || [];
-                            const citations = item.citations || [];
+                        {filteredSessionThreads.length === 0 ? (
+                          <div className="p-8 rounded-xl bg-[#0b0f19] border border-white/10 text-center text-xs text-slate-400 space-y-1">
+                            <p className="font-semibold text-slate-300">No matching conversations</p>
+                            <p className="text-[11px] text-slate-500">Try adjusting your filter or search query.</p>
+                          </div>
+                        ) : (
+                          <div className="space-y-2 max-h-[740px] overflow-y-auto pr-1">
+                            {filteredSessionThreads.map((thread) => {
+                              const isSelected = activeSession?.sessionId === thread.sessionId;
+                              const dateStr = thread.lastActivity 
+                                ? `${thread.lastActivity.split('T')[0]} ${thread.lastActivity.split('T')[1]?.slice(0, 5) || ''}`
+                                : 'Recent';
 
-                            return (
-                              <div key={item.id} className="space-y-3 relative">
-                                
-                                {turnIdx > 0 && (
-                                  <div className="w-full border-t border-white/5 my-4" />
-                                )}
+                              return (
+                                <div
+                                  key={thread.sessionId}
+                                  onClick={() => {
+                                    setSelectedSessionId(thread.sessionId);
+                                    setMobileChatView('chat');
+                                  }}
+                                  className={`p-3.5 rounded-xl border transition-all cursor-pointer relative group text-left ${
+                                    isSelected
+                                      ? 'bg-gradient-to-r from-indigo-950/70 via-indigo-900/40 to-[#0c1120] border-indigo-500 shadow-md shadow-indigo-950/40 ring-1 ring-indigo-500/30'
+                                      : 'bg-[#0b0f19] border-white/10 hover:border-white/20 hover:bg-white/[0.02]'
+                                  }`}
+                                >
+                                  {/* Left accent bar for active */}
+                                  {isSelected && (
+                                    <div className="absolute left-0 top-2 bottom-2 w-1 bg-gradient-to-b from-indigo-400 to-cyan-400 rounded-r" />
+                                  )}
 
-                                {/* Prompt Header & Number */}
-                                <div className="flex items-center justify-between text-xs">
-                                  <div className="flex items-center gap-2">
-                                    <span className="w-5 h-5 rounded-full bg-white/10 text-white font-mono font-bold text-[10px] flex items-center justify-center">
-                                      {turnIdx + 1}
-                                    </span>
-                                    <span className="text-slate-400 font-semibold">User Prompt:</span>
-                                    <span className="text-[10px] text-slate-500 font-mono">{item.trace_id}</span>
-                                  </div>
-
-                                  <div className="text-right text-[11px] font-mono text-emerald-400">
-                                    {item.total_latency_ms}ms &bull; {item.total_tokens} tokens
-                                  </div>
-                                </div>
-
-                                {/* User Question Box */}
-                                <div className="p-3.5 rounded-xl bg-indigo-950/30 border border-indigo-500/30 text-white text-xs font-medium">
-                                  {item.query}
-                                </div>
-
-                                {/* Assistant Generated Response */}
-                                <div className="p-4 rounded-xl bg-black/40 border border-white/5 space-y-3 text-xs text-slate-300 font-sans leading-relaxed">
-                                  <div className="text-slate-200">
-                                    {item.answer}
-                                  </div>
-
-                                  {/* Citations & Chunks Inspection Toggle */}
-                                  <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-white/5 text-xs">
-                                    <div className="flex flex-wrap items-center gap-1.5 text-slate-400 text-[11px]">
-                                      <span className="font-semibold text-slate-300">Citations:</span>
-                                      {citations.length > 0 ? (
-                                        citations.map((c, i) => (
-                                          <span key={i} className="px-1.5 py-0.5 rounded bg-white/[0.05] text-[10px] text-cyan-300 font-mono">
-                                            {c.document} {c.page ? `p.${c.page}` : ''}
-                                          </span>
-                                        ))
-                                      ) : (
-                                        <span className="text-[11px] text-slate-500 italic">No citations</span>
-                                      )}
+                                  <div className="space-y-2 pl-1">
+                                    <div className="flex items-center justify-between gap-2">
+                                      <span className="text-[10px] px-2 py-0.5 rounded bg-white/[0.06] text-slate-300 font-mono font-medium truncate max-w-[140px]">
+                                        {thread.sessionId}
+                                      </span>
+                                      <span className="text-[10px] text-slate-400 font-mono shrink-0">
+                                        {dateStr}
+                                      </span>
                                     </div>
 
+                                    <h4 className="text-xs font-semibold text-white group-hover:text-indigo-300 transition-colors line-clamp-2 leading-relaxed">
+                                      "{thread.firstQuery}"
+                                    </h4>
+
+                                    <div className="flex items-center justify-between pt-1 border-t border-white/5 text-[10px] font-mono">
+                                      <div className="flex items-center gap-2">
+                                        <span className="text-slate-400">
+                                          💬 {thread.turns.length} {thread.turns.length === 1 ? 'prompt' : 'prompts'}
+                                        </span>
+                                        <span className="text-slate-600">&bull;</span>
+                                        <span className="text-cyan-400 font-semibold">
+                                          {thread.totalTokens.toLocaleString()}t
+                                        </span>
+                                      </div>
+
+                                      <div className="flex items-center gap-1.5">
+                                        {thread.hasRisk && (
+                                          <span className="px-1.5 py-0.2 rounded bg-rose-500/20 text-rose-300 border border-rose-500/30 font-bold">
+                                            RISK
+                                          </span>
+                                        )}
+                                        <ChevronRight className={`w-3.5 h-3.5 transition-transform ${
+                                          isSelected ? 'text-indigo-400 translate-x-0.5' : 'text-slate-500 group-hover:text-slate-300'
+                                        }`} />
+                                      </div>
+                                    </div>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Right: Selected Chat View (Side Way) */}
+                      <div className={`md:col-span-7 lg:col-span-7 xl:col-span-8 space-y-3 ${
+                        mobileChatView === 'list' ? 'hidden md:block' : 'block'
+                      }`}>
+                        
+                        {activeSession ? (
+                          <div className="rounded-2xl bg-[#080d19] border border-white/10 shadow-2xl overflow-hidden flex flex-col">
+                            
+                            {/* Chat Header */}
+                            <div className="p-4 bg-white/[0.02] border-b border-white/10 flex flex-wrap items-center justify-between gap-3 shrink-0">
+                              <div className="flex items-center gap-2">
+                                {/* Mobile Back Button */}
+                                <button
+                                  type="button"
+                                  onClick={() => setMobileChatView('list')}
+                                  className="md:hidden p-1.5 rounded-lg bg-white/5 text-slate-300 hover:text-white mr-1 cursor-pointer"
+                                >
+                                  <ArrowLeft className="w-4 h-4" />
+                                </button>
+                                
+                                <div className="space-y-0.5">
+                                  <div className="flex items-center gap-2 flex-wrap">
+                                    <span className="text-xs font-mono font-bold text-indigo-300 flex items-center gap-1.5">
+                                      <span>Session:</span>
+                                      <span className="text-white">{activeSession.sessionId}</span>
+                                    </span>
                                     <button
                                       type="button"
-                                      onClick={() => setExpandedMessageId(isExpanded ? null : item.id)}
-                                      className="flex items-center gap-1 text-indigo-400 hover:text-indigo-300 text-xs font-semibold cursor-pointer"
+                                      onClick={() => handleCopyAuditText(activeSession.sessionId, activeSession.sessionId)}
+                                      title="Copy Session ID"
+                                      className="p-1 rounded text-slate-400 hover:text-white hover:bg-white/5 transition-colors cursor-pointer"
                                     >
-                                      <span>{isExpanded ? 'Hide' : 'Inspect'} Chunks ({chunks.length})</span>
-                                      {isExpanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
-                                    </button>
-                                  </div>
-
-                                  {/* Collapsible Chunks Sent to LLM */}
-                                  {isExpanded && (
-                                    <div className="mt-3 p-3.5 rounded-xl bg-[#07090e] border border-white/10 space-y-2 animate-in fade-in duration-150">
-                                      <div className="text-[11px] font-bold text-slate-300 uppercase tracking-wider mb-1">
-                                        Retrieved Chunks Context:
-                                      </div>
-                                      {chunks.length === 0 ? (
-                                        <p className="text-xs text-slate-500 italic">No chunk data stored for this turn.</p>
+                                      {copiedAuditText === activeSession.sessionId ? (
+                                        <Check className="w-3.5 h-3.5 text-emerald-400" />
                                       ) : (
-                                        <div className="space-y-2">
-                                          {chunks.map((chk, cIdx) => (
-                                            <div key={cIdx} className="p-2.5 rounded-lg bg-white/[0.02] border border-white/5 space-y-1">
-                                              <div className="flex items-center justify-between text-[11px] font-mono">
-                                                <span className="text-indigo-400 font-semibold">
-                                                  [{cIdx + 1}] {chk.source || 'doc'} {chk.page ? `(p.${chk.page})` : ''}
-                                                </span>
-                                                <span className="text-emerald-400">
-                                                  Score: {chk.score ? `${Math.round(chk.score * 100)}%` : 'N/A'}
-                                                </span>
-                                              </div>
-                                              <p className="text-[11px] text-slate-400 line-clamp-2 font-mono">
-                                                {chk.text || 'No text snippet'}
-                                              </p>
-                                            </div>
-                                          ))}
-                                        </div>
+                                        <Copy className="w-3.5 h-3.5" />
                                       )}
+                                    </button>
+                                    {activeSession.hasRisk && (
+                                      <span className="text-[10px] px-2 py-0.5 rounded bg-rose-500/20 text-rose-300 border border-rose-500/30 font-mono font-bold">
+                                        RISK DETECTED
+                                      </span>
+                                    )}
+                                  </div>
+                                  <p className="text-[11px] text-slate-400 font-mono">
+                                    Last active: {activeSession.lastActivity?.replace('T', ' ').slice(0, 16)}
+                                  </p>
+                                </div>
+                              </div>
 
-                                      <div className="pt-2 border-t border-white/5 grid grid-cols-4 gap-2 text-[10px] font-mono text-center text-slate-400">
-                                        <div>Embed: <span className="text-white">{item.embed_latency_ms}ms</span></div>
-                                        <div>Search: <span className="text-white">{item.search_latency_ms}ms</span></div>
-                                        <div>Rerank: <span className="text-white">{item.rerank_latency_ms}ms</span></div>
-                                        <div>LLM: <span className="text-white">{item.generation_latency_ms}ms</span></div>
+                              <div className="flex items-center gap-3 text-xs font-mono">
+                                <span className="px-2.5 py-1 rounded-lg bg-white/[0.04] text-slate-300">
+                                  💬 {activeSession.turns.length} {activeSession.turns.length === 1 ? 'Prompt' : 'Prompts'}
+                                </span>
+                                <span className="px-2.5 py-1 rounded-lg bg-cyan-500/10 border border-cyan-500/20 text-cyan-300 font-bold">
+                                  {activeSession.totalTokens.toLocaleString()} tok
+                                </span>
+                              </div>
+                            </div>
+
+                            {/* Chat Message Stream */}
+                            <div className="p-4 sm:p-5 space-y-6 max-h-[660px] overflow-y-auto">
+                              {activeSession.turns.map((item, turnIdx) => {
+                                const isExpanded = expandedMessageId === item.id;
+                                const chunks = item.chunks_sent || [];
+                                const citations = item.citations || [];
+
+                                return (
+                                  <div key={item.id} className="space-y-3.5 relative">
+                                    
+                                    {turnIdx > 0 && (
+                                      <div className="w-full border-t border-white/5 my-4" />
+                                    )}
+
+                                    {/* Turn Sub-Header */}
+                                    <div className="flex items-center justify-between text-xs">
+                                      <div className="flex items-center gap-2">
+                                        <span className="w-5 h-5 rounded-full bg-indigo-600/30 text-indigo-300 border border-indigo-500/40 font-mono font-bold text-[10px] flex items-center justify-center">
+                                          {turnIdx + 1}
+                                        </span>
+                                        <span className="text-slate-300 font-semibold text-[11px]">Prompt #{turnIdx + 1}</span>
+                                        <span className="text-[10px] text-slate-500 font-mono truncate max-w-[120px]">{item.trace_id}</span>
+                                      </div>
+
+                                      <div className="flex items-center gap-2 text-right text-[11px] font-mono">
+                                        <span className="text-emerald-400 font-bold">{item.total_latency_ms}ms</span>
+                                        <span className="text-slate-600">&bull;</span>
+                                        <span className="text-slate-400">{item.total_tokens} tok</span>
                                       </div>
                                     </div>
-                                  )}
-                                </div>
 
-                              </div>
-                            );
-                          })}
-                        </div>
+                                    {/* User Question */}
+                                    <div className="p-4 rounded-xl bg-gradient-to-r from-indigo-950/40 to-slate-900/60 border border-indigo-500/30 text-white text-xs font-medium space-y-1.5 shadow-sm">
+                                      <div className="flex items-center justify-between text-[10px] text-indigo-300 font-mono uppercase tracking-wider font-semibold">
+                                        <span className="flex items-center gap-1.5">
+                                          <User className="w-3.5 h-3.5" />
+                                          <span>User Prompt</span>
+                                        </span>
+                                        <div className="flex items-center gap-2">
+                                          <button
+                                            type="button"
+                                            onClick={() => handleCopyAuditText(item.query, `q_${item.id}`)}
+                                            className="text-slate-400 hover:text-white transition-colors cursor-pointer"
+                                            title="Copy prompt"
+                                          >
+                                            {copiedAuditText === `q_${item.id}` ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
+                                          </button>
+                                          {onRerunQuery && (
+                                            <button
+                                              type="button"
+                                              onClick={() => onRerunQuery(item.query)}
+                                              className="text-indigo-400 hover:text-indigo-300 transition-colors cursor-pointer"
+                                              title="Rerun this query in Search"
+                                            >
+                                              <ArrowRight className="w-3 h-3" />
+                                            </button>
+                                          )}
+                                        </div>
+                                      </div>
+                                      <p className="text-slate-100 font-sans text-sm leading-relaxed whitespace-pre-wrap">{item.query}</p>
+                                    </div>
+
+                                    {/* Assistant Generated Response */}
+                                    <div className="p-4 sm:p-5 rounded-xl bg-black/50 border border-white/10 space-y-3.5 text-xs text-slate-300 font-sans leading-relaxed shadow-md">
+                                      <div className="flex items-center justify-between text-[11px] font-semibold text-cyan-400 border-b border-white/5 pb-2">
+                                        <span className="flex items-center gap-1.5">
+                                          <Bot className="w-4 h-4 text-cyan-400" />
+                                          <span>AI Grounded Response</span>
+                                        </span>
+                                        <button
+                                          type="button"
+                                          onClick={() => handleCopyAuditText(item.answer, `a_${item.id}`)}
+                                          className="flex items-center gap-1 text-[10px] font-mono text-slate-400 hover:text-white transition-colors cursor-pointer"
+                                        >
+                                          {copiedAuditText === `a_${item.id}` ? (
+                                            <>
+                                              <Check className="w-3 h-3 text-emerald-400" />
+                                              <span className="text-emerald-400">Copied</span>
+                                            </>
+                                          ) : (
+                                            <>
+                                              <Copy className="w-3 h-3" />
+                                              <span>Copy Answer</span>
+                                            </>
+                                          )}
+                                        </button>
+                                      </div>
+
+                                      {/* Markdown Content */}
+                                      <div 
+                                        className="ragops-markdown max-w-none text-slate-200"
+                                        dangerouslySetInnerHTML={{ __html: marked.parse(item.answer || '') }}
+                                      />
+
+                                      {/* Citations & Chunks Inspection Toggle */}
+                                      <div className="flex flex-wrap items-center justify-between gap-2 pt-3 border-t border-white/5 text-xs">
+                                        <div className="flex flex-wrap items-center gap-1.5 text-slate-400 text-[11px]">
+                                          <span className="font-semibold text-slate-300">Citations:</span>
+                                          {citations.length > 0 ? (
+                                            citations.map((c, i) => (
+                                              <span 
+                                                key={i} 
+                                                onClick={() => onChunkClick && onChunkClick(c)}
+                                                className={`px-2 py-0.5 rounded bg-white/[0.05] text-[10px] text-cyan-300 font-mono border border-white/5 ${
+                                                  onChunkClick ? 'hover:border-cyan-500/40 hover:bg-cyan-500/10 cursor-pointer' : ''
+                                                }`}
+                                              >
+                                                {c.document} {c.page ? `p.${c.page}` : ''}
+                                              </span>
+                                            ))
+                                          ) : (
+                                            <span className="text-[11px] text-slate-500 italic">No citations</span>
+                                          )}
+                                        </div>
+
+                                        <button
+                                          type="button"
+                                          onClick={() => setExpandedMessageId(isExpanded ? null : item.id)}
+                                          className="flex items-center gap-1 text-indigo-400 hover:text-indigo-300 text-xs font-semibold cursor-pointer py-1 px-2 rounded-lg hover:bg-indigo-500/10 transition-colors"
+                                        >
+                                          <span>{isExpanded ? 'Hide' : 'Inspect'} Chunks ({chunks.length})</span>
+                                          {isExpanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                                        </button>
+                                      </div>
+
+                                      {/* Collapsible Chunks Sent to LLM */}
+                                      {isExpanded && (
+                                        <div className="mt-3 p-3.5 rounded-xl bg-[#07090e] border border-white/10 space-y-2.5 animate-in fade-in duration-150">
+                                          <div className="text-[11px] font-bold text-slate-300 uppercase tracking-wider mb-1 flex items-center justify-between">
+                                            <span>Retrieved Grounding Chunks Context:</span>
+                                            <span className="text-[10px] font-mono text-slate-500">{chunks.length} chunks</span>
+                                          </div>
+                                          {chunks.length === 0 ? (
+                                            <p className="text-xs text-slate-500 italic">No chunk data stored for this turn.</p>
+                                          ) : (
+                                            <div className="space-y-2">
+                                              {chunks.map((chk, cIdx) => (
+                                                <div 
+                                                  key={cIdx} 
+                                                  onClick={() => onChunkClick && onChunkClick(chk)}
+                                                  className={`p-3 rounded-lg bg-white/[0.02] border border-white/5 space-y-1.5 ${
+                                                    onChunkClick ? 'hover:border-cyan-500/40 hover:bg-cyan-500/5 cursor-pointer' : ''
+                                                  }`}
+                                                >
+                                                  <div className="flex items-center justify-between text-[11px] font-mono">
+                                                    <span className="text-indigo-400 font-semibold truncate max-w-[280px]">
+                                                      [{cIdx + 1}] {chk.source || 'doc'} {chk.page ? `(p.${chk.page})` : ''}
+                                                    </span>
+                                                    <span className="text-emerald-400 font-bold shrink-0">
+                                                      Score: {chk.score ? `${Math.round(chk.score * 100)}%` : 'Grounded'}
+                                                    </span>
+                                                  </div>
+                                                  <p className="text-[11px] text-slate-400 line-clamp-3 font-mono leading-relaxed">
+                                                    {chk.text || 'No text snippet'}
+                                                  </p>
+                                                </div>
+                                              ))}
+                                            </div>
+                                          )}
+
+                                          <div className="pt-2 border-t border-white/5 grid grid-cols-4 gap-2 text-[10px] font-mono text-center text-slate-400">
+                                            <div className="p-1 rounded bg-white/[0.02]">Embed: <span className="text-white font-bold">{item.embed_latency_ms}ms</span></div>
+                                            <div className="p-1 rounded bg-white/[0.02]">Search: <span className="text-white font-bold">{item.search_latency_ms}ms</span></div>
+                                            <div className="p-1 rounded bg-white/[0.02]">Rerank: <span className="text-white font-bold">{item.rerank_latency_ms}ms</span></div>
+                                            <div className="p-1 rounded bg-white/[0.02]">LLM: <span className="text-white font-bold">{item.generation_latency_ms}ms</span></div>
+                                          </div>
+                                        </div>
+                                      )}
+                                    </div>
+
+                                  </div>
+                                );
+                              })}
+                            </div>
+
+                          </div>
+                        ) : (
+                          <div className="p-16 rounded-2xl bg-[#080d19] border border-white/10 text-center space-y-2">
+                            <p className="text-slate-300 text-sm font-semibold">Select a conversation</p>
+                            <p className="text-slate-500 text-xs">Choose any conversation from the list to view its chat provenance.</p>
+                          </div>
+                        )}
 
                       </div>
-                    ));
-                  })()}
-                </div>
+
+                    </div>
+                  );
+                })()
               )}
 
             </div>
@@ -1588,102 +1904,341 @@ export default function DashboardPage({ onRerunQuery, apiBaseUrl = '', currentUs
       {activeTab === 'traces' && (
         <div className="space-y-6 animate-in fade-in duration-150">
           
-          <div className="flex items-center justify-between border-b border-white/10 pb-4">
-            <div>
-              <h3 className="text-base font-bold text-white flex items-center gap-2">
-                <Search className="w-5 h-5 text-indigo-400" />
-                <span>Distributed Request Tracing &amp; Retrieval Inspector</span>
-              </h3>
-              <p className="text-xs text-slate-400">
-                Inspect every query hop: embedding inference, vector retrieval in ChromaDB, cross-encoder reranking, and generation.
-              </p>
+          {/* Header & Controls Toolbar */}
+          <div className="p-5 rounded-2xl bg-[#0b0f19] border border-white/10 space-y-4 shadow-xl">
+            <div className="flex flex-wrap items-center justify-between gap-4">
+              <div>
+                <h3 className="text-base font-bold text-white flex items-center gap-2">
+                  <Search className="w-5 h-5 text-indigo-400" />
+                  <span>Distributed Request Tracing &amp; Retrieval Inspector</span>
+                </h3>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  Inspect query execution hops, token telemetry, and click any trace to expand its AI response &amp; latency waterfall.
+                </p>
+              </div>
+
+              {/* Action Buttons: Expand All & Collapse All */}
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => handleExpandAllTraces(recentLogs)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] text-slate-300 border border-white/10 text-xs font-semibold cursor-pointer transition-colors"
+                >
+                  <Maximize2 className="w-3.5 h-3.5" />
+                  <span>Expand All</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={handleCollapseAllTraces}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] text-slate-300 border border-white/10 text-xs font-semibold cursor-pointer transition-colors"
+                >
+                  <Minimize2 className="w-3.5 h-3.5" />
+                  <span>Collapse All</span>
+                </button>
+              </div>
             </div>
-            
-            <button
-              onClick={() => setRiskFilter(!riskFilter)}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all cursor-pointer ${
-                riskFilter
-                  ? 'bg-rose-500/20 text-rose-300 border-rose-500/40'
-                  : 'bg-white/[0.04] text-slate-300 border-white/10 hover:bg-white/[0.08]'
-              }`}
-            >
-              <Filter className="w-3.5 h-3.5" />
-              <span>{riskFilter ? 'Showing Risk Only' : 'Filter Risk Signals'}</span>
-            </button>
+
+            {/* Filter and Search Bar */}
+            <div className="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-white/5">
+              <div className="flex items-center gap-2 flex-wrap">
+                <div className="relative">
+                  <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="text"
+                    placeholder="Search traces by query, @user, or trace ID..."
+                    value={traceSearchQuery}
+                    onChange={(e) => setTraceSearchQuery(e.target.value)}
+                    className="pl-8 pr-3 py-1.5 bg-black/40 border border-white/10 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 font-mono w-56 sm:w-72"
+                  />
+                </div>
+
+                {/* Filter Pills */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setTraceLatencyFilter('all');
+                    setRiskFilter(false);
+                  }}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-semibold border transition-all cursor-pointer ${
+                    traceLatencyFilter === 'all' && !riskFilter
+                      ? 'bg-indigo-600 text-white border-indigo-500 shadow-sm'
+                      : 'bg-white/[0.04] text-slate-400 border-white/10 hover:text-white'
+                  }`}
+                >
+                  All ({recentLogs.length})
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setRiskFilter(!riskFilter);
+                  }}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold border transition-all cursor-pointer ${
+                    riskFilter
+                      ? 'bg-rose-500/20 text-rose-300 border-rose-500/40 shadow-sm'
+                      : 'bg-white/[0.04] text-slate-400 border-white/10 hover:text-white'
+                  }`}
+                >
+                  <ShieldAlert className="w-3.5 h-3.5" />
+                  <span>Risk Signals</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setTraceLatencyFilter(traceLatencyFilter === 'slow' ? 'all' : 'slow')}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold border transition-all cursor-pointer ${
+                    traceLatencyFilter === 'slow'
+                      ? 'bg-amber-500/20 text-amber-300 border-amber-500/40 shadow-sm'
+                      : 'bg-white/[0.04] text-slate-400 border-white/10 hover:text-white'
+                  }`}
+                >
+                  <Clock className="w-3.5 h-3.5" />
+                  <span>Slow (&gt;1.5s)</span>
+                </button>
+              </div>
+
+              <div className="text-xs text-slate-400 font-mono">
+                Showing {
+                  recentLogs.filter((log) => {
+                    if (riskFilter && !log.policy_risk_flag && !log.churn_risk_flag) return false;
+                    if (traceLatencyFilter === 'slow' && (log.total_latency_ms || 0) < 1500) return false;
+                    if (traceSearchQuery.trim()) {
+                      const q = traceSearchQuery.toLowerCase();
+                      const queryMatch = log.query && log.query.toLowerCase().includes(q);
+                      const userMatch = log.username && log.username.toLowerCase().includes(q);
+                      const idMatch = log.trace_id && log.trace_id.toLowerCase().includes(q);
+                      const ansMatch = log.answer && log.answer.toLowerCase().includes(q);
+                      return queryMatch || userMatch || idMatch || ansMatch;
+                    }
+                    return true;
+                  }).length
+                } of {recentLogs.length} traces
+              </div>
+            </div>
           </div>
 
+          {/* Compact Space-Saving Trace Cards with Click-to-Expand AI Response */}
           <div className="space-y-3">
             {recentLogs
-              .filter((log) => !riskFilter || log.policy_risk_flag || log.churn_risk_flag)
-              .map((log) => (
-                <div 
-                  key={log.id}
-                  className="p-4 rounded-xl bg-[#0b0f19] border border-white/10 hover:border-indigo-500/30 transition-all space-y-3"
-                >
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <div className="flex items-center gap-2 text-xs">
-                      <span className="font-mono text-indigo-300 font-semibold">{log.trace_id}</span>
-                      <span className="text-slate-500">&bull;</span>
-                      <span className="px-2 py-0.5 rounded bg-white/[0.06] font-mono text-slate-300 font-semibold">
-                        @{log.username}
-                      </span>
-                      <span className="text-slate-500">&bull;</span>
-                      <span className="text-slate-400 font-mono text-[11px]">{log.created_at}</span>
+              .filter((log) => {
+                if (riskFilter && !log.policy_risk_flag && !log.churn_risk_flag) return false;
+                if (traceLatencyFilter === 'slow' && (log.total_latency_ms || 0) < 1500) return false;
+                if (traceSearchQuery.trim()) {
+                  const q = traceSearchQuery.toLowerCase();
+                  const queryMatch = log.query && log.query.toLowerCase().includes(q);
+                  const userMatch = log.username && log.username.toLowerCase().includes(q);
+                  const idMatch = log.trace_id && log.trace_id.toLowerCase().includes(q);
+                  const ansMatch = log.answer && log.answer.toLowerCase().includes(q);
+                  return queryMatch || userMatch || idMatch || ansMatch;
+                }
+                return true;
+              })
+              .map((log) => {
+                const logKey = log.id || log.trace_id;
+                const isExpanded = Boolean(expandedTraceIds[logKey]);
+
+                // Latency color code
+                const latency = log.total_latency_ms || 0;
+                const latencyBadgeColor = latency < 1000 
+                  ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30'
+                  : latency < 2500 
+                    ? 'bg-amber-500/15 text-amber-300 border-amber-500/30'
+                    : 'bg-rose-500/15 text-rose-300 border-rose-500/30';
+
+                return (
+                  <div 
+                    key={logKey}
+                    className={`rounded-xl border transition-all overflow-hidden ${
+                      isExpanded
+                        ? 'bg-[#0d1222] border-indigo-500/50 shadow-xl ring-1 ring-indigo-500/20'
+                        : 'bg-[#0b0f19] border-white/10 hover:border-indigo-500/30 hover:bg-white/[0.01]'
+                    }`}
+                  >
+                    {/* Compact Card Header: Always Visible ("Show necessary info above") */}
+                    <div 
+                      onClick={() => toggleTraceExpand(logKey)}
+                      className="p-4 cursor-pointer select-none space-y-2.5"
+                    >
+                      {/* Top Row: Metadata badges */}
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div className="flex flex-wrap items-center gap-2 text-xs">
+                          <span className="font-mono text-indigo-300 font-semibold flex items-center gap-1">
+                            <span>{log.trace_id}</span>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleCopyTraceText(log.trace_id, log.trace_id);
+                              }}
+                              className="p-0.5 text-slate-500 hover:text-white transition-colors cursor-pointer"
+                              title="Copy trace ID"
+                            >
+                              {copiedTraceText === log.trace_id ? (
+                                <Check className="w-3 h-3 text-emerald-400" />
+                              ) : (
+                                <Copy className="w-3 h-3" />
+                              )}
+                            </button>
+                          </span>
+                          <span className="text-slate-600">&bull;</span>
+                          <span className="px-2 py-0.5 rounded bg-white/[0.06] font-mono text-slate-300 font-semibold flex items-center gap-1">
+                            <User className="w-3 h-3 text-slate-400" />
+                            <span>@{log.username}</span>
+                          </span>
+                          <span className="text-slate-600">&bull;</span>
+                          <span className="text-slate-400 font-mono text-[11px]">{log.created_at}</span>
+                          
+                          {/* Risk Badges */}
+                          {log.policy_risk_flag && (
+                            <span className="px-2 py-0.5 rounded bg-rose-500/20 text-rose-300 border border-rose-500/30 text-[10px] font-mono font-bold">
+                              POLICY RISK
+                            </span>
+                          )}
+                          {log.churn_risk_flag && (
+                            <span className="px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30 text-[10px] font-mono font-bold">
+                              CHURN RISK
+                            </span>
+                          )}
+                        </div>
+
+                        {/* Latency and Token Badges */}
+                        <div className="flex items-center gap-2.5 text-xs font-mono">
+                          <span className="text-slate-400 hidden sm:inline">
+                            In: {log.input_tokens || 0}t &bull; Out: {log.output_tokens || 0}t
+                          </span>
+                          <span className={`px-2.5 py-0.5 rounded-full border text-xs font-bold font-mono ${latencyBadgeColor}`}>
+                            {latency}ms
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Bottom Row: Query & Expand Toggle Button */}
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="text-sm font-semibold text-white truncate max-w-3xl flex items-center gap-2">
+                          <Search className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
+                          <span className="truncate">"{log.query}"</span>
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            toggleTraceExpand(logKey);
+                          }}
+                          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all shrink-0 cursor-pointer ${
+                            isExpanded
+                              ? 'bg-indigo-600/30 text-indigo-300 border-indigo-500/40'
+                              : 'bg-white/[0.04] text-slate-300 border-white/10 hover:bg-white/[0.08] hover:text-white'
+                          }`}
+                        >
+                          <span>{isExpanded ? 'Hide Response' : 'View AI Response'}</span>
+                          {isExpanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                        </button>
+                      </div>
                     </div>
 
-                    <div className="flex items-center gap-3 text-xs font-mono">
-                      <span className="text-slate-400">In: {log.input_tokens}t</span>
-                      <span className="text-slate-400">Out: {log.output_tokens}t</span>
-                      <span className="text-emerald-400 font-bold">{log.total_latency_ms}ms</span>
-                    </div>
+                    {/* Collapsible Area: "After click show response generate by ai so like save space" */}
+                    {isExpanded && (
+                      <div className="px-4 pb-4 pt-1 space-y-4 border-t border-white/5 animate-in fade-in duration-150">
+                        
+                        {/* AI Generated Response */}
+                        <div className="p-4 rounded-xl bg-black/50 border border-white/10 space-y-2.5 text-xs text-slate-300 font-sans shadow-inner">
+                          <div className="flex items-center justify-between text-[11px] font-semibold text-cyan-400 border-b border-white/5 pb-2">
+                            <span className="flex items-center gap-1.5">
+                              <Bot className="w-4 h-4 text-cyan-400" />
+                              <span>AI Generated Grounded Response:</span>
+                            </span>
+                            <div className="flex items-center gap-2">
+                              <button
+                                type="button"
+                                onClick={() => handleCopyTraceText(log.answer, `ans_${logKey}`)}
+                                className="flex items-center gap-1 text-[10px] font-mono text-slate-400 hover:text-white transition-colors cursor-pointer"
+                              >
+                                {copiedTraceText === `ans_${logKey}` ? (
+                                  <>
+                                    <Check className="w-3 h-3 text-emerald-400" />
+                                    <span className="text-emerald-400">Copied</span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <Copy className="w-3 h-3" />
+                                    <span>Copy Answer</span>
+                                  </>
+                                )}
+                              </button>
+                              {onRerunQuery && (
+                                <button
+                                  type="button"
+                                  onClick={() => onRerunQuery(log.query)}
+                                  className="flex items-center gap-1 text-[10px] font-mono text-indigo-400 hover:text-indigo-300 transition-colors cursor-pointer"
+                                >
+                                  <ArrowRight className="w-3 h-3" />
+                                  <span>Rerun Query</span>
+                                </button>
+                              )}
+                            </div>
+                          </div>
+
+                          <div 
+                            className="ragops-markdown max-w-none text-slate-200"
+                            dangerouslySetInnerHTML={{ __html: marked.parse(log.answer || 'No response recorded.') }}
+                          />
+                        </div>
+
+                        {/* Latency Waterfall Bar */}
+                        <div className="space-y-1.5 p-3 rounded-xl bg-white/[0.02] border border-white/5">
+                          <div className="flex items-center justify-between text-[10px] font-mono text-slate-400">
+                            <span className="font-semibold text-slate-300">Latency Breakdown (Waterfall)</span>
+                            <span className="text-emerald-400 font-bold">Total: {log.total_latency_ms}ms</span>
+                          </div>
+                          <div className="h-2 w-full rounded-full bg-white/5 overflow-hidden flex">
+                            <div 
+                              title={`Embedding: ${log.embed_latency_ms}ms`}
+                              style={{ width: `${Math.max(((log.embed_latency_ms || 0) / (log.total_latency_ms || 1)) * 100, 5)}%` }}
+                              className="bg-purple-500 h-full"
+                            />
+                            <div 
+                              title={`Vector Search: ${log.search_latency_ms}ms`}
+                              style={{ width: `${Math.max(((log.search_latency_ms || 0) / (log.total_latency_ms || 1)) * 100, 5)}%` }}
+                              className="bg-blue-500 h-full"
+                            />
+                            <div 
+                              title={`Reranker: ${log.rerank_latency_ms}ms`}
+                              style={{ width: `${Math.max(((log.rerank_latency_ms || 0) / (log.total_latency_ms || 1)) * 100, 5)}%` }}
+                              className="bg-cyan-500 h-full"
+                            />
+                            <div 
+                              title={`LLM Generation: ${log.generation_latency_ms}ms`}
+                              style={{ width: `${Math.max(((log.generation_latency_ms || 0) / (log.total_latency_ms || 1)) * 100, 20)}%` }}
+                              className="bg-emerald-500 h-full"
+                            />
+                          </div>
+                          <div className="flex flex-wrap items-center gap-4 text-[10px] font-mono text-slate-400 pt-1">
+                            <span className="flex items-center gap-1.5">
+                              <span className="w-2 h-2 rounded bg-purple-500" /> 
+                              <span>Embed: <strong className="text-white">{log.embed_latency_ms}ms</strong></span>
+                            </span>
+                            <span className="flex items-center gap-1.5">
+                              <span className="w-2 h-2 rounded bg-blue-500" /> 
+                              <span>Search: <strong className="text-white">{log.search_latency_ms}ms</strong></span>
+                            </span>
+                            <span className="flex items-center gap-1.5">
+                              <span className="w-2 h-2 rounded bg-cyan-500" /> 
+                              <span>Rerank: <strong className="text-white">{log.rerank_latency_ms}ms</strong></span>
+                            </span>
+                            <span className="flex items-center gap-1.5">
+                              <span className="w-2 h-2 rounded bg-emerald-500" /> 
+                              <span>LLM: <strong className="text-white">{log.generation_latency_ms}ms</strong></span>
+                            </span>
+                          </div>
+                        </div>
+
+                      </div>
+                    )}
+
                   </div>
-
-                  <div className="text-sm font-semibold text-white">
-                    {log.query}
-                  </div>
-
-                  <div className="p-3 rounded-lg bg-black/40 border border-white/5 text-xs text-slate-300 font-sans">
-                    {log.answer}
-                  </div>
-
-                  {/* Latency Waterfall Bar */}
-                  <div className="space-y-1">
-                    <div className="flex items-center justify-between text-[10px] font-mono text-slate-400">
-                      <span>Latency Breakdown (Waterfall)</span>
-                      <span>Total: {log.total_latency_ms}ms</span>
-                    </div>
-                    <div className="h-2 w-full rounded-full bg-white/5 overflow-hidden flex">
-                      <div 
-                        title={`Embedding: ${log.embed_latency_ms}ms`}
-                        style={{ width: `${Math.max((log.embed_latency_ms / (log.total_latency_ms || 1)) * 100, 5)}%` }}
-                        className="bg-purple-500 h-full"
-                      />
-                      <div 
-                        title={`Vector Search: ${log.search_latency_ms}ms`}
-                        style={{ width: `${Math.max((log.search_latency_ms / (log.total_latency_ms || 1)) * 100, 5)}%` }}
-                        className="bg-blue-500 h-full"
-                      />
-                      <div 
-                        title={`Reranker: ${log.rerank_latency_ms}ms`}
-                        style={{ width: `${Math.max((log.rerank_latency_ms / (log.total_latency_ms || 1)) * 100, 5)}%` }}
-                        className="bg-cyan-500 h-full"
-                      />
-                      <div 
-                        title={`LLM Generation: ${log.generation_latency_ms}ms`}
-                        style={{ width: `${Math.max((log.generation_latency_ms / (log.total_latency_ms || 1)) * 100, 20)}%` }}
-                        className="bg-emerald-500 h-full"
-                      />
-                    </div>
-                    <div className="flex items-center gap-4 text-[10px] font-mono text-slate-400 pt-1">
-                      <span className="flex items-center gap-1"><span className="w-2 h-2 rounded bg-purple-500" /> Embed: {log.embed_latency_ms}ms</span>
-                      <span className="flex items-center gap-1"><span className="w-2 h-2 rounded bg-blue-500" /> Search: {log.search_latency_ms}ms</span>
-                      <span className="flex items-center gap-1"><span className="w-2 h-2 rounded bg-cyan-500" /> Rerank: {log.rerank_latency_ms}ms</span>
-                      <span className="flex items-center gap-1"><span className="w-2 h-2 rounded bg-emerald-500" /> LLM: {log.generation_latency_ms}ms</span>
-                    </div>
-                  </div>
-
-                </div>
-              ))}
+                );
+              })}
           </div>
 
         </div>
