@@ -995,13 +995,15 @@ class DocumentCatalogRepository:
 # -----------------------------------------------------------------------------
 
 class SemanticCacheRepository:
-    """Repository for inspecting and managing the semantic answer cache."""
+    """Repository for inspecting and managing the semantic answer cache across Redis and DB."""
 
     def get_cache_stats(self) -> dict[str, Any]:
-        """Get aggregate metrics for semantic caching."""
+        """Get aggregate metrics for semantic caching across Redis and Database."""
         session = get_session()
         try:
             from ragops.storage.models import SemanticCacheModel
+            from ragops.storage.redis_cache import RedisSemanticCache
+
             total_entries = session.query(func.count(SemanticCacheModel.id)).scalar() or 0
             total_hits = session.query(func.sum(SemanticCacheModel.hit_count)).scalar() or 0
 
@@ -1016,30 +1018,49 @@ class SemanticCacheRepository:
 
             hit_rate_pct = round((chat_cache_hits / chat_total * 100), 1) if chat_total > 0 else 0.0
 
+            # Redis telemetry
+            redis_stats = {}
+            try:
+                redis_stats = RedisSemanticCache.get_instance().get_stats()
+            except Exception:
+                pass
+
             return {
-                "total_cached_patterns": total_entries,
-                "total_cache_hits": int(total_hits),
+                "total_cached_patterns": max(total_entries, redis_stats.get("total_cached_entries", 0)),
+                "total_cache_hits": int(total_hits) + redis_stats.get("total_hits", 0),
                 "chat_cache_hits": int(chat_cache_hits),
                 "chat_total_queries": int(chat_total),
                 "cache_hit_rate_pct": hit_rate_pct,
                 "total_latency_saved_ms": round(float(total_saved_ms), 1),
                 "total_cost_saved_usd": round(int(chat_cache_hits) * 0.0003, 5),
+                "redis_enabled": redis_stats.get("redis_enabled", True),
+                "redis_connected": redis_stats.get("redis_connected", False),
+                "redis_url": redis_stats.get("redis_url", "redis://127.0.0.1:6379/0"),
+                "redis_cached_entries": redis_stats.get("total_cached_entries", 0),
+                "redis_hits": redis_stats.get("total_hits", 0),
+                "redis_exact_hits": redis_stats.get("exact_hits", 0),
+                "redis_semantic_hits": redis_stats.get("semantic_hits", 0),
+                "redis_memory": redis_stats.get("used_memory_human", "0B"),
+                "similarity_threshold": redis_stats.get("similarity_threshold", 0.92),
+                "similarity_threshold_range": "0.90 - 0.95 (direct cache hit)",
             }
         finally:
             session.close()
 
     def list_entries(self, limit: int = 50) -> list[dict[str, Any]]:
-        """List active cache entries with hit counts and scopes."""
+        """List active cache entries with hit counts and scopes from DB and Redis."""
         session = get_session()
         try:
             from ragops.storage.models import SemanticCacheModel
+            from ragops.storage.redis_cache import RedisSemanticCache
+
             entries = (
                 session.query(SemanticCacheModel)
                 .order_by(SemanticCacheModel.hit_count.desc(), SemanticCacheModel.last_hit_at.desc())
                 .limit(limit)
                 .all()
             )
-            return [
+            db_entries = [
                 {
                     "id": e.id,
                     "cache_key": e.cache_key,
@@ -1052,19 +1073,41 @@ class SemanticCacheRepository:
                     "last_hit_at": str(e.last_hit_at),
                     "created_at": str(e.created_at),
                     "answer_preview": e.answer[:120] + ("..." if len(e.answer) > 120 else ""),
+                    "tier": "database",
                 }
                 for e in entries
             ]
+
+            # If DB is empty, pull from Redis
+            if not db_entries:
+                try:
+                    redis_entries = RedisSemanticCache.get_instance().list_entries(limit=limit)
+                    for r in redis_entries:
+                        r["tier"] = "redis"
+                    return redis_entries
+                except Exception:
+                    pass
+
+            return db_entries
         finally:
             session.close()
 
     def clear_cache(self) -> int:
-        """Clear all semantic cache entries."""
+        """Clear all semantic cache entries across DB and Redis."""
         session = get_session()
         try:
             from ragops.storage.models import SemanticCacheModel
+            from ragops.storage.redis_cache import RedisSemanticCache
+
             count = session.query(SemanticCacheModel).delete()
             session.commit()
+
+            # Clear Redis cache
+            try:
+                RedisSemanticCache.get_instance().clear_cache()
+            except Exception:
+                pass
+
             logger.info("semantic_cache_cleared", deleted_count=count)
             return count
         except Exception as e:

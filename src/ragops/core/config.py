@@ -97,6 +97,16 @@ class ObservabilitySettings(BaseSettings):
     )
 
 
+class RedisSettings(BaseSettings):
+    """Redis cache settings (supports Memurai / Redis on 127.0.0.1:6379)."""
+    model_config = _COMMON_CONFIG
+
+    url: str = Field(default="redis://127.0.0.1:6379/0", alias="REDIS_URL")
+    enabled: bool = Field(default=True, alias="REDIS_ENABLED")
+    similarity_threshold: float = Field(default=0.90, alias="CACHE_SIMILARITY_THRESHOLD")
+    ttl_seconds: int = Field(default=604800, alias="REDIS_CACHE_TTL")
+
+
 class Settings(BaseSettings):
     """Root application settings — aggregates all sub-settings."""
     model_config = _COMMON_CONFIG
@@ -107,6 +117,7 @@ class Settings(BaseSettings):
     embedding: EmbeddingSettings = Field(default_factory=EmbeddingSettings)
     chroma: ChromaSettings = Field(default_factory=ChromaSettings)
     database: DatabaseSettings = Field(default_factory=DatabaseSettings)
+    redis: RedisSettings = Field(default_factory=RedisSettings)
     retrieval: RetrievalSettings = Field(default_factory=RetrievalSettings)
     ingestion: IngestionSettings = Field(default_factory=IngestionSettings)
     api: APISettings = Field(default_factory=APISettings)

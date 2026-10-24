@@ -66,6 +66,14 @@ async def lifespan(app: FastAPI):
     except Exception as db_err:
         logger.warning("database_init_failed", error=str(db_err))
 
+    # Auto-ensure Redis / Memurai cache service is active
+    if getattr(settings, "redis", None) and settings.redis.enabled:
+        try:
+            from ragops.storage.redis_cache import ensure_redis_running
+            ensure_redis_running(settings.redis.url)
+        except Exception as redis_err:
+            logger.warning("redis_auto_start_check_failed", error=str(redis_err))
+
     # Launch model warmup in background task so Uvicorn opens listening port in <1 second
     asyncio.create_task(_async_warmup())
 

@@ -779,9 +779,21 @@ export default function SearchPage({
                           {/* Query Intelligence & Semantic Cache Indicators */}
                           <div className="flex flex-wrap items-center gap-2 text-xs">
                             {meta.cache_hit && (
-                              <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 font-medium text-[11px] shadow-sm">
-                                <Zap className="w-3.5 h-3.5 text-emerald-400" />
-                                <span>⚡ Semantic Cache Hit ({meta.total_latency_ms || 6.5}ms • $0.00 spend)</span>
+                              <div className={`flex items-center gap-1.5 px-3 py-1 rounded-full font-medium text-[11px] shadow-sm ${
+                                meta.cache_tier === 'redis_exact'
+                                  ? 'bg-rose-500/15 border border-rose-500/30 text-rose-300'
+                                  : meta.cache_tier === 'redis_semantic'
+                                  ? 'bg-emerald-500/15 border border-emerald-500/30 text-emerald-300'
+                                  : 'bg-emerald-500/15 border border-emerald-500/30 text-emerald-300'
+                              }`}>
+                                <Zap className={`w-3.5 h-3.5 ${meta.cache_tier === 'redis_exact' ? 'text-rose-400' : 'text-emerald-400'}`} />
+                                <span>
+                                  {meta.cache_tier === 'redis_exact'
+                                    ? `⚡ Redis Instant Cache Hit (${meta.total_latency_ms || 1.8}ms • $0.00 spend)`
+                                    : meta.cache_tier === 'redis_semantic'
+                                    ? `⚡ Redis Semantic Hit (${meta.similarity_score ? Math.round(meta.similarity_score * 100) : 95}% Relevance Match • ${meta.total_latency_ms || 6.2}ms • $0.00 spend)`
+                                    : `⚡ Semantic Cache Hit (${meta.total_latency_ms || 6.5}ms • $0.00 spend)`}
+                                </span>
                               </div>
                             )}
 

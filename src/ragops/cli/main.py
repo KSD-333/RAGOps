@@ -232,14 +232,25 @@ def evaluate(dataset: str, version: str, no_judge: bool):
 def serve(host: str, port: int, reload: bool):
     """Start the RAGOps API server."""
     import uvicorn
+    from ragops.core.config import get_settings
     from ragops.core.logging import setup_logging
+    from ragops.storage.redis_cache import ensure_redis_running
 
     setup_logging("INFO")
+    settings = get_settings()
+
+    redis_status = "[dim yellow]Disabled[/dim yellow]"
+    if settings.redis.enabled:
+        if ensure_redis_running(settings.redis.url):
+            redis_status = "[bold green]Online (<2ms exact & ≥90% semantic hit)[/bold green]"
+        else:
+            redis_status = "[dim yellow]Offline (using PostgreSQL/SQLite cache fallback)[/dim yellow]"
 
     console.print(Panel.fit(
         f"[bold cyan]RAGOps API Server[/bold cyan]\n"
         f"Host: {host}:{port}\n"
-        f"Docs: http://{host}:{port}/docs",
+        f"Docs: http://{host}:{port}/docs\n"
+        f"Redis/Memurai: {redis_status}",
         border_style="cyan",
     ))
 

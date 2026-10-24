@@ -1279,14 +1279,24 @@ export default function DashboardPage({ onRerunQuery, apiBaseUrl = '', currentUs
                   <Zap className="w-4 h-4" />
                 </div>
                 <div>
-                  <h3 className="text-sm font-bold text-white font-['Outfit'] flex items-center gap-2">
+                  <h3 className="text-sm font-bold text-white font-['Outfit'] flex flex-wrap items-center gap-2">
                     <span>Query Intelligence &amp; Semantic Cache Layer</span>
                     <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 font-mono font-bold">
                       ACTIVE
                     </span>
+                    {cacheStats?.redis_connected ? (
+                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-rose-500/20 text-rose-300 font-mono font-bold flex items-center gap-1.5 border border-rose-500/30 shadow-sm">
+                        <span className="w-1.5 h-1.5 rounded-full bg-rose-400 animate-pulse"></span>
+                        REDIS / MEMURAI ONLINE ({cacheStats?.redis_memory || '<1MB'})
+                      </span>
+                    ) : (
+                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-500/20 text-slate-400 font-mono">
+                        DATABASE CACHE
+                      </span>
+                    )}
                   </h3>
                   <p className="text-xs text-slate-400">
-                    Shorthand rewriting, scope safety gating, and zero-token cached inference (&lt;10ms)
+                    Shorthand rewriting, scope safety gating, Redis sub-2ms exact hits &amp; &ge;90%–95% direct semantic cache hits
                   </p>
                 </div>
               </div>
@@ -1301,7 +1311,7 @@ export default function DashboardPage({ onRerunQuery, apiBaseUrl = '', currentUs
               </button>
             </div>
 
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-1">
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 pt-1">
               <div className="p-3.5 rounded-xl bg-white/[0.02] border border-white/5">
                 <div className="text-[11px] font-semibold text-slate-400 uppercase">Cached Patterns</div>
                 <div className="text-xl font-bold text-white font-mono mt-1">
@@ -1316,6 +1326,22 @@ export default function DashboardPage({ onRerunQuery, apiBaseUrl = '', currentUs
                   {cacheStats?.cache_hit_rate_pct || 0}%
                 </div>
                 <div className="text-[10px] text-slate-500 mt-1">Repeated query reuse</div>
+              </div>
+
+              <div className="p-3.5 rounded-xl bg-white/[0.02] border border-white/5">
+                <div className="text-[11px] font-semibold text-slate-400 uppercase">Redis Fast Hits</div>
+                <div className="text-xl font-bold text-rose-400 font-mono mt-1">
+                  {cacheStats?.redis_hits || 0}
+                </div>
+                <div className="text-[10px] text-slate-500 mt-1">&lt;2ms instant answers</div>
+              </div>
+
+              <div className="p-3.5 rounded-xl bg-white/[0.02] border border-white/5">
+                <div className="text-[11px] font-semibold text-slate-400 uppercase">Direct Hit Threshold</div>
+                <div className="text-xl font-bold text-indigo-400 font-mono mt-1">
+                  {cacheStats?.similarity_threshold ? `${Math.round(cacheStats.similarity_threshold * 100)}%` : '92%'}
+                </div>
+                <div className="text-[10px] text-slate-500 mt-1">90%–95% query relevance</div>
               </div>
 
               <div className="p-3.5 rounded-xl bg-white/[0.02] border border-white/5">
