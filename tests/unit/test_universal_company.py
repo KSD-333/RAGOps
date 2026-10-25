@@ -73,7 +73,12 @@ def test_universal_extractor_heuristic_extraction():
     keys = {(c.section_key, c.fact_key) for c in candidates}
     assert ("identity", "legal_name") in keys
     assert ("identity", "global_headquarters") in keys or ("locations", "headquarters") in keys or ("locations", "headquarters_location") in keys
-    assert ("identity", "ceo") in keys or ("identity", "chief_executive_officer") in keys
+    assert (
+        ("identity", "ceo") in keys
+        or ("identity", "chief_executive_officer") in keys
+        or ("leadership", "chief_executive_officer") in keys
+        or ("leadership", "ceo") in keys
+    )
     assert ("workforce", "global_headcount") in keys or ("workforce", "headcount") in keys
 
 

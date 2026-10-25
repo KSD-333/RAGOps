@@ -69,6 +69,8 @@ def get_engine():
             _engine = create_engine(configured_url, echo=False)
             _active_db_type = "sqlite"
             logger.info("sqlite_database_engine_created", url=configured_url)
+            from ragops.storage.models import Base
+            Base.metadata.create_all(_engine)
             return _engine
 
     except Exception as e:
@@ -84,6 +86,8 @@ def get_engine():
         _engine = create_engine(fallback_url, echo=False)
         _active_db_type = "sqlite_fallback"
         logger.info("using_sqlite_fallback", url=fallback_url)
+        from ragops.storage.models import Base
+        Base.metadata.create_all(_engine)
         return _engine
 
 

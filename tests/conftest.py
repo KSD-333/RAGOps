@@ -29,7 +29,15 @@ def set_test_env(monkeypatch):
     monkeypatch.setenv("CHROMA_COLLECTION_NAME", "test_collection")
     temp_dir = tempfile.mkdtemp()
     monkeypatch.setenv("CHROMA_PERSIST_DIR", temp_dir)
-    monkeypatch.setenv("DATABASE_URL", f"sqlite:///{temp_dir}/test.db")
+    test_db = f"sqlite:///{temp_dir}/test.db"
+    monkeypatch.setenv("DATABASE_URL", test_db)
+
+    # Reset cached database engine and session factory so the test DB is used
+    import ragops.storage.database as db_mod
+    db_mod._engine = None
+    db_mod._session_factory = None
+    db_mod._active_db_type = None
+    db_mod.init_db()
 
 
 @pytest.fixture
