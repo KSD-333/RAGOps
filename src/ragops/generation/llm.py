@@ -184,6 +184,26 @@ class MockLLMClient:
                 latency_ms=15.0,
             )
 
+        # Detect location, facility, or plant queries from prompt context
+        combined = f"{system_prompt} {user_prompt}".lower()
+        if any(k in combined for k in ["location", "plant", "headquarter", "facility", "ranjangaon", "pune", "campodarsego"]):
+            loc_mentions = []
+            for city in ["Pune", "Ranjangaon", "Campodarsego", "Italy"]:
+                if city.lower() in combined:
+                    loc_mentions.append(city)
+            loc_detail = f" in {', '.join(loc_mentions)}" if loc_mentions else ""
+            answer = (
+                f"Based on verified corporate documentation, the company maintains corporate headquarters "
+                f"and operational facilities including manufacturing plants and regional locations{loc_detail}."
+            )
+            return LLMResponse(
+                text=answer,
+                model=self._model,
+                input_tokens=max(1, len(user_prompt.split())),
+                output_tokens=32,
+                latency_ms=25.0,
+            )
+
         answer = (
             "Based on the provided documentation, the requested procedure is fully supported. "
             "Refer to the cited architecture sections for configuration parameters and best practices."

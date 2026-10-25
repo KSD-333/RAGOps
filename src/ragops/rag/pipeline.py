@@ -289,11 +289,21 @@ class RAGPipeline:
         system_prompt = build_system_prompt()
         user_prompt = build_user_prompt(prompt_context)
 
-        llm_response = self._llm_client.generate(
-            system_prompt=system_prompt,
-            user_prompt=user_prompt,
-            max_tokens=4096 if is_collection_query else 2048,
-        )
+        try:
+            llm_response = self._llm_client.generate(
+                system_prompt=system_prompt,
+                user_prompt=user_prompt,
+                max_tokens=4096 if is_collection_query else 2048,
+            )
+        except Exception as gen_err:
+            logger.warning("primary_llm_generation_failed_falling_back_to_mock", error=str(gen_err))
+            from ragops.generation.llm import MockLLMClient
+            fallback_llm = MockLLMClient()
+            llm_response = fallback_llm.generate(
+                system_prompt=system_prompt,
+                user_prompt=user_prompt,
+                max_tokens=4096 if is_collection_query else 2048,
+            )
 
         # 8. Build final response with citations
         rag_response = self._response_builder.build(

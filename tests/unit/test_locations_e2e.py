@@ -8,8 +8,16 @@ from ragops.tools.web_extractor import CompanyWebExtractor
 
 
 def test_rag_pipeline_answers_company_locations_query():
-    # Ensure profile is embedded
+    # Ensure profile with locations is seeded and embedded
     repo = CompanyRepository()
+    repo.update_profile({
+        "company_name": "Carraro India",
+        "group_name": "Carraro Group",
+        "locations": [
+            {"city": "Pune", "state": "Maharashtra", "type": "Manufacturing Plant", "address": "MIDC Ranjangaon"},
+            {"city": "Campodarsego", "state": "Padua", "type": "Global Headquarters", "address": "Via Olmo 37"},
+        ],
+    })
     profile = repo.get_profile()
     extractor = CompanyWebExtractor()
     extractor.embed_company_profile(profile)
