@@ -8,6 +8,7 @@ Both the API and the evaluation system call this pipeline.
 
 from __future__ import annotations
 
+from typing import Any
 import uuid
 
 from ragops.core.logging import get_logger

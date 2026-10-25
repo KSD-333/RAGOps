@@ -95,7 +95,6 @@ class WebSearchTool:
 
         # 2. Try DuckDuckGo HTML endpoint
         try:
-            ddg_url = f"https://html.duckduckgo.com/html/?q={urllib.parse.quote(clean_query)}"
             resp = requests.post(
                 "https://html.duckduckgo.com/html/",
                 data={"q": clean_query, "b": ""},

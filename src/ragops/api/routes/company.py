@@ -207,24 +207,6 @@ async def search_company_gap(request: SearchGapRequest):
         raise HTTPException(status_code=500, detail=f"Search failed: {str(e)}")
 
 
-class ClearCompanyRequest(BaseModel):
-    organization_id: Optional[str] = Field(None, description="Organization ID to clear, or 'all'")
-
-
-@router.post("/clear")
-async def clear_company_data(request: Optional[ClearCompanyRequest] = None):
-    """Clear all candidate facts, approved facts, documents, and outbox records."""
-    try:
-        repo = FactManagementRepository()
-        org_id = request.organization_id if request else None
-        result = repo.clear_company_knowledge(organization_id=org_id)
-        _clear_rag_caches()
-        return result
-    except Exception as e:
-        logger.error("clear_company_data_failed", error=str(e))
-        raise HTTPException(status_code=500, detail=f"Failed to clear company data: {str(e)}")
-
-
 # -----------------------------------------------------------------------------
 # Source-Backed Fact Validation & Outbox Publication Endpoints
 # -----------------------------------------------------------------------------

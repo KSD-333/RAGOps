@@ -67,7 +67,6 @@ class UniversalCompanyCrawler:
 
         visited_urls: set[str] = set()
         crawled_docs: list[CrawledPageDoc] = []
-        links_queue: list[tuple[str, Optional[str]]] = [(clean_entry, "identity")]
 
         # First pass: fetch entry page and extract internal links
         first_doc, discovered_links = self._fetch_and_discover_links(clean_entry, base_domain)

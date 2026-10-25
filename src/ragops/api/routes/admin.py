@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from typing import Optional
 from fastapi import APIRouter, HTTPException, Query
-from pydantic import BaseModel
 
 from ragops.storage.database import get_active_db_type
 from ragops.storage.repositories import ChatRepository, UserRepository

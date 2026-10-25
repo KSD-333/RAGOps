@@ -12,7 +12,6 @@ from ragops.core.auth import (
     UserProfile,
     create_token,
     get_current_user,
-    get_current_user_optional,
 )
 from ragops.storage.repositories import UserRepository
 

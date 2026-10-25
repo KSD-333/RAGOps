@@ -82,7 +82,7 @@ def build_system_prompt() -> str:
             desc = profile.get("description", "") if profile else ""
             prods = ", ".join(profile.get("products", [])) if profile and isinstance(profile.get("products"), list) else str(profile.get("products", "") if profile else "")
             emp = profile.get("employee_details", "") if profile else ""
-            locs = ", ".join([f"{l.get('city', '')} ({l.get('type', '')})" for l in profile.get("locations", []) if isinstance(l, dict)]) if profile and isinstance(profile.get("locations"), list) else str(profile.get("locations", "") if profile else "")
+            locs = ", ".join([f"{loc.get('city', '')} ({loc.get('type', '')})" for loc in profile.get("locations", []) if isinstance(loc, dict)]) if profile and isinstance(profile.get("locations"), list) else str(profile.get("locations", "") if profile else "")
             ceo = profile.get("ceo", "") if profile else ""
             dirs = ", ".join(profile.get("directors", [])) if profile and isinstance(profile.get("directors"), list) else str(profile.get("directors", "") if profile else "")
             urls_str = ", ".join(urls)
@@ -119,7 +119,7 @@ def build_system_prompt() -> str:
 4. When conversation history is provided, resolve follow-up questions, pronouns, and topic continuity naturally.
 5. Always cite your sources using [Source: filename or website] format.
 6. Be polite, authoritative, professional, and helpful. Avoid harsh or robotic rejections when factual context is provided."""
-    except Exception as e:
+    except Exception:
         pass
 
     return DEFAULT_SYSTEM_PROMPT

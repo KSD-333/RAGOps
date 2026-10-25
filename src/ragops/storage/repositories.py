@@ -17,7 +17,6 @@ from ragops.storage.database import get_session
 from ragops.storage.models import (
     ChatMessageModel,
     DocumentModel,
-    FeedbackModel,
     TraceModel,
     UserModel,
     CompanyProfileModel,
@@ -419,7 +418,7 @@ class ChatRepository:
             if user_filter:
                 q = q.filter(ChatMessageModel.username == user_filter)
             if risk_only:
-                q = q.filter((ChatMessageModel.policy_risk_flag == True) | (ChatMessageModel.churn_risk_flag == True))
+                q = q.filter((ChatMessageModel.policy_risk_flag.is_(True)) | (ChatMessageModel.churn_risk_flag.is_(True)))
 
             records = q.order_by(ChatMessageModel.created_at.desc()).limit(limit).all()
             return [self._to_dict(m) for m in records]
@@ -435,8 +434,8 @@ class ChatRepository:
             total_cost = session.query(func.coalesce(func.sum(ChatMessageModel.cost_usd), 0.0)).scalar() or 0.0
             avg_latency = session.query(func.coalesce(func.avg(ChatMessageModel.total_latency_ms), 0.0)).scalar() or 0.0
 
-            policy_risk_count = session.query(func.count(ChatMessageModel.id)).filter(ChatMessageModel.policy_risk_flag == True).scalar() or 0
-            churn_risk_count = session.query(func.count(ChatMessageModel.id)).filter(ChatMessageModel.churn_risk_flag == True).scalar() or 0
+            policy_risk_count = session.query(func.count(ChatMessageModel.id)).filter(ChatMessageModel.policy_risk_flag.is_(True)).scalar() or 0
+            churn_risk_count = session.query(func.count(ChatMessageModel.id)).filter(ChatMessageModel.churn_risk_flag.is_(True)).scalar() or 0
             positive_feedback = session.query(func.count(ChatMessageModel.id)).filter(ChatMessageModel.feedback_rating == "positive").scalar() or 0
             negative_feedback = session.query(func.count(ChatMessageModel.id)).filter(ChatMessageModel.feedback_rating == "negative").scalar() or 0
 
@@ -823,7 +822,7 @@ class DocumentCatalogRepository:
         pending_sources = []
         try:
             pending_docs = session.query(DocumentModel).filter(
-                (DocumentModel.chunk_count == 0) | (DocumentModel.chunk_count == None)
+                (DocumentModel.chunk_count == 0) | (DocumentModel.chunk_count.is_(None))
             ).all()
             pending_sources = [d.source for d in pending_docs]
         finally:
@@ -1010,7 +1009,7 @@ class SemanticCacheRepository:
             # Chat turns cache hit metrics
             chat_total = session.query(func.count(ChatMessageModel.id)).scalar() or 0
             chat_cache_hits = session.query(func.count(ChatMessageModel.id)).filter(
-                ChatMessageModel.cache_hit == True
+                ChatMessageModel.cache_hit.is_(True)
             ).scalar() or 0
             total_saved_ms = session.query(
                 func.sum(ChatMessageModel.cache_latency_saved_ms)
@@ -1642,7 +1641,7 @@ class FactManagementRepository:
                         CompanyFactModel.section_key == cand.section_key,
                         CompanyFactModel.fact_key == cand.fact_key,
                         CompanyFactModel.scope_key == cand.scope_key,
-                        CompanyFactModel.is_active == True,
+                        CompanyFactModel.is_active.is_(True),
                     )
                     .first()
                 )
@@ -1827,7 +1826,7 @@ class FactManagementRepository:
         try:
             q = session.query(CompanyFactModel).filter(
                 CompanyFactModel.organization_id == organization_id,
-                CompanyFactModel.is_active == True,
+                CompanyFactModel.is_active.is_(True),
             )
             if section_key:
                 q = q.filter(CompanyFactModel.section_key == section_key)
@@ -1843,7 +1842,7 @@ class FactManagementRepository:
                 session.query(CompanyFactModel)
                 .filter(
                     CompanyFactModel.organization_id == organization_id,
-                    CompanyFactModel.is_active == True,
+                    CompanyFactModel.is_active.is_(True),
                 )
                 .all()
             )
@@ -1968,62 +1967,6 @@ class FactManagementRepository:
                 }
 
             return None
-        finally:
-            session.close()
-
-    def clear_company_knowledge(self, organization_id: Optional[str] = None) -> dict[str, Any]:
-        """Clear all candidate facts, evidence, approved facts, outbox events, and documents."""
-        session = get_session()
-        try:
-            cand_q = session.query(FactCandidateModel)
-            fact_q = session.query(CompanyFactModel)
-            outbox_q = session.query(PublicationOutboxModel)
-            dec_q = session.query(FactReviewDecisionModel)
-            ev_q = session.query(FactEvidenceModel)
-            doc_q = session.query(SourceDocumentModel)
-            src_q = session.query(CompanySourceModel)
-
-            if organization_id and organization_id != "all":
-                cand_ids = [c.id for c in cand_q.filter(FactCandidateModel.organization_id == organization_id).all()]
-                if cand_ids:
-                    ev_q.filter(FactEvidenceModel.candidate_id.in_(cand_ids)).delete(synchronize_session=False)
-                    dec_q.filter(FactReviewDecisionModel.candidate_id.in_(cand_ids)).delete(synchronize_session=False)
-                cand_q.filter(FactCandidateModel.organization_id == organization_id).delete(synchronize_session=False)
-                fact_q.filter(CompanyFactModel.organization_id == organization_id).delete(synchronize_session=False)
-                outbox_q.filter(PublicationOutboxModel.organization_id == organization_id).delete(synchronize_session=False)
-                doc_q.filter(SourceDocumentModel.organization_id == organization_id).delete(synchronize_session=False)
-                src_q.filter(CompanySourceModel.organization_id == organization_id).delete(synchronize_session=False)
-            else:
-                ev_q.delete(synchronize_session=False)
-                dec_q.delete(synchronize_session=False)
-                cand_q.delete(synchronize_session=False)
-                fact_q.delete(synchronize_session=False)
-                outbox_q.delete(synchronize_session=False)
-                doc_q.delete(synchronize_session=False)
-                src_q.delete(synchronize_session=False)
-                session.query(SemanticCacheModel).delete(synchronize_session=False)
-
-            # Reset profile to clean state
-            profile = session.query(CompanyProfileModel).first()
-            if profile:
-                profile.company_name = "Enterprise"
-                profile.group_name = ""
-                profile.industry = ""
-                profile.description = ""
-                profile.products = []
-                profile.employee_details = ""
-                profile.locations = []
-                profile.ceo = ""
-                profile.directors = []
-                profile.domains_urls = []
-                profile.metadata_json = {}
-
-            session.commit()
-            return {"status": "success", "message": f"Successfully cleared corporate knowledge for organization: {organization_id or 'all'}."}
-        except Exception as e:
-            session.rollback()
-            logger.error("clear_company_knowledge_failed", error=str(e))
-            raise
         finally:
             session.close()
 

@@ -11,7 +11,7 @@ from typing import Any, Optional
 from ragops.company.agent import CompanyResearchAgent
 from ragops.company.crawler import UniversalCompanyCrawler
 from ragops.company.extractor import UniversalCompanyExtractor
-from ragops.company.schema import AnalysisResult, CandidateFactItem
+from ragops.company.schema import AnalysisResult
 from ragops.core.logging import get_logger
 from ragops.storage.repositories import FactManagementRepository
 
@@ -206,7 +206,7 @@ class CompanyIntelligenceService:
 
                 approved_count = session.query(CompanyFactModel).filter(
                     CompanyFactModel.organization_id == org_id,
-                    CompanyFactModel.is_active == True,
+                    CompanyFactModel.is_active.is_(True),
                 ).count()
 
                 results.append({

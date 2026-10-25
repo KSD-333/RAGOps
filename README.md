@@ -322,11 +322,19 @@ cd RAGOps
 
 # 2. Set up Python virtual environment
 python -m venv .venv
-source .venv/bin/activate  # Windows: .venv\Scripts\activate
+# On macOS / Linux:
+source .venv/bin/activate
+# On Windows (PowerShell):
+.venv\Scripts\Activate.ps1
+# On Windows (Command Prompt):
+.venv\Scripts\activate.bat
 
 # 3. Install backend dependencies
-pip install hatchling
-pip install -e ".[dev]"
+pip install --upgrade pip
+pip install -r requirements.txt
+# (Optional: For tests, linting, and development)
+pip install -r requirements-dev.txt
+pip install -e .
 
 # 4. Configure environment
 cp .env.example .env

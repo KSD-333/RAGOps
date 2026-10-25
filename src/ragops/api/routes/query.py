@@ -152,13 +152,13 @@ async def get_session_history(
         chat_repo = ChatRepository()
         filter_user = session_user or (username if role != "admin" else None)
         messages = chat_repo.get_session_messages(session_id=session_id, username=filter_user)
-        
+
         # Access control: If non-admin user tries to access another user's session
         if role != "admin" and username and messages:
             session_owners = {m.get("username") for m in messages if m.get("username")}
             if session_owners and username not in session_owners:
                 raise HTTPException(
-                    status_code=403, 
+                    status_code=403,
                     detail="Access denied: You do not have permission to view another user's chat history."
                 )
 
@@ -171,7 +171,7 @@ async def get_session_history(
 
 @router.delete("/sessions/{session_id}")
 async def delete_user_session(
-    session_id: str, 
+    session_id: str,
     username: Optional[str] = None,
     role: Optional[str] = None,
 ):

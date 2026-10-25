@@ -375,7 +375,7 @@ class CompanyWebExtractor:
         if extracted.get("locations"):
             existing_locs = list(preview.get("locations") or [])
             new_locs = extracted["locations"]
-            loc_keys = {(l.get("city", "").lower(), l.get("type", "").lower()) for l in existing_locs if isinstance(l, dict)}
+            loc_keys = {(loc.get("city", "").lower(), loc.get("type", "").lower()) for loc in existing_locs if isinstance(loc, dict)}
             for nl in new_locs:
                 if isinstance(nl, dict):
                     k = (nl.get("city", "").lower(), nl.get("type", "").lower())
@@ -491,11 +491,11 @@ class CompanyWebExtractor:
         # 2. Locations, Manufacturing Plants, Hubs & Facilities
         loc_lines = []
         if isinstance(locs, list):
-            for l in locs:
-                if isinstance(l, dict):
-                    loc_lines.append(f"• {l.get('city', '')}, {l.get('state', '')} — {l.get('type', 'Facility')} (Address: {l.get('address', 'Industrial Zone')})")
-                elif isinstance(l, str):
-                    loc_lines.append(f"• {l}")
+            for loc in locs:
+                if isinstance(loc, dict):
+                    loc_lines.append(f"• {loc.get('city', '')}, {loc.get('state', '')} — {loc.get('type', 'Facility')} (Address: {loc.get('address', 'Industrial Zone')})")
+                elif isinstance(loc, str):
+                    loc_lines.append(f"• {loc}")
         elif isinstance(locs, str):
             loc_lines.append(locs)
 
@@ -740,11 +740,11 @@ class CompanyWebExtractor:
             facts_text_lines.append("Corporate Locations & Manufacturing Facilities:\n" + "\n".join(loc_lines))
         elif profile.get("locations"):
             loc_strs = []
-            for l in profile["locations"]:
-                if isinstance(l, dict):
-                    loc_strs.append(f"{l.get('city', '')}, {l.get('state', '')} ({l.get('type', 'Facility')})")
-                elif isinstance(l, str):
-                    loc_strs.append(l)
+            for loc in profile["locations"]:
+                if isinstance(loc, dict):
+                    loc_strs.append(f"{loc.get('city', '')}, {loc.get('state', '')} ({loc.get('type', 'Facility')})")
+                elif isinstance(loc, str):
+                    loc_strs.append(loc)
             facts_text_lines.append(f"Company Locations & Plants: {'; '.join(loc_strs)}")
 
         # Logistics Hubs
