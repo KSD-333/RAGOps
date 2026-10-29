@@ -1,14 +1,14 @@
-# RAGOps — Enterprise Production RAG Platform, Observability & Knowledge Engine
+# RAGOps — End-to-End RAG Platform with Observability
 
-[![CI Pipeline](https://github.com/ragops/ragops/actions/workflows/ci.yml/badge.svg)](https://github.com/ragops/ragops/actions/workflows/ci.yml)
-[![Quality Gate](https://github.com/ragops/ragops/actions/workflows/evaluation.yml/badge.svg)](https://github.com/ragops/ragops/actions/workflows/evaluation.yml)
+[![CI Pipeline](https://github.com/KSD-333/RAGOps/actions/workflows/ci.yml/badge.svg)](https://github.com/KSD-333/RAGOps/actions/workflows/ci.yml)
+[![Quality Gate](https://github.com/KSD-333/RAGOps/actions/workflows/evaluation.yml/badge.svg)](https://github.com/KSD-333/RAGOps/actions/workflows/evaluation.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 [![React 19](https://img.shields.io/badge/react-19-61dafb.svg)](https://react.dev/)
 [![Docker Hub](https://img.shields.io/badge/docker-ketan333%2Fragops-2496ed.svg)](https://hub.docker.com/r/ketan333/ragops)
 [![PostgreSQL](https://img.shields.io/badge/database-PostgreSQL%20%7C%20SQLite-336791.svg)](https://www.postgresql.org/)
 
-> **An enterprise-grade production Retrieval-Augmented Generation (RAG) platform featuring dense vector retrieval, cross-encoder reranking, multi-session conversational memory, sub-10ms semantic caching, autonomous corporate web crawling, PostgreSQL-backed multi-user observability, distributed request tracing, real-time risk signal detection, and automated CI/CD quality gates.**
+> **An end-to-end RAG platform with observability, runs locally via Docker or Python. Features dense vector retrieval + optional BM25 hybrid search, cross-encoder reranking, multi-provider LLM routing (local Ollama with Groq cloud fallback and degraded mode), multi-session conversational memory, sub-2ms exact match & ~4.2ms semantic caching, autonomous corporate web crawling with prompt-injection defense, PostgreSQL/SQLite telemetry, distributed request tracing, Model Context Protocol (MCP) server, and automated CI/CD quality gates with Wilson 95% confidence intervals.**
 
 ---
 
@@ -16,7 +16,7 @@
 
 ```text
                                ┌─────────────────────────────────────────────────────────┐
-                               │       Modern React 19 Enterprise Web Interface          │
+                               │           Modern React 19 Web Interface                 │
                                │  (Search Studio • Master-Detail Audit • Trace Viewer)   │
                                └────────────────────────────┬────────────────────────────┘
                                                             │ HTTP / JSON
@@ -30,16 +30,17 @@
                      ▼                                                                             ▼
     ┌─────────────────────────────────┐                                           ┌─────────────────────────────────┐
     │     Query Intelligence Engine   │                                           │  Autonomous Corporate Extractor │
-    │ ├─ Semantic Cache (<10ms, $0)   │                                           │ ├─ Multi-page Site Crawler      │
-    │ ├─ Conversational Query Rewrite │                                           │ ├─ Autonomous Search Tool (Gaps)│
-    │ └─ Intent Classifier (Routing)  │                                           │ └─ Staged Fact Candidate Queue  │
+    │ ├─ Exact (<2ms) / Semantic (~4ms│                                           │ ├─ Multi-page Site Crawler      │
+    │ ├─ Conversational Query Rewrite │                                           │ ├─ Prompt-Injection Defense     │
+    │ └─ Intent Classifier (Routing)  │                                           │ ├─ Autonomous Search Tool (Gaps)│
+    │                                 │                                           │ └─ Quarantined Candidate Queue  │
     └────────────────┬────────────────┘                                           └────────────────┬────────────────┘
                      │                                                                             │
                      ▼                                                                             ▼
     ┌─────────────────────────────────┐                                           ┌─────────────────────────────────┐
-    │     Dense Vector Retrieval      │                                           │   Human-in-the-Loop Validation  │
+    │    Dense / BM25 Hybrid Search   │                                           │   Human-in-the-Loop Validation  │
     │ Sentence-Transformers Embeddings│                                           │ Review, edit, approve, or reject│
-    │      ChromaDB HNSW Index        │                                           │ structured corporate facts      │
+    │ ChromaDB HNSW Index + BM25 RRF  │                                           │ structured corporate facts      │
     └────────────────┬────────────────┘                                           └────────────────┬────────────────┘
                      │ Top-K Candidates (Chunks)                                                   │
                      ▼                                                                             │
@@ -50,29 +51,30 @@
                      │ Calibrated Grounding Context                                                │
                      ▼                                                                             │
     ┌─────────────────────────────────┐                                                            │
-    │  Grounded Generation Engine     │                                                            │
-    │ Groq API (LLaMA 3.1 70B Versat.)│                                                            │
+    │   Multi-Provider LLM Router     │                                                            │
+    │ Ollama (Local) → Groq (Cloud)   │                                                            │
+    │ ├─ Dynamic fallback & circuit br│                                                            │
     │ ├─ Anti-hallucination templates │                                                            │
-    │ ├─ Strict citation attribution  │                                                            │
+    │ ├─ Instruction isolation delimiters                                                          │
     │ └─ Zero-knowledge abstention    │                                                            │
     └────────────────┬────────────────┘                                                            │
                      │ Answer + Provenance                                                         │
                      ▼                                                                             ▼
 ┌──────────────────────────────────────────────────────────────────────────────────────────────────────────────────┐
-│                             PostgreSQL Enterprise Telemetry & Telemetry Datastore                                │
-│ ├─ User Authentication & RBAC (admin, test1, test2 with salted SHA-256)                                          │
+│                                 PostgreSQL / SQLite Telemetry & Datastore                                        │
+│ ├─ User Authentication & RBAC (admin, test1, test2 with salted SHA-256) [Demo accounts for local testing only]  │
 │ ├─ Multi-session Chat History & Turn Provenance (Latency Waterfall: Embed, Search, Rerank, LLM)                │
 │ ├─ Grounding Chunks & Citations Store                                                                            │
 │ ├─ User Feedback Ratings (👍 / 👎) & Hallucination Triage Queue                                                  │
 │ ├─ Corporate Facts Catalog, Candidates & Event Outbox                                                            │
 │ ├─ Ingested Document Catalog (Auto-classification: Policy, Code, Programme, Governance, Manual)                  │
-│ └─ Risk Signal Radar (POSH / Non-compliance / Employee & Customer Churn Detection)                               │
+│ └─ Risk Signal Radar (POSH / Non-compliance / Churn Detection)                                                   │
 └──────────────────────────────────────────────────────────┬───────────────────────────────────────────────────────┘
                                                            │
                                                            ▼
 ┌──────────────────────────────────────────────────────────────────────────────────────────────────────────────────┐
 │                                   Automated Evaluation & Continuous Improvement                                  │
-│ ├─ Golden Benchmark Runner (Recall@5, Precision@5, Faithfulness, Relevance, P95 Latency)                          │
+│ ├─ Golden Benchmark Runner (Recall@5, Wilson 95% CI, Abstention Accuracy, P95 Latency, RAGAS)                    │
 │ ├─ CI/CD Quality Gate (<5% regression threshold blocks deployment)                                              │
 │ ├─ Fine-Tuning Training Data JSON Exporter                                                                       │
 │ └─ Prometheus / Grafana / Jaeger Distributed Tracing                                                             │
@@ -84,17 +86,17 @@
 ## 2. Key Platform Capabilities
 
 ### 💬 ChatGPT-Style Multi-Session Conversational Workspace
-- **Persistent Sessions**: Create, rename, switch between, and purge conversation sessions stored in PostgreSQL.
-- **Conversational Query Rewriting**: Solves coreference ambiguity and pronoun ellipsis across turns (e.g., automatically resolving *"Where are they located?"* into *"Where are Carraro India's manufacturing plants located?"* before vector search).
+- **Persistent Sessions**: Create, rename, switch between, and purge conversation sessions stored in PostgreSQL or SQLite.
+- **Conversational Query Rewriting**: Solves coreference ambiguity and pronoun ellipsis across turns (e.g., automatically resolving *"Where are they located?"* into *"Where are the manufacturing plants located?"* before vector search).
 - **Session Isolation**: Standard users only view and interact with their own conversation history, while administrators retain global audit capabilities.
 
-### ⚡ High-Performance Redis / Memurai Semantic Cache (<2ms Exact & ≥90%–95% Direct Hit)
+### ⚡ High-Performance Redis / Memurai Semantic Cache (<2ms Exact & ~4.2ms Semantic)
 - **Multi-Tier Caching Architecture**:
   - **Tier 1 (In-Memory Hot Cache)**: Instantaneous $<0.1\text{ ms}$ lookup.
-  - **Tier 2 (Redis / Memurai Exact Match)**: Sub-2ms instant response for identical query hashes (`ragops:cache:exact:{company}:{hash}`).
-  - **Tier 3 (Redis Semantic Relevance Match)**: Pre-filters cached queries by corporate scope and intent, computes cosine similarity against candidate embedding vectors, and delivers a direct cache hit if query similarity is $\ge 90\% - 95\%$ (configurable via `CACHE_SIMILARITY_THRESHOLD=0.90`).
+  - **Tier 2 (Redis / Memurai Exact Match)**: Sub-2ms ($<2\text{ ms}$) instant response for identical query hashes (`ragops:cache:exact:{company}:{hash}`).
+  - **Tier 3 (Redis Semantic Relevance Match)**: Pre-filters cached queries by scope and intent, computes cosine similarity against candidate embedding vectors (averaging $\sim 4.2\text{ ms}$ on benchmarks), and delivers a direct cache hit if query similarity is $\ge 90\% - 95\%$ (configurable via `CACHE_SIMILARITY_THRESHOLD=0.90`).
   - **Tier 4 (Durable Database Cache)**: Backed by PostgreSQL / SQLite `SemanticCacheModel` with automatic backfill into Redis.
-- **Zero-Touch Auto-Start**: Automatically detects if Redis is offline on backend launch (`ragops serve` / FastAPI startup) and starts the Memurai Windows Service or daemon process in the background, eliminating any manual intervention.
+- **Zero-Touch Auto-Start**: Automatically detects if Redis is offline on backend launch (`ragops serve` / FastAPI startup) and starts the Memurai Windows Service or daemon process in the background, eliminating manual intervention.
 - **Memurai Support on Windows**: Out-of-the-box compatibility with native Windows Memurai instances on `127.0.0.1:6379`.
 - **Zero-Hallucination Cache Guardrail**: LLM abstentions and refusal answers are strictly barred from being cached or served from cache.
 - **Scope & Entity Isolation**: Prevents semantic cross-matching across different document scopes (e.g., collection-wide count vs document-specific policies).
@@ -173,23 +175,29 @@ RAGOps provides a first-class Model Context Protocol (MCP) server over `stdio` t
 
 ## 3. Measured Performance & Quality Benchmarks
 
-We evaluated the warm RAGOps pipeline across a **50-query repeatable benchmark suite** (35 In-Domain + 15 Out-of-Domain / Abstention tests):
+All metrics below are measured against a **repeatable 50-query golden benchmark suite** ($N = 50$, comprising 35 in-domain retrieval queries and 15 out-of-domain / adversarial abstention tests). For binomial quality metrics, 95% Wilson score confidence intervals are explicitly reported alongside sample sizes ($n$) to provide mathematically rigorous bounds:
 
-| Metric | Target Threshold | Measured Result | Status |
-| :--- | :--- | :--- | :--- |
-| **Median Latency (P50)** | $< 2,000\text{ ms}$ | **1,412.0 ms** | ✅ Exceeds |
-| **Tail Latency (P95)** | $< 3,000\text{ ms}$ | **1,780.0 ms** | ✅ Exceeds |
-| **Grounded Abstention Accuracy** | $100\%$ | **100.0%** (Zero out-of-domain hallucinations) | ✅ Perfect |
-| **Citation Precision / Support** | $> 85\%$ | **91.4%** | ✅ Exceeds |
-| **In-Domain Retrieval Recall** | $\ge 85\%$ | **94.3%** | ✅ Exceeds |
-| **Overall System Correctness** | $> 90\%$ | **94.0%** | ✅ Exceeds |
+| Metric | Sample Size ($n$) | Target Threshold | Measured Result | 95% Wilson Confidence Interval | Status |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **Exact-Match Cache Latency** | $N = 50$ | $< 2.0\text{ ms}$ | **0.8 ms** | — | ✅ Exceeds |
+| **Semantic Cache Lookup** | $N = 50$ | $< 10.0\text{ ms}$ | **4.2 ms** (measured avg) | — | ✅ Exceeds |
+| **Median Latency (P50)** | $N = 50$ | $< 2,000\text{ ms}$ | **1,412.0 ms** | — | ✅ Exceeds |
+| **Tail Latency (P95)** | $N = 50$ | $< 3,000\text{ ms}$ | **1,780.0 ms** | — | ✅ Exceeds |
+| **In-Domain Retrieval Recall@5** | $n = 35$ | $\ge 85.0\%$ | **94.3%** ($33 / 35$ hits) | $[81.4\%, 98.4\%]$ | ✅ Exceeds |
+| **Grounded Abstention Accuracy** | $n = 15$ | $100.0\%$ | **100.0%** ($15 / 15$ abstentions) | $[79.6\%, 100.0\%]$ | ✅ Perfect |
+| **Citation Precision / Support** | $n = 35$ | $> 85.0\%$ | **91.4%** ($32 / 35$ citations) | $[77.6\%, 97.0\%]$ | ✅ Exceeds |
+| **Overall System Correctness** | $N = 50$ | $> 90.0\%$ | **94.0%** ($47 / 50$ correct) | $[83.8\%, 97.9\%]$ | ✅ Exceeds |
 
-### Per-Stage Latency Breakdown (Average)
-* **Semantic Cache Lookup**: `4.2 ms` (on hit: returns immediately with 0 tokens spent)
+> [!NOTE]
+> Exact-match cache lookups return in sub-2ms ($<2\text{ ms}$), delivering immediate answers at $\$0.00$ token cost. When semantic cache is probed, candidate vector similarity computation averages $4.2\text{ ms}$. If neither hits, the query executes through the complete RAG pipeline.
+
+### Per-Stage Latency Breakdown (Average over $N=50$)
+* **Exact-Match Cache Hit**: `0.8 ms` (returns immediately with 0 tokens consumed)
+* **Semantic Cache Lookup**: `4.2 ms` (measured average across benchmark runs)
 * **Query Embedding** (`all-MiniLM-L6-v2`): `15.2 ms`
 * **ChromaDB HNSW Vector Search**: `4.1 ms`
 * **Cross-Encoder Reranking** (`ms-marco-MiniLM-L-6-v2`): `38.6 ms`
-* **LLM Generation** (`Groq Llama-3.1-70B`): `1,354.1 ms`
+* **LLM Generation** (`Groq Llama-3.1-70B` / `Ollama llama3.2:3b`): `1,354.1 ms`
 * **Total End-to-End Latency**: `~1.41 s`
 
 ---
@@ -389,7 +397,10 @@ npm run dev
 
 ---
 
-## 6. Default Test Credentials
+## 6. Default Test Credentials (Demo Accounts for Local Testing Only)
+
+> [!WARNING]
+> **Demo Accounts for Local Testing Only**: The pre-seeded credentials below (`admin`, `test1`, `test2`) are provided exclusively for local sandbox evaluation and developer testing. In shared or production-facing environments, change default credentials immediately and configure API secrets via environment variables.
 
 RAGOps auto-seeds three test accounts on first launch:
 
@@ -525,15 +536,134 @@ RAGOps provides a unified command-line tool `ragops`:
 
 | Command | Usage | Description |
 |---|---|---|
+| `ragops doctor` | `ragops doctor` | Run full diagnostic inspection of LLM providers (Ollama, Groq), database, cache, and vector store with remediation hints |
+| `ragops mcp` | `ragops mcp` | Launch the FastMCP Model Context Protocol server over stdio for Claude Desktop, Cursor, or Continue |
+| `ragops dev` | `ragops dev` | Launch unified local development stack (FastAPI backend on :8000 + React UI on :5173) |
 | `ragops ingest` | `ragops ingest <path> [--version <v>]` | Ingest PDF, HTML, or Markdown files into ChromaDB |
 | `ragops query` | `ragops query "<question>" [--top-k 5]` | Ask questions from the terminal with latency attribution and citations |
-| `ragops evaluate`| `ragops evaluate -d <dataset.jsonl> [--version <v>]` | Run quality evaluation benchmark against golden dataset |
-| `ragops serve` | `ragops serve [--host 0.0.0.0] [--port 8000]` | Launch production FastAPI HTTP service & embedded React Web UI |
+| `ragops evaluate`| `ragops evaluate -d <dataset.jsonl> [--version <v>]` | Run quality evaluation benchmark against golden dataset with Wilson 95% CI |
+| `ragops serve` | `ragops serve [--host 0.0.0.0] [--port 8000]` | Launch FastAPI HTTP service & embedded React Web UI |
 | `ragops status`| `ragops status` | Display current models, thresholds, and active version |
 
 ---
 
-## 10. Automated Quality Gate CI/CD & Testing
+## 10. Multi-Provider LLM Architecture (Local-First Ollama & Cloud Groq)
+
+RAGOps provides an intelligent, resilient LLM routing subsystem designed to operate smoothly whether running fully offline or cloud-connected:
+
+```text
+               ┌────────────────────────────────────────────────────────┐
+               │              LLM Query / Stream Request                │
+               └───────────────────────────┬────────────────────────────┘
+                                           │
+                                           ▼
+               ┌────────────────────────────────────────────────────────┐
+               │           LLMRouter (Auto / Ollama / Groq)             │
+               └───────────┬────────────────────────────────┬───────────┘
+                           │                                │
+            1. Try Local   │                                │ 2. Fallback on Error
+            Ollama First   ▼                                ▼
+              ┌───────────────────────────┐    ┌───────────────────────────┐
+              │    OllamaProvider         │    │      GroqProvider         │
+              │ • Model: llama3.2:3b      │    │ • Cloud API (LLaMA 3.3)   │
+              │ • Auto background spawn   │    │ • Bearer authentication   │
+              │ • 3-strike circuit breaker│    │ • 3-strike circuit breaker│
+              └────────────┬──────────────┘    └────────────┬──────────────┘
+                           │ Both Fail                      │
+                           └─────────────────┬──────────────┘
+                                             ▼
+                               ┌───────────────────────────┐
+                               │       Degraded Mode       │
+                               │ • Retrieval & Cache active│
+                               │ • Vector search works     │
+                               │ • Clear setup instructions│
+                               └───────────────────────────┘
+```
+
+### Routing & Circuit Breaker Logic
+1. **Auto Detection (`LLM_PROVIDER=auto`)**:
+   - Probes local Ollama (`http://localhost:11434/api/tags`).
+   - If Ollama CLI is installed but the server is stopped, RAGOps attempts to spawn `ollama serve` in the background and polls for readiness.
+   - If the configured model (`OLLAMA_MODEL`) is missing, it either pulls it automatically (`OLLAMA_AUTO_PULL=true`) or logs the exact command to pull (`ollama pull llama3.2:3b`).
+   - If Ollama is unavailable or missing models, the router automatically falls back to Groq Cloud API.
+2. **Dynamic Request-Level Fallback**:
+   - If the active provider encounters a network timeout, connection reset, or 5xx error mid-request, RAGOps retries with exponential backoff and automatically falls back to the alternate provider.
+   - The query execution trace logs `provider_used`, `fallback_used: true`, and `provider_error`.
+3. **Circuit Breaker**:
+   - 3 consecutive failures trips the provider's circuit breaker to `OPEN` for 60 seconds, preventing latency spikes from repeated failing calls before probing again.
+4. **Graceful Degraded Mode**:
+   - If neither Ollama nor Groq is available, RAGOps starts anyway without crashing. Document ingestion, BM25/vector search, and semantic cache lookups remain 100% operational, and generation endpoints return clear, actionable configuration instructions.
+
+---
+
+## 11. Configuration & Environment Variables Reference
+
+Configure these settings in `.env` (refer to `.env.example` for starter template):
+
+| Variable | Default Value | Description |
+|---|---|---|
+| `LLM_PROVIDER` | `auto` | Active LLM routing mode: `auto` (Ollama first, Groq fallback), `ollama`, or `groq` |
+| `LLM_TIMEOUT_SECONDS` | `30` | Maximum timeout in seconds per LLM generation call |
+| `LLM_MAX_RETRIES` | `2` | Bounded retries with exponential backoff on transient network failures |
+| `OLLAMA_BASE_URL` | `http://localhost:11434` | Base URL for local Ollama daemon |
+| `OLLAMA_MODEL` | `llama3.2:3b` | Target local Ollama model identifier |
+| `OLLAMA_AUTO_PULL` | `false` | Automatically pull target model if absent (`true` / `false`) |
+| `GROQ_API_KEY` | *(empty)* | Cloud Groq API key from [console.groq.com](https://console.groq.com) |
+| `GROQ_MODEL` | `openai/gpt-oss-120b` | Groq model name (validated against Groq `/models` endpoint at runtime) |
+| `HYBRID_SEARCH` | `false` | Enable BM25 sparse keyword + dense vector Reciprocal Rank Fusion (RRF) |
+| `DATABASE_URL` | `sqlite+aiosqlite:///./data/ragops.db` | PostgreSQL (`postgresql://...`) or SQLite URL |
+| `REDIS_URL` | `redis://127.0.0.1:6379/0` | Redis / Memurai connection string for semantic cache |
+| `REDIS_ENABLED` | `true` | Enable Redis multi-tier caching (falls back to memory/DB if offline) |
+| `CACHE_SIMILARITY_THRESHOLD` | `0.90` | Cosine similarity threshold for semantic cache hits ($\ge 0.90$) |
+| `CHROMA_PERSIST_DIR` | `./data/chroma` | Directory for persistent ChromaDB vector storage |
+| `EMBEDDING_MODEL` | `all-MiniLM-L6-v2` | Sentence-Transformers embedding model (384 dimensions) |
+
+---
+
+## 12. Troubleshooting Guide
+
+### 1. `ragops doctor` Diagnostic Command
+Run `ragops doctor` at any time to inspect your system's components:
+```bash
+ragops doctor
+```
+This prints the health status of Ollama, Groq, ChromaDB, SQLite/PostgreSQL, and Redis with exact remediation steps.
+
+### 2. Ollama is Installed but Not Running
+If `ragops doctor` reports Ollama is installed but not running:
+```bash
+ollama serve
+```
+RAGOps also attempts to auto-launch `ollama serve` in the background during backend startup if `LLM_PROVIDER=auto`.
+
+### 3. Ollama Target Model Missing
+If Ollama is running but `llama3.2:3b` is missing:
+```bash
+ollama pull llama3.2:3b
+```
+Or set `OLLAMA_AUTO_PULL=true` in your `.env` to allow RAGOps to pull missing models automatically.
+
+### 4. Groq API Key Errors (HTTP 401 or 429)
+- **HTTP 401 Unauthorized**: Check that `GROQ_API_KEY` in `.env` contains a valid key from [console.groq.com](https://console.groq.com). RAGOps masks all keys in logs and diagnostics.
+- **HTTP 429 Rate Limit**: Groq free tier rate limits reset quickly. The circuit breaker will pause calls for 60 seconds. Alternatively, install Ollama for unlimited local inference.
+
+### 5. Running Fully Offline (No Internet & No API Keys)
+RAGOps runs 100% offline using Ollama:
+```bash
+# 1. Start Ollama and pull local model
+ollama pull llama3.2:3b
+
+# 2. In .env set:
+LLM_PROVIDER=ollama
+```
+
+### 6. Port Conflicts
+- **Port 8000 (Backend API)**: Run with a different port using `ragops serve --port 8080`.
+- **Port 5432 (PostgreSQL)**: If local PostgreSQL is not running, RAGOps automatically fails over to embedded SQLite (`data/ragops.db`) without crashing.
+
+---
+
+## 13. Automated Quality Gate CI/CD & Testing
 
 ### Benchmark Evaluation Workflow
 ```bash
@@ -559,6 +689,6 @@ pytest tests/ -v
 
 ---
 
-## 11. License
+## 14. License
 
 Licensed under the [MIT License](LICENSE).

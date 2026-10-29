@@ -88,6 +88,12 @@ async def lifespan(app: FastAPI):
             ollama_ready=diag["ollama"]["model_ready"],
             groq_reachable=diag["groq"]["reachable"],
         )
+        if diag["groq"].get("reachable") and not diag["groq"].get("model_in_list", True):
+            logger.warning(
+                "configured_groq_model_not_found_in_api",
+                configured_model=diag["groq"]["model"],
+                hint="The configured GROQ_MODEL was not returned in the Groq /openai/v1/models list and may be retired.",
+            )
     except Exception as llm_err:
         logger.warning("llm_provider_lifespan_init_failed", error=str(llm_err))
 
