@@ -236,6 +236,12 @@ class EvaluationResult(BaseModel):
     total_output_tokens: int = 0
     total_cost: float = 0.0
     sample_count: int = 0
+    recall_sample_size: int = 0
+    recall_wilson_ci_95: dict[str, float] = Field(default_factory=dict)
+    abstention_accuracy: float = 0.0
+    abstention_sample_size: int = 0
+    abstention_wilson_ci_95: dict[str, float] = Field(default_factory=dict)
+    ragas_metrics: dict[str, Any] = Field(default_factory=dict)
     evaluated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 

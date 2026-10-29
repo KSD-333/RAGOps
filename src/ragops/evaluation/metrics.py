@@ -32,9 +32,18 @@ class MetricsAggregator:
             answer_relevance_heuristic,
             citation_accuracy,
         )
+        from ragops.evaluation.confidence import (
+            is_grounded_abstention,
+            wilson_score_interval,
+        )
 
         # Compute per-sample metrics
         recalls = []
+        in_domain_recalls = []
+        recall_hits = 0
+        abstention_successes = 0
+        abstention_total = 0
+
         precisions = []
         mrrs = []
         faithfulness_scores = []
@@ -45,8 +54,20 @@ class MetricsAggregator:
         total_output_tokens = 0
 
         for i, output in enumerate(outputs):
-            # Retrieval metrics
-            recalls.append(recall_at_k(output.expected_chunks, output.retrieved_chunks, k=5))
+            is_abstention_test = (not output.expected_chunks)
+
+            if is_abstention_test:
+                abstention_total += 1
+                if is_grounded_abstention(output.actual_answer):
+                    abstention_successes += 1
+            else:
+                r_k = recall_at_k(output.expected_chunks, output.retrieved_chunks, k=5)
+                recalls.append(r_k)
+                in_domain_recalls.append(r_k)
+                if r_k > 0.0:
+                    recall_hits += 1
+
+            # Precision & MRR
             precisions.append(precision_at_k(output.expected_chunks, output.retrieved_chunks, k=5))
             mrrs.append(mrr(output.expected_chunks, output.retrieved_chunks))
 
@@ -77,20 +98,29 @@ class MetricsAggregator:
         p50_idx = len(sorted_latencies) // 2
         p95_idx = int(len(sorted_latencies) * 0.95)
 
+        # Compute 95% Wilson Confidence Intervals
+        recall_ci = wilson_score_interval(recall_hits, len(in_domain_recalls))
+        abstention_ci = wilson_score_interval(abstention_successes, abstention_total)
+
         result = EvaluationResult(
             dataset_version=dataset_version,
             rag_version=rag_version,
-            retrieval_recall=statistics.mean(recalls) if recalls else 0,
-            retrieval_precision=statistics.mean(precisions) if precisions else 0,
-            mrr=statistics.mean(mrrs) if mrrs else 0,
-            faithfulness=statistics.mean(faithfulness_scores) if faithfulness_scores else 0,
-            answer_relevance=statistics.mean(relevance_scores) if relevance_scores else 0,
-            citation_accuracy=statistics.mean(citation_scores) if citation_scores else 0,
-            p50_latency_ms=sorted_latencies[p50_idx] if sorted_latencies else 0,
-            p95_latency_ms=sorted_latencies[min(p95_idx, len(sorted_latencies) - 1)] if sorted_latencies else 0,
+            retrieval_recall=statistics.mean(recalls) if recalls else 0.0,
+            retrieval_precision=statistics.mean(precisions) if precisions else 0.0,
+            mrr=statistics.mean(mrrs) if mrrs else 0.0,
+            faithfulness=statistics.mean(faithfulness_scores) if faithfulness_scores else 0.0,
+            answer_relevance=statistics.mean(relevance_scores) if relevance_scores else 0.0,
+            citation_accuracy=statistics.mean(citation_scores) if citation_scores else 0.0,
+            p50_latency_ms=sorted_latencies[p50_idx] if sorted_latencies else 0.0,
+            p95_latency_ms=sorted_latencies[min(p95_idx, len(sorted_latencies) - 1)] if sorted_latencies else 0.0,
             total_input_tokens=total_input_tokens,
             total_output_tokens=total_output_tokens,
             sample_count=len(outputs),
+            recall_sample_size=len(in_domain_recalls),
+            recall_wilson_ci_95=recall_ci,
+            abstention_accuracy=abstention_ci["proportion"],
+            abstention_sample_size=abstention_total,
+            abstention_wilson_ci_95=abstention_ci,
         )
 
         logger.info(

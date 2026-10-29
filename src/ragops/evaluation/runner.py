@@ -20,6 +20,7 @@ from ragops.core.types import (
     QueryRequest,
 )
 from ragops.evaluation.datasets import DatasetLoader
+from ragops.evaluation.external_eval import run_ragas_evaluation
 from ragops.evaluation.judges import LLMJudge
 from ragops.evaluation.metrics import MetricsAggregator
 from ragops.evaluation.schemas import EvaluationConfig
@@ -94,6 +95,17 @@ class EvaluationRunner:
             judge_scores=judge_scores if judge_scores else None,
         )
 
+        # 4b. Optional external RAGAS evaluation
+        if config.use_ragas:
+            contexts = [[s.content for s in o.sources] for o in outputs]
+            ragas_res = run_ragas_evaluation(
+                questions=[o.question for o in outputs],
+                answers=[o.actual_answer for o in outputs],
+                contexts=contexts,
+                ground_truths=[o.expected_answer for o in outputs],
+            )
+            result.ragas_metrics = ragas_res
+
         # 5. Save report
         if config.save_report:
             self._save_report(result, outputs, config)
@@ -101,6 +113,9 @@ class EvaluationRunner:
         logger.info(
             "evaluation_complete",
             recall=round(result.retrieval_recall, 3),
+            recall_ci=result.recall_wilson_ci_95,
+            abstention_accuracy=round(result.abstention_accuracy, 3),
+            abstention_ci=result.abstention_wilson_ci_95,
             faithfulness=round(result.faithfulness, 3),
             samples=result.sample_count,
         )
