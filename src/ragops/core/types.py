@@ -168,6 +168,7 @@ class LLMResponse(BaseModel):
     """Raw LLM response with usage metadata."""
     text: str
     model: str
+    provider: str = "unknown"
     input_tokens: int = 0
     output_tokens: int = 0
     latency_ms: float = 0.0

@@ -196,6 +196,7 @@ class ChatRepository:
         cache_hit: bool = False,
         rewritten_query: str = "",
         cache_latency_saved_ms: float = 0.0,
+        provider: str = 'unknown',
     ) -> ChatMessageModel:
         """Persist a full RAG turn with all tokens, latencies, chunk provenance, and cache telemetry."""
         session = get_session()
@@ -216,6 +217,7 @@ class ChatRepository:
                 query=query,
                 answer=answer,
                 model=model,
+                provider=provider,
                 input_tokens=input_tokens,
                 output_tokens=output_tokens,
                 total_tokens=total_tokens,
@@ -498,6 +500,7 @@ class ChatRepository:
                     "response": m.answer,
                     "citations": m.citations,
                     "model": m.model,
+            "provider": getattr(m, "provider", "unknown"),
                     "created_at": str(m.created_at),
                 }
                 for m in records

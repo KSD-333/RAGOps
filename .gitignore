@@ -48,6 +48,8 @@ htmlcov/
 .coverage
 .coverage.*
 
+dump.rdb
+
 # mypy
 .mypy_cache/
 

@@ -54,12 +54,33 @@ class GenerationError(RAGOpsError):
 
 
 class LLMProviderError(GenerationError):
-    """Error from the LLM provider (Groq, OpenAI, etc.)."""
+    """Error from the LLM provider (Ollama, Groq, etc.)."""
 
-    def __init__(self, message: str = "", provider: str = "", status_code: int | None = None):
+    def __init__(self, message: str = "", provider: str = "", status_code: int | None = None, fix_hint: str = ""):
         self.provider = provider
         self.status_code = status_code
-        super().__init__(message, {"provider": provider, "status_code": status_code})
+        self.fix_hint = fix_hint
+        super().__init__(message, {"provider": provider, "status_code": status_code, "fix_hint": fix_hint})
+
+
+class ProviderUnavailableError(LLMProviderError):
+    """LLM provider service or API is completely unavailable."""
+    pass
+
+
+class ModelNotFoundError(LLMProviderError):
+    """Requested model is not installed or available on provider."""
+    pass
+
+
+class CircuitBreakerOpenError(LLMProviderError):
+    """Circuit breaker is open due to recent repeated failures."""
+    pass
+
+
+class PromptInjectionDetectedError(RAGOpsError):
+    """Potential prompt injection or malicious instruction detected in untrusted content."""
+    pass
 
 
 class PromptTooLongError(GenerationError):

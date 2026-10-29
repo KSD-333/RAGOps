@@ -340,5 +340,103 @@ def status():
     console.print(table)
 
 
+
+@cli.command()
+def doctor():
+    """Diagnose RAGOps environment, LLM providers (Ollama & Groq), and system health."""
+    from ragops.core.config import get_settings
+    from ragops.generation.providers.router import get_llm_router
+    from ragops.retrieval.vector_store import ChromaVectorStore
+    from ragops.storage.database import get_active_db_type
+
+    settings = get_settings()
+    router = get_llm_router()
+    diag = router.diagnose()
+
+    active_color = "green" if diag["active_provider"] != "degraded" else "red"
+    degraded_color = "red" if diag["degraded"] else "green"
+    degraded_label = "YES (Fallback to Retrieval-only)" if diag["degraded"] else "NO (Full Generation Active)"
+
+    console.print(Panel.fit(
+        f"[bold cyan]RAGOps System Doctor & LLM Diagnostics[/bold cyan]\n"
+        f"Mode: [bold]{diag['mode']}[/bold] | Active Provider: [bold {active_color}]{diag['active_provider']}[/bold {active_color}]\n"
+        f"Degraded Status: [bold {degraded_color}]{degraded_label}[/bold {degraded_color}]",
+        border_style="cyan",
+    ))
+
+    # 1. LLM Providers Table
+    llm_table = Table(title="LLM Provider Diagnostics")
+    llm_table.add_column("Provider", style="cyan", no_wrap=True)
+    llm_table.add_column("Property", style="white")
+    llm_table.add_column("Value / Status", style="green")
+
+    # Ollama Rows
+    o = diag["ollama"]
+    o_status = "[bold green]Online[/bold green]" if o["running"] and o["model_ready"] else (
+        "[bold yellow]Running (Model Missing)[/bold yellow]" if o["running"] else "[bold red]Offline[/bold red]"
+    )
+    llm_table.add_row("Ollama (Local)", "Binary Installed", "[green]Yes[/green]" if o["installed"] else "[red]No[/red]")
+    llm_table.add_row("Ollama (Local)", "Server Running", f"[green]Yes ({router.ollama.base_url})[/green]" if o["running"] else "[red]No[/red]")
+    llm_table.add_row("Ollama (Local)", "Configured Model", f"{o['configured_model']}")
+    llm_table.add_row("Ollama (Local)", "Model Ready", "[green]Yes[/green]" if o["model_ready"] else "[yellow]No (Needs Pull)[/yellow]")
+    llm_table.add_row("Ollama (Local)", "Status Verdict", o_status)
+
+    # Groq Rows
+    g = diag["groq"]
+    g_status = "[bold green]Online[/bold green]" if g["reachable"] else "[bold red]Unavailable[/bold red]"
+    llm_table.add_row("Groq (Cloud)", "API Key Present", f"[green]Yes ({g.get('masked_key', '***')})[/green]" if g["key_present"] else "[red]Missing in .env[/red]")
+    llm_table.add_row("Groq (Cloud)", "API Reachable", "[green]Yes[/green]" if g["reachable"] else "[red]No[/red]")
+    llm_table.add_row("Groq (Cloud)", "Configured Model", f"{g.get('model', settings.groq.model)}")
+    llm_table.add_row("Groq (Cloud)", "Model In Available List", "[green]Yes[/green]" if g.get("model_in_list") else "[yellow]Unknown/Unverified[/yellow]")
+    llm_table.add_row("Groq (Cloud)", "Status Verdict", g_status)
+
+    console.print(llm_table)
+
+    # 2. Storage & Cache Diagnostics
+    stor_table = Table(title="Storage & Retrieval Subsystems")
+    stor_table.add_column("Subsystem", style="cyan")
+    stor_table.add_column("Engine / Location", style="white")
+    stor_table.add_column("Status", style="green")
+
+    db_type = get_active_db_type()
+    stor_table.add_row("Relational Database", f"SQLAlchemy ({db_type})", "[bold green]Connected[/bold green]")
+
+    try:
+        store = ChromaVectorStore()
+        count = store.count()
+        stor_table.add_row("ChromaDB Vector Store", f"{settings.chroma.persist_dir} ({count} chunks)", "[bold green]Indexed[/bold green]")
+    except Exception as e:
+        stor_table.add_row("ChromaDB Vector Store", settings.chroma.persist_dir, f"[bold red]Error: {e}[/bold red]")
+
+    redis_stat = "[bold yellow]Disabled[/bold yellow]"
+    if settings.redis.enabled:
+        from ragops.storage.redis_cache import ensure_redis_running
+        if ensure_redis_running(settings.redis.url):
+            redis_stat = "[bold green]Online (<2ms exact & ≥90% semantic)[/bold green]"
+        else:
+            redis_stat = "[bold yellow]Offline (Fallback to local cache)[/bold yellow]"
+    stor_table.add_row("Redis Semantic Cache", settings.redis.url, redis_stat)
+
+    console.print(stor_table)
+
+    # 3. Actionable Fix Suggestions
+    if diag["degraded"]:
+        console.print("\n[bold yellow]⚠️  ACTION REQUIRED TO RESTORE LLM GENERATION:[/bold yellow]")
+        if not o["installed"]:
+            console.print("  1. [bold]Install Ollama locally:[/bold] Download from [link=https://ollama.com]https://ollama.com[/link]")
+        elif not o["running"]:
+            console.print("  1. [bold]Start Ollama service:[/bold] Run [cyan]ollama serve[/cyan] in a terminal")
+        elif not o["model_ready"]:
+            console.print(f"  1. [bold]Pull configured model:[/bold] Run [cyan]ollama pull {o['configured_model']}[/cyan]")
+
+        if not g["key_present"]:
+            console.print("  2. [bold]Set Cloud API Key:[/bold] Add [cyan]GROQ_API_KEY=gsk_...[/cyan] to your [cyan].env[/cyan] file")
+        elif not g["reachable"]:
+            console.print(f"  2. [bold]Fix Groq API:[/bold] {g.get('message', 'Verify API key and internet access')}")
+    else:
+        active_name = diag["active_provider"]
+        console.print(f"\n[bold green]✓ System is healthy and ready to serve queries via {active_name.upper()}![/bold green]")
+
+
 if __name__ == "__main__":
     cli()

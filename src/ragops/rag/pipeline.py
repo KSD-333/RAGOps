@@ -56,10 +56,11 @@ class RAGPipeline:
             self._llm_client = llm_client
         else:
             try:
-                self._llm_client = GroqClient()
+                from ragops.generation.providers.router import get_llm_router
+                self._llm_client = get_llm_router()
             except Exception as e:
                 logger.warning(
-                    "groq_client_init_failed_fallback_to_mock",
+                    "llm_router_init_failed_fallback_to_mock",
                     error=str(e),
                 )
                 from ragops.generation.llm import MockLLMClient
@@ -314,6 +315,14 @@ class RAGPipeline:
             retrieved_context=retrieved_context,
             trace_id=trace_id,
         )
+
+        # Provider routing & latency telemetry
+        provider_name = getattr(llm_response, "provider", getattr(self._llm_client, "last_provider_used", "unknown"))
+        rag_response.metadata["provider_used"] = provider_name
+        rag_response.metadata["fallback_used"] = getattr(self._llm_client, "last_fallback_used", False)
+        if getattr(self._llm_client, "last_provider_error", None):
+            rag_response.metadata["provider_error"] = self._llm_client.last_provider_error
+        rag_response.metadata["generation_latency_ms"] = getattr(llm_response, "latency_ms", 0.0)
 
         # Check for abstention / refusal -> Trigger Autonomous Search Tool Fallback ONLY if explicit company URLs are registered
         if self._is_abstention(rag_response.answer):

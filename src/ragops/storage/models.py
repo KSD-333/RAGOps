@@ -65,6 +65,7 @@ class ChatMessageModel(Base):
     query = Column(Text, nullable=False)
     answer = Column(Text, default="", nullable=False)
     model = Column(String(100), default="", nullable=False)
+    provider = Column(String(50), default="unknown", nullable=True)
 
     # Token & Cost Metrics
     input_tokens = Column(Integer, default=0, nullable=False)

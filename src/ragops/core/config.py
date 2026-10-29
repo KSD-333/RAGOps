@@ -34,6 +34,24 @@ class GroqSettings(BaseSettings):
     max_tokens: int = Field(default=2048, alias="GROQ_MAX_TOKENS")
 
 
+class OllamaSettings(BaseSettings):
+    """Ollama local LLM provider settings."""
+    model_config = _COMMON_CONFIG
+
+    base_url: str = Field(default="http://localhost:11434", alias="OLLAMA_BASE_URL")
+    model: str = Field(default="llama3.2:3b", alias="OLLAMA_MODEL")
+    auto_pull: bool = Field(default=False, alias="OLLAMA_AUTO_PULL")
+
+
+class LLMSettings(BaseSettings):
+    """Global LLM router and timeout settings."""
+    model_config = _COMMON_CONFIG
+
+    provider: str = Field(default="auto", alias="LLM_PROVIDER")  # auto | ollama | groq
+    timeout_seconds: float = Field(default=30.0, alias="LLM_TIMEOUT_SECONDS")
+    max_retries: int = Field(default=2, alias="LLM_MAX_RETRIES")
+
+
 
 class EmbeddingSettings(BaseSettings):
     """Embedding model settings."""
@@ -67,6 +85,7 @@ class RetrievalSettings(BaseSettings):
     reranker_model: str = Field(
         default="cross-encoder/ms-marco-MiniLM-L-6-v2", alias="RERANKER_MODEL"
     )
+    hybrid_search: bool = Field(default=False, alias="HYBRID_SEARCH")
 
 
 class IngestionSettings(BaseSettings):
@@ -114,6 +133,8 @@ class Settings(BaseSettings):
     environment: str = Field(default="development", alias="ENVIRONMENT")
 
     groq: GroqSettings = Field(default_factory=GroqSettings)
+    ollama: OllamaSettings = Field(default_factory=OllamaSettings)
+    llm: LLMSettings = Field(default_factory=LLMSettings)
     embedding: EmbeddingSettings = Field(default_factory=EmbeddingSettings)
     chroma: ChromaSettings = Field(default_factory=ChromaSettings)
     database: DatabaseSettings = Field(default_factory=DatabaseSettings)

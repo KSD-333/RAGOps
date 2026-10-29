@@ -97,6 +97,7 @@ async def query_rag(input: QueryInput):
                 cache_hit=meta.get("cache_hit", False),
                 rewritten_query=meta.get("rewritten_query", ""),
                 cache_latency_saved_ms=meta.get("latency_saved_ms", 0.0),
+                provider=meta.get("provider_used", "unknown"),
             )
         except Exception as db_err:
             logger.warning("chat_turn_db_persistence_failed", error=str(db_err))

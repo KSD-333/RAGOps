@@ -74,6 +74,23 @@ async def lifespan(app: FastAPI):
         except Exception as redis_err:
             logger.warning("redis_auto_start_check_failed", error=str(redis_err))
 
+    # LLM Provider Detection & Lifespan Health Check
+    try:
+        from ragops.generation.providers.router import get_llm_router
+        router = get_llm_router()
+        active = router.detect_active_provider(auto_start_ollama=True)
+        diag = router.diagnose()
+        logger.info(
+            "llm_provider_initialized",
+            mode=diag["mode"],
+            active_provider=active,
+            degraded=diag["degraded"],
+            ollama_ready=diag["ollama"]["model_ready"],
+            groq_reachable=diag["groq"]["reachable"],
+        )
+    except Exception as llm_err:
+        logger.warning("llm_provider_lifespan_init_failed", error=str(llm_err))
+
     # Launch model warmup in background task so Uvicorn opens listening port in <1 second
     asyncio.create_task(_async_warmup())
 

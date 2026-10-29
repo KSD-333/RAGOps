@@ -143,6 +143,7 @@ def init_db() -> None:
                 ("cache_hit", "BOOLEAN DEFAULT FALSE"),
                 ("rewritten_query", "TEXT DEFAULT ''"),
                 ("cache_latency_saved_ms", "FLOAT DEFAULT 0.0"),
+                ("provider", "VARCHAR(50) DEFAULT 'unknown'"),
             ]:
                 try:
                     conn.execute(text(f"ALTER TABLE chat_messages ADD COLUMN {col_name} {col_type}"))
