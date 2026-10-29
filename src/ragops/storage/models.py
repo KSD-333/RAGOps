@@ -292,6 +292,8 @@ class FactCandidateModel(Base):
     normalized_value = Column(JSON, nullable=True)
     validation_status = Column(String(20), default="pending", nullable=False)  # 'pending', 'valid', 'invalid', 'conflicting', 'needs_review'
     review_status = Column(String(20), default="pending", nullable=False)  # 'pending', 'approved', 'rejected', 'needs_changes', 'superseded'
+    quarantine = Column(Boolean, default=False, nullable=False)
+    quarantine_reason = Column(String(500), nullable=True)
     extractor_version = Column(String(50), default="v1.0")
     extraction_confidence = Column(Float, default=1.0)
     reviewed_by = Column(String(100), nullable=True)

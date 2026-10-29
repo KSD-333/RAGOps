@@ -120,6 +120,8 @@ class CandidateFactItem(BaseModel):
     validation_status: str = Field("valid", description="'valid', 'conflicting', 'needs_review', 'invalid'")
     review_status: str = Field("pending", description="'pending', 'approved', 'rejected', 'needs_changes'")
     extraction_confidence: float = Field(0.95, ge=0.0, le=1.0)
+    quarantine: bool = Field(False, description="Flagged for security review due to prompt-injection or suspicious instructions")
+    quarantine_reason: Optional[str] = Field(None, description="Explanation of why candidate fact was quarantined")
     evidence_text: str = Field(..., description="Exact verbatim citation quote from source text")
     section_heading: Optional[str] = Field(None, description="Heading of the section where fact was located")
     source_url: Optional[str] = Field(None, description="Canonical page URL where evidence was found")

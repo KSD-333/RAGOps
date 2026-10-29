@@ -150,6 +150,16 @@ def init_db() -> None:
                     conn.commit()
                 except Exception:
                     pass
+
+            for col_name, col_type in [
+                ("quarantine", "BOOLEAN DEFAULT FALSE"),
+                ("quarantine_reason", "VARCHAR(500) DEFAULT ''"),
+            ]:
+                try:
+                    conn.execute(text(f"ALTER TABLE fact_candidates ADD COLUMN {col_name} {col_type}"))
+                    conn.commit()
+                except Exception:
+                    pass
     except Exception as e:
         logger.debug("schema_evolution_check_done", msg=str(e))
 

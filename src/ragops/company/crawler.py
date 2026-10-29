@@ -9,6 +9,7 @@ import requests
 from bs4 import BeautifulSoup
 
 from ragops.company.schema import CrawledPageDoc
+from ragops.core.security import sanitize_crawled_html
 from ragops.core.logging import get_logger
 
 logger = get_logger(__name__)
@@ -157,12 +158,8 @@ class UniversalCompanyCrawler:
             for tag in soup(["script", "style", "noscript", "svg", "header", "footer", "nav", "aside", "form"]):
                 tag.decompose()
 
-            # Clean content text
-            text = soup.get_text(separator="\n")
-            lines = [line.strip() for line in text.splitlines() if line.strip()]
-            full_text = "\n".join(lines)
-            full_text = re.sub(r"\n{3,}", "\n\n", full_text)
-            truncated_text = full_text[: self.max_chars_per_page]
+            # Clean content text with robust prompt-injection & hidden-DOM defense
+            truncated_text = sanitize_crawled_html(raw_html, max_chars=self.max_chars_per_page)
 
             doc = CrawledPageDoc(
                 url=clean_url,

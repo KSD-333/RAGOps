@@ -133,6 +133,8 @@ class CompanyIntelligenceService:
                 document_id=primary_doc_id,
                 validation_status=cand.validation_status,
                 review_status="pending",
+                quarantine=cand.quarantine,
+                quarantine_reason=cand.quarantine_reason,
                 extraction_confidence=cand.extraction_confidence,
                 organization_id=org_id,
                 evidence_list=[

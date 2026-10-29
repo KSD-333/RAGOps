@@ -1508,6 +1508,8 @@ class FactManagementRepository:
         document_id: Optional[str] = None,
         organization_id: str = "default_org",
         extraction_confidence: float = 1.0,
+        quarantine: bool = False,
+        quarantine_reason: Optional[str] = None,
     ) -> dict[str, Any]:
         """Save an extracted field candidate with its supporting evidence citations."""
         session = get_session()
@@ -1522,6 +1524,8 @@ class FactManagementRepository:
                 normalized_value=normalized_value or proposed_value,
                 validation_status=validation_status,
                 review_status=review_status,
+                quarantine=quarantine,
+                quarantine_reason=quarantine_reason,
                 extraction_confidence=extraction_confidence,
                 created_at=datetime.now(timezone.utc),
             )
@@ -2038,6 +2042,8 @@ class FactManagementRepository:
             "normalized_value": c.normalized_value,
             "validation_status": c.validation_status,
             "review_status": c.review_status,
+            "quarantine": bool(getattr(c, "quarantine", False)),
+            "quarantine_reason": getattr(c, "quarantine_reason", None),
             "extraction_confidence": c.extraction_confidence,
             "reviewed_by": c.reviewed_by,
             "reviewed_at": str(c.reviewed_at) if c.reviewed_at else None,

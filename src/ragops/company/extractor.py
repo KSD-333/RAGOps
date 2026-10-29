@@ -59,6 +59,32 @@ class UniversalCompanyExtractor:
         # 4. Enforce Conflict Detection across candidate claims
         self._detect_conflicts(candidates)
 
+        # 5. Prompt-Injection & Security Defense Scan
+        from ragops.core.security import detect_prompt_injection
+        suspicious_urls = set()
+        for doc in crawled_docs:
+            doc_flagged, doc_reason = detect_prompt_injection(doc.clean_text)
+            if doc_flagged:
+                suspicious_urls.add(doc.url)
+
+        for cand in candidates:
+            val_str = str(cand.proposed_value)
+            ev_str = str(cand.evidence_text)
+            flagged, reason = detect_prompt_injection(f"{val_str} {ev_str}")
+            if not flagged and cand.source_url in suspicious_urls:
+                flagged = True
+                reason = f"Source page '{cand.source_url}' contains suspicious instruction patterns"
+
+            if flagged:
+                cand.quarantine = True
+                cand.quarantine_reason = reason
+                cand.validation_status = "needs_review"
+                logger.warning(
+                    "candidate_fact_quarantined",
+                    fact=f"{cand.section_key}.{cand.fact_key}",
+                    reason=reason,
+                )
+
         logger.info("universal_extraction_completed", company=company_name, total_candidates=len(candidates))
         return candidates
 
