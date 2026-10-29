@@ -8,25 +8,38 @@ from ragops.tools.web_extractor import CompanyWebExtractor
 
 
 def test_rag_pipeline_answers_company_locations_query():
-    # Ensure profile with locations is seeded and embedded
+    # Test using a fictitious entity and clean up afterwards
     repo = CompanyRepository()
-    repo.update_profile({
-        "company_name": "Carraro India",
-        "group_name": "Carraro Group",
-        "locations": [
-            {"city": "Pune", "state": "Maharashtra", "type": "Manufacturing Plant", "address": "MIDC Ranjangaon"},
-            {"city": "Campodarsego", "state": "Padua", "type": "Global Headquarters", "address": "Via Olmo 37"},
-        ],
-    })
-    profile = repo.get_profile()
-    extractor = CompanyWebExtractor()
-    extractor.embed_company_profile(profile)
+    try:
+        repo.update_profile({
+            "company_name": "TestCorp International",
+            "group_name": "TestCorp Group",
+            "locations": [
+                {"city": "Metropolis", "state": "Central", "type": "Manufacturing Plant", "address": "123 Industrial Way"},
+                {"city": "Capital City", "state": "North", "type": "Global Headquarters", "address": "1 Global Plaza"},
+            ],
+        })
+        profile = repo.get_profile()
+        extractor = CompanyWebExtractor()
+        extractor.embed_company_profile(profile)
 
-    pipeline = RAGPipeline()
-    response = pipeline.query(QueryRequest(query="company all loactions"))
+        pipeline = RAGPipeline()
+        response = pipeline.query(QueryRequest(query="company all locations"))
 
-    ans = response.answer.lower()
-    # It must NOT say "I'm sorry, but the provided documents do not contain any information"
-    assert "i'm sorry, but the provided documents do not contain" not in ans
-    # It should mention Pune or Ranjangaon or Italy or locations
-    assert any(w in ans for w in ["pune", "ranjangaon", "italy", "campodarsego", "plant", "location", "headquarters"])
+        ans = response.answer.lower()
+        # It must NOT say ungrounded rejection
+        assert "i'm sorry, but the provided documents do not contain" not in ans
+        assert any(w in ans for w in ["metropolis", "capital", "plant", "location", "headquarters"])
+    finally:
+        # Guarantee database remains clean and unpolluted
+        repo.update_profile({
+            "company_name": "",
+            "group_name": "",
+            "industry": "",
+            "locations": [],
+            "products": [],
+            "directors": [],
+            "ceo": "",
+            "domains_urls": [],
+            "metadata_json": {},
+        })

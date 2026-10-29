@@ -191,7 +191,7 @@ class WebSearchTool:
                 params={
                     "action": "query",
                     "list": "search",
-                    "srsearch": f"{resolved} company" if len(resolved.split()) == 1 and resolved.lower() not in ("siemens", "infosys", "wipro") else resolved,
+                    "srsearch": f"{resolved} company" if len(resolved.split()) == 1 else resolved,
                     "format": "json",
                     "utf8": 1,
                     "srlimit": 3,

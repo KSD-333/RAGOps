@@ -56,3 +56,5 @@ uv.lock
 
 Info.txt
 HOW_IT_WORKS_AND_OPERATIONS_GUIDE.md
+*.log
+memurai-log.txt

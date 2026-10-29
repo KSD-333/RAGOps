@@ -11,22 +11,22 @@ def test_fact_management_lifecycle():
 
     # 1. Register a test company source
     source = repo.register_source(
-        display_name="Carraro Test Portal",
-        source_url="https://www.carraro.com/test",
+        display_name="Acme Test Portal",
+        source_url="https://www.example-acme.com/test",
         source_type="website",
-        country_code="IT",
+        country_code="US",
         organization_id=test_org,
     )
-    assert source["display_name"] == "Carraro Test Portal"
+    assert source["display_name"] == "Acme Test Portal"
     assert source["verification_status"] == "verified"
 
     # 2. Record source document
     doc = repo.record_source_document(
-        content_text="Carraro S.p.A. global headquarters located in Campodarsego, Padua, Italy.",
-        canonical_url="https://www.carraro.com/test",
-        title="Carraro Test Corporate Profile",
+        content_text="Acme Corp global headquarters located in Chicago, Illinois.",
+        canonical_url="https://www.example-acme.com/test",
+        title="Acme Test Corporate Profile",
         source_id=source["id"],
-        country_code="IT",
+        country_code="US",
         organization_id=test_org,
     )
     assert doc["content_version"] >= 1
@@ -36,7 +36,7 @@ def test_fact_management_lifecycle():
     candidate = repo.save_candidate_with_evidence(
         section_key="identity",
         fact_key="global_headquarters",
-        proposed_value="Campodarsego, Padua, Italy",
+        proposed_value="Chicago, Illinois",
         scope_key="global",
         document_id=doc["id"],
         validation_status="valid",
@@ -45,9 +45,9 @@ def test_fact_management_lifecycle():
         organization_id=test_org,
         evidence_list=[
             {
-                "evidence_text": "Carraro S.p.A. global headquarters located in Campodarsego, Padua, Italy.",
+                "evidence_text": "Acme Corp global headquarters located in Chicago, Illinois.",
                 "section_heading": "Global Presence",
-                "source_url": "https://www.carraro.com/test",
+                "source_url": "https://www.example-acme.com/test",
             }
         ],
     )

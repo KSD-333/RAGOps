@@ -49,6 +49,9 @@ eval:
 serve:
 	$(PYTHON) -m ragops.cli.main serve --host 0.0.0.0 --port 8000 --reload
 
+dev:
+	$(PYTHON) -m ragops.cli.main dev
+
 docker-build:
 	docker build -t ragops/api:latest -f docker/Dockerfile.api .
 	docker build -t ragops/worker:latest -f docker/Dockerfile.worker .

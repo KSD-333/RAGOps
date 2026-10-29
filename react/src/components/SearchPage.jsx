@@ -356,7 +356,7 @@ export default function SearchPage({
         const botMsg = {
           id: `sys_${Date.now()}`,
           query: `AI Crawled & Extracted Corporate Profile from ${crawledPreview.domains_urls?.[0] || 'website'}`,
-          answer: `### ✅ Corporate Profile Grounded & Embedded Successfully!\n\nAll verified corporate intelligence for **${data.profile?.company_name || 'the company'}** has been stored in PostgreSQL and embedded into the ChromaDB Vector Store (**${data.chunks_embedded || 5} dense grounding chunks**):\n\n- **Locations & Facilities**: ${data.profile?.locations?.length || 0} locations/plants indexed (including Pune Ranjangaon Plant 1, MIDC Plant 2, Italy Global HQ).\n- **Key Clients & OEM Partners**: ${(data.profile?.metadata_json?.clients || []).join(', ') || 'Major OEMs indexed'}.\n- **Products & Systems**: ${(data.profile?.products || []).slice(0, 5).join(', ')}.\n- **Executive Leadership**: ${data.profile?.ceo || 'Executive Leadership'}.\n\n💡 **You can now ask:**\n- *"company all locations"*\n- *"who are the key clients and partners?"*\n- *"what products do they manufacture?"*`,
+          answer: `### ✅ Corporate Profile Grounded & Embedded Successfully!\n\nAll verified corporate intelligence for **${data.profile?.company_name || 'the company'}** has been stored in PostgreSQL and embedded into the ChromaDB Vector Store (**${data.chunks_embedded || 5} dense grounding chunks**):\n\n- **Locations & Facilities**: ${data.profile?.locations?.length || 0} locations/plants indexed (${(data.profile?.locations || []).slice(0, 3).map(l => l.city || l.address).filter(Boolean).join(', ') || 'Locations recorded'}).\n- **Key Clients & OEM Partners**: ${(data.profile?.metadata_json?.clients || []).join(', ') || 'Clients & partners recorded'}.\n- **Products & Systems**: ${(data.profile?.products || []).slice(0, 5).join(', ')}.\n- **Executive Leadership**: ${data.profile?.ceo || 'Executive Leadership'}.\n\n💡 **You can now ask:**\n- *"company all locations"*\n- *"who are the key clients and partners?"*\n- *"what products do they manufacture?"*`,
           sources: [`Corporate Profile Knowledge Base (${data.profile?.company_name})`],
           trace_id: `trace_embed_${Date.now()}`,
           metadata: { total_latency_ms: 10 },
@@ -997,7 +997,7 @@ export default function SearchPage({
               <Globe className="w-4 h-4 text-cyan-400 shrink-0" />
               <input
                 type="url"
-                placeholder="Paste company website URL (e.g. https://www.carraro.com/en or https://www.tatamotors.com)..."
+                placeholder="Paste company website URL (e.g. https://example.com)..."
                 value={targetCompanyUrl}
                 onChange={(e) => setTargetCompanyUrl(e.target.value)}
                 className="flex-1 min-w-[260px] px-3.5 py-2 bg-black/50 border border-white/10 rounded-xl text-xs text-white placeholder-slate-500 font-mono focus:outline-none focus:border-cyan-500"

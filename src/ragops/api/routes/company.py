@@ -399,19 +399,6 @@ async def get_published_knowledge(
         raise HTTPException(status_code=500, detail=f"Failed to fetch approved facts: {str(e)}")
 
 
-@router.post("/seed-carraro")
-async def seed_carraro_grounding(organization_id: str = "default_org", force_reset: bool = False):
-    """Seed audited Carraro candidate facts and approved knowledge (Campodarsego Italy HQ, 3,795 workforce, 8 plants, OEM partners)."""
-    try:
-        repo = FactManagementRepository()
-        result = repo.seed_carraro_knowledge(organization_id=organization_id, force_reset=force_reset)
-        _clear_rag_caches()
-        return result
-    except Exception as e:
-        logger.error("seed_carraro_grounding_failed", error=str(e))
-        raise HTTPException(status_code=500, detail=f"Failed to seed Carraro knowledge: {str(e)}")
-
-
 # -----------------------------------------------------------------------------
 # Backward-Compatible Profile & Extraction Endpoints
 # -----------------------------------------------------------------------------

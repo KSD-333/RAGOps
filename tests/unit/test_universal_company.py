@@ -75,6 +75,7 @@ def test_universal_extractor_heuristic_extraction():
     assert ("identity", "global_headquarters") in keys or ("locations", "headquarters") in keys or ("locations", "headquarters_location") in keys
     assert (
         ("identity", "ceo") in keys
+        or ("identity", "ceo_name") in keys
         or ("identity", "chief_executive_officer") in keys
         or ("leadership", "chief_executive_officer") in keys
         or ("leadership", "ceo") in keys

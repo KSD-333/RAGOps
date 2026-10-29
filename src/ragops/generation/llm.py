@@ -186,15 +186,10 @@ class MockLLMClient:
 
         # Detect location, facility, or plant queries from prompt context
         combined = f"{system_prompt} {user_prompt}".lower()
-        if any(k in combined for k in ["location", "plant", "headquarter", "facility", "ranjangaon", "pune", "campodarsego"]):
-            loc_mentions = []
-            for city in ["Pune", "Ranjangaon", "Campodarsego", "Italy"]:
-                if city.lower() in combined:
-                    loc_mentions.append(city)
-            loc_detail = f" in {', '.join(loc_mentions)}" if loc_mentions else ""
+        if any(k in combined for k in ["location", "plant", "headquarter", "facility"]):
             answer = (
-                f"Based on verified corporate documentation, the company maintains corporate headquarters "
-                f"and operational facilities including manufacturing plants and regional locations{loc_detail}."
+                "Based on verified corporate documentation, the company maintains corporate headquarters "
+                "and operational facilities including manufacturing plants and regional locations."
             )
             return LLMResponse(
                 text=answer,

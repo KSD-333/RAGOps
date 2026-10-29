@@ -49,15 +49,12 @@ class UniversalCompanyExtractor:
         # 2. Attempt Groq extraction
         candidates = self._extract_via_groq(company_name, combined_text, crawled_docs)
 
-        # 3. If LLM produced few or zero candidates (e.g. rate limit), run heuristic extractor
-        if not candidates or len(candidates) < 4:
-            logger.info("llm_extraction_insufficient_using_heuristic_extractor", company=company_name)
-            heuristic_candidates = self._extract_via_heuristics(company_name, crawled_docs, search_findings)
-            # Merge without duplicates
-            existing_keys = {(c.section_key, c.fact_key) for c in candidates}
-            for hc in heuristic_candidates:
-                if (hc.section_key, hc.fact_key) not in existing_keys:
-                    candidates.append(hc)
+        # 3. Always supplement with heuristic extraction to ensure core identity facts (CEO, HQ, etc.) are never omitted
+        heuristic_candidates = self._extract_via_heuristics(company_name, crawled_docs, search_findings)
+        existing_keys = {(c.section_key, c.fact_key) for c in candidates}
+        for hc in heuristic_candidates:
+            if (hc.section_key, hc.fact_key) not in existing_keys:
+                candidates.append(hc)
 
         # 4. Enforce Conflict Detection across candidate claims
         self._detect_conflicts(candidates)
@@ -128,9 +125,20 @@ class UniversalCompanyExtractor:
             raw_candidates = parsed.get("candidates", [])
 
             results: list[CandidateFactItem] = []
+            SYNONYM_FACT_KEYS = {
+                "ceo_name": "ceo",
+                "chief_executive_officer": "ceo",
+                "headquarters": "global_headquarters",
+                "headquarters_location": "global_headquarters",
+                "headcount": "global_headcount",
+                "employee_count": "global_headcount",
+            }
             for item in raw_candidates:
-                sec = item.get("section_key")
-                fkey = item.get("fact_key")
+                sec = str(item.get("section_key", "")).lower().strip()
+                fkey = str(item.get("fact_key", "")).lower().strip()
+                fkey = SYNONYM_FACT_KEYS.get(fkey, fkey)
+                if sec == "leadership" and fkey in ("ceo", "chairman"):
+                    sec = "identity"
                 val = item.get("proposed_value")
                 ev = item.get("evidence_text") or f"Extracted from {company_name} official website."
                 if not sec or not fkey or val is None:
@@ -140,8 +148,8 @@ class UniversalCompanyExtractor:
 
                 results.append(
                     CandidateFactItem(
-                        section_key=str(sec).lower(),
-                        fact_key=str(fkey).lower(),
+                        section_key=sec,
+                        fact_key=fkey,
                         scope_key=str(item.get("scope_key", "global")),
                         proposed_value=val,
                         normalized_value=item.get("normalized_value") or val,

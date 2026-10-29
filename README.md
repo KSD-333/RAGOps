@@ -343,16 +343,22 @@ cp .env.example .env
 # 5. Ingest initial knowledge base
 ragops ingest data/raw --version v1
 
-# 6. Start backend API server
-ragops serve --port 8000 --reload
-```
+# 6. One-Command Full Stack Launcher (Backend + React UI)
+# Windows:
+.\start_dev.bat
+# Or CLI:
+ragops dev
 
-In a separate terminal, run the React frontend with Hot Module Reloading (HMR):
-```bash
+# (Alternatively, run individually:)
+# Terminal 1 - Backend API:
+ragops serve --port 8000 --reload
+
+# Terminal 2 - React Web UI:
 cd react
 npm install
 npm run dev
-# Open http://localhost:5173/ in your browser
+# Access API Docs:  http://127.0.0.1:8000/docs
+# Access React UI:   http://localhost:5173/
 ```
 
 ---

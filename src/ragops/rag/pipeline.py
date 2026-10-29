@@ -109,17 +109,20 @@ class RAGPipeline:
             try:
                 from ragops.storage.repositories import CompanyRepository
                 prof = CompanyRepository().get_profile()
-                if prof and prof.get("company_name") and prof["company_name"].strip().lower() not in ("enterprise", "company", ""):
+                if prof and prof.get("company_name") and prof["company_name"].strip().lower() not in ("enterprise", "company", "carraro", "carraro india", "default", ""):
                     comp_name = f" for {prof['company_name'].strip()}"
             except Exception:
                 pass
 
             if intent.intent_type == "conversational_greeting":
-                reply = f"Hello! I am your RAGOps corporate assistant{comp_name}. How can I help you navigate company policies, locations, guidelines, or procedures today?"
+                if comp_name:
+                    reply = f"Hello! I am your RAGOps assistant{comp_name}. How can I help you navigate company documents, policies, or procedures today?"
+                else:
+                    reply = "Hello! I am your RAGOps Assistant. How can I help you navigate your documents, policies, or knowledge base today?"
             elif intent.intent_type == "conversational_acknowledgment":
-                reply = "You're welcome! Feel free to ask if you have any questions about company policies, documents, or procedures."
+                reply = "You're welcome! Feel free to ask if you have any questions about documents, policies, or procedures."
             else:
-                reply = "Hello! Please feel free to ask any specific question across the corporate knowledge base (e.g. 'What is the POSH complaint procedure?', 'What are the travel policy rules?', or 'Who are key clients?')."
+                reply = "Hello! Please feel free to ask any specific question across your ingested documents and knowledge base."
 
             est_out_toks = max(15, len(reply) // 4)
             est_in_toks = max(2, len(request.query) // 4)

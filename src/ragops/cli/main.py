@@ -263,6 +263,59 @@ def serve(host: str, port: int, reload: bool):
 
 
 @cli.command()
+@click.option("--host", default="0.0.0.0", help="API Host")
+@click.option("--port", default=8000, type=int, help="API Port")
+@click.option("--no-browser", is_flag=True, help="Do not open browser automatically")
+def dev(host: str, port: int, no_browser: bool):
+    """Start both FastAPI Backend and React Dashboard concurrently."""
+    import subprocess
+    import sys
+    from pathlib import Path
+
+    project_root = Path(__file__).resolve().parents[3]
+    react_dir = project_root / "react"
+
+    console.print(Panel.fit(
+        f"[bold cyan]RAGOps Full-Stack Dev Launcher[/bold cyan]\n"
+        f"[bold green]FastAPI API:[/bold green] http://127.0.0.1:{port} (Docs: http://127.0.0.1:{port}/docs)\n"
+        f"[bold blue]React Dashboard:[/bold blue] http://localhost:5173\n"
+        f"Press Ctrl+C to terminate both servers.",
+        border_style="cyan",
+    ))
+
+    # 1. Start React Vite server in background
+    react_proc = None
+    if react_dir.exists() and (react_dir / "package.json").exists():
+        console.print("[dim]Starting React Vite dashboard...[/dim]")
+        try:
+            react_proc = subprocess.Popen(
+                ["npm.cmd" if sys.platform == "win32" else "npm", "run", "dev"],
+                cwd=str(react_dir),
+                shell=(sys.platform == "win32"),
+            )
+        except Exception as e:
+            console.print(f"[yellow]Could not launch React automatically: {e}[/yellow]")
+
+    # 2. Start FastAPI server
+    try:
+        import uvicorn
+        from ragops.core.logging import setup_logging
+        from ragops.core.config import get_settings
+        from ragops.storage.redis_cache import ensure_redis_running
+
+        setup_logging("INFO")
+        settings = get_settings()
+        if settings.redis.enabled:
+            ensure_redis_running(settings.redis.url)
+
+        uvicorn.run("ragops.api.app:app", host=host, port=port, reload=True)
+    finally:
+        if react_proc and react_proc.poll() is None:
+            console.print("[dim]Stopping React dev server...[/dim]")
+            react_proc.terminate()
+
+
+@cli.command()
 def status():
     """Show RAGOps system status."""
     from ragops.core.config import get_settings

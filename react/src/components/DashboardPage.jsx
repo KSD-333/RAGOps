@@ -561,7 +561,7 @@ export default function DashboardPage({ onRerunQuery, apiBaseUrl = '', currentUs
   const handleExtractCompanyFromUrl = async (urlOverride = null) => {
     const target = (urlOverride || companyUrlInput || newCompanyUrl).trim();
     if (!target) {
-      alert('Please enter any company website URL (e.g. https://www.tatamotors.com or https://www.siemens.com or https://www.caterpillar.com)');
+      alert('Please enter any company website URL (e.g. https://example.com)');
       return;
     }
     setIsExtractingCompany(true);
@@ -2592,7 +2592,7 @@ export default function DashboardPage({ onRerunQuery, apiBaseUrl = '', currentUs
                   <Globe className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
                   <input
                     type="url"
-                    placeholder="Enter any enterprise website URL (e.g. https://www.tatamotors.com or https://www.siemens.com or https://www.tesla.com)..."
+                    placeholder="Enter any enterprise website URL (e.g. https://example.com)..."
                     value={companyUrlInput}
                     onChange={(e) => setCompanyUrlInput(e.target.value)}
                     onKeyDown={(e) => {
@@ -3307,7 +3307,7 @@ export default function DashboardPage({ onRerunQuery, apiBaseUrl = '', currentUs
                         type="text"
                         value={companyForm.company_name || ''}
                         onChange={(e) => setCompanyForm({ ...companyForm, company_name: e.target.value })}
-                        placeholder="e.g. Tata Motors Limited or Siemens AG"
+                        placeholder="e.g. Acme Corporation"
                         className="w-full px-3 py-2 bg-black/50 border border-white/10 rounded-xl text-white font-sans focus:outline-none focus:border-indigo-500"
                       />
                     </div>
@@ -3317,7 +3317,7 @@ export default function DashboardPage({ onRerunQuery, apiBaseUrl = '', currentUs
                         type="text"
                         value={companyForm.group_name || ''}
                         onChange={(e) => setCompanyForm({ ...companyForm, group_name: e.target.value })}
-                        placeholder="e.g. Tata Group or Siemens Group"
+                        placeholder="e.g. Acme Group"
                         className="w-full px-3 py-2 bg-black/50 border border-white/10 rounded-xl text-white font-sans focus:outline-none focus:border-indigo-500"
                       />
                     </div>
@@ -3503,7 +3503,7 @@ export default function DashboardPage({ onRerunQuery, apiBaseUrl = '', currentUs
                   <div className="flex items-center gap-2 pt-1">
                     <input
                       type="text"
-                      placeholder="Add OEM Client (e.g. Cummins, Caterpillar, Bosch)..."
+                      placeholder="Add Client / Partner name..."
                       value={newClientInput}
                       onChange={(e) => setNewClientInput(e.target.value)}
                       onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleAddClientItem(); } }}

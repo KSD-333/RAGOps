@@ -54,6 +54,7 @@ def get_engine():
                 pool_pre_ping=True,
                 pool_recycle=1800,
                 echo=False,
+                connect_args={"connect_timeout": 3},
             )
             # Test connection immediately
             with _engine.connect() as conn:
