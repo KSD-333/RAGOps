@@ -10,7 +10,7 @@ The implementation hides whether you're using ChromaDB, Qdrant, FAISS, or pgvect
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Protocol
+from typing import Any, Protocol
 
 import numpy as np
 

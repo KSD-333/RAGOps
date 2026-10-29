@@ -21,7 +21,7 @@ from ragops.core.types import (
 from ragops.retrieval.embeddings import EmbeddingProvider, SentenceTransformerEmbedding
 from ragops.retrieval.reranker import CrossEncoderReranker, NoOpReranker, Reranker
 from ragops.retrieval.vector_store import ChromaVectorStore, VectorStore
-from ragops.retrieval.bm25 import BM25Index, is_bm25_available, reciprocal_rank_fusion
+from ragops.retrieval.bm25 import BM25Index, reciprocal_rank_fusion
 
 logger = get_logger(__name__)
 

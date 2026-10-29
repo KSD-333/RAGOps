@@ -16,7 +16,7 @@ from ragops.core.types import (
     QueryRequest,
     RAGResponse,
 )
-from ragops.generation.llm import GroqClient, LLMClient
+from ragops.generation.llm import LLMClient
 from ragops.generation.prompts import build_system_prompt, build_user_prompt
 from ragops.generation.response import ResponseBuilder
 from ragops.rag.context_builder import ContextBuilder

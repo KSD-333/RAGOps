@@ -8,7 +8,6 @@ from typing import Any, Iterator
 from ragops.core.config import get_settings
 from ragops.core.exceptions import (
     CircuitBreakerOpenError,
-    ProviderUnavailableError,
 )
 from ragops.core.logging import get_logger
 from ragops.core.types import LLMResponse
