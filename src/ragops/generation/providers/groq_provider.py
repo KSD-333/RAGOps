@@ -294,3 +294,4 @@ class GroqProvider(LLMProvider):
                 f"Groq stream error: {e}",
                 provider=self.name,
             ) from e
+

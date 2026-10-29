@@ -165,3 +165,4 @@ def reciprocal_rank_fusion(
         )
 
     return fused_results
+

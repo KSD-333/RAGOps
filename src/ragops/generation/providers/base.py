@@ -73,3 +73,4 @@ class LLMProvider(ABC):
             Dictionary containing health diagnostic metrics without sensitive secrets.
         """
         pass
+

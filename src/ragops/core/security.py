@@ -100,3 +100,4 @@ def sanitize_crawled_html(raw_html: str, max_chars: int = 8000) -> str:
     except Exception as e:
         logger.warning("html_sanitization_fallback", error=str(e))
         return raw_html[:max_chars]
+

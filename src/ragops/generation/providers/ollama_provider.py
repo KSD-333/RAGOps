@@ -309,3 +309,4 @@ class OllamaProvider(LLMProvider):
                 f"Ollama stream interrupted: {e}",
                 provider=self.name,
             ) from e
+
