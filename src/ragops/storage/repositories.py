@@ -268,6 +268,15 @@ class ChatRepository:
         finally:
             session.close()
 
+    def get_trace(self, trace_id: str) -> dict[str, Any] | None:
+        """Fetch full telemetry and chunk provenance for a specific trace_id."""
+        session = get_session()
+        try:
+            msg = session.query(ChatMessageModel).filter(ChatMessageModel.trace_id == trace_id).first()
+            return self._to_dict(msg) if msg else None
+        finally:
+            session.close()
+
     def get_user_history(self, username: str, limit: int = 50) -> list[dict[str, Any]]:
         """Get chronological chat history for a specific user with full chunk details."""
         session = get_session()

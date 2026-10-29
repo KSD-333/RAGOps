@@ -143,6 +143,32 @@
 - **Contract Budget Calculator**: Configurable token thresholds and monetary pricing (supports ₹, $, €, £).
 - **ML Training Dataset Exporter**: Export filtered positive grounded Q&A pairs as standard JSON datasets for fine-tuning open-source LLMs.
 
+### 🔌 Model Context Protocol (MCP) Integration
+RAGOps provides a first-class Model Context Protocol (MCP) server over `stdio` transport, enabling AI desktop clients (such as Claude Desktop, Cursor, and Continue) to query your enterprise knowledge base, ingest documents, inspect traces, and monitor cache statistics directly:
+
+#### Claude Desktop Configuration (`claude_desktop_config.json`)
+```json
+{
+  "mcpServers": {
+    "ragops": {
+      "command": "ragops",
+      "args": ["mcp"],
+      "env": {
+        "LLM_PROVIDER": "auto",
+        "DATABASE_URL": "postgresql://postgres:1234@localhost:5432/ragops"
+      }
+    }
+  }
+}
+```
+
+#### Available MCP Tools
+- **`search_knowledge_base(query, top_k=5)`**: Query enterprise documents with dense/hybrid search, cross-encoder reranking, and citation provenance.
+- **`list_documents()`**: List all indexed documents, chunk counts, and total inventory.
+- **`ingest_document(path)`**: Safely ingest a document from `data/raw/` into ChromaDB (with built-in path-traversal protection).
+- **`get_trace(trace_id)`**: Inspect execution traces, latencies, chunk provenance, and token usage for any query.
+- **`cache_stats()`**: Fetch real-time hit rates, memory consumption, and entries in the Redis semantic cache.
+
 ---
 
 ## 3. Measured Performance & Quality Benchmarks

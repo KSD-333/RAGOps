@@ -438,5 +438,17 @@ def doctor():
         console.print(f"\n[bold green]✓ System is healthy and ready to serve queries via {active_name.upper()}![/bold green]")
 
 
+@cli.command()
+def mcp():
+    """Launch the RAGOps Model Context Protocol (MCP) server over stdio."""
+    try:
+        from ragops.mcp_server import run_stdio
+        run_stdio()
+    except ImportError as e:
+        console.print(f"[bold red]MCP Error:[/bold red] {e}")
+        console.print("[yellow]Install MCP SDK with: pip install mcp[/yellow]")
+        sys.exit(1)
+
+
 if __name__ == "__main__":
     cli()
