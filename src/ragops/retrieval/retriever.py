@@ -21,6 +21,7 @@ from ragops.core.types import (
 from ragops.retrieval.embeddings import EmbeddingProvider, SentenceTransformerEmbedding
 from ragops.retrieval.reranker import CrossEncoderReranker, NoOpReranker, Reranker
 from ragops.retrieval.vector_store import ChromaVectorStore, VectorStore
+from ragops.retrieval.bm25 import BM25Index, is_bm25_available, reciprocal_rank_fusion
 
 logger = get_logger(__name__)
 
@@ -28,7 +29,7 @@ logger = get_logger(__name__)
 class Retriever(Protocol):
     """Interface for retrievers — allows swapping implementations."""
 
-    def retrieve(self, query: str, top_k: int = 10) -> RetrievedContext:
+    def retrieve(self, query: str, top_k: int = 10, doc_type: str | None = None) -> RetrievedContext:
         """Retrieve relevant context for a query."""
         ...
 
@@ -62,6 +63,27 @@ class RAGRetriever:
 
         self._top_k = settings.retrieval.top_k
         self._rerank_top_n = settings.retrieval.rerank_top_n
+        self._hybrid_search = settings.retrieval.hybrid_search
+        self._bm25_index = BM25Index()
+        self._bm25_initialized = False
+
+    def _ensure_bm25_ready(self) -> None:
+        """Lazily build BM25 index from vector store chunks if hybrid search is enabled."""
+        if self._bm25_initialized or not self._hybrid_search:
+            return
+        try:
+            if hasattr(self._vector_store, "get_all_documents"):
+                docs_data = self._vector_store.get_all_documents()
+                if docs_data.get("ids"):
+                    self._bm25_index.build_from_chunks(
+                        docs_data["ids"],
+                        docs_data["documents"],
+                        docs_data["metadatas"],
+                    )
+            self._bm25_initialized = True
+        except Exception as e:
+            logger.warning("bm25_index_init_failed_falling_back_to_dense", error=str(e))
+            self._bm25_initialized = False
 
     def index(self, chunks: list[DocumentChunk]) -> int:
         """Embed and store document chunks in the vector store.
@@ -84,28 +106,55 @@ class RAGRetriever:
 
     index_chunks = index
 
-    def retrieve(self, query: str, top_k: int | None = None) -> RetrievedContext:
-        """Full retrieval pipeline: embed query → search → rerank.
+    def retrieve(
+        self,
+        query: str,
+        top_k: int | None = None,
+        doc_type: str | None = None,
+    ) -> RetrievedContext:
+        """Full retrieval pipeline: embed query → search (dense or hybrid BM25+RRF) → rerank.
 
         Returns a RetrievedContext with the most relevant chunks.
         """
         start_time = time.perf_counter()
         effective_top_k = top_k or self._top_k
 
-        logger.debug("retrieving", query=query[:80], top_k=effective_top_k)
+        logger.debug("retrieving", query=query[:80], top_k=effective_top_k, doc_type=doc_type)
 
         # 1. Embed the query
         t_embed_start = time.perf_counter()
         query_embedding = self._embeddings.embed_query(query)
         embed_ms = (time.perf_counter() - t_embed_start) * 1000
 
-        # 2. Vector search (fetch candidate pool)
+        # 2. Dense search (fetch candidate pool)
         t_search_start = time.perf_counter()
         candidate_k = max(effective_top_k * 2, 10)
-        search_results = self._vector_store.search(query_embedding, top_k=candidate_k)
+        dense_results = self._vector_store.search(
+            query_embedding, top_k=candidate_k, doc_type=doc_type
+        )
+
+        # 3. Optional Hybrid Search: BM25 + Reciprocal Rank Fusion
+        candidate_pool = dense_results
+        if self._hybrid_search:
+            try:
+                self._ensure_bm25_ready()
+                if self._bm25_index.is_ready:
+                    bm25_results = self._bm25_index.search(
+                        query=query, top_k=candidate_k, doc_type=doc_type
+                    )
+                    candidate_pool = reciprocal_rank_fusion(
+                        dense_results=dense_results,
+                        bm25_results=bm25_results,
+                        k=60,
+                        top_n=candidate_k,
+                    )
+            except Exception as hybrid_err:
+                logger.warning("hybrid_fusion_failed_fallback_to_dense", error=str(hybrid_err))
+                candidate_pool = dense_results
+
         search_ms = (time.perf_counter() - t_search_start) * 1000
 
-        if not search_results:
+        if not candidate_pool:
             elapsed = (time.perf_counter() - start_time) * 1000
             return RetrievedContext(
                 query=query,
@@ -116,12 +165,12 @@ class RAGRetriever:
                 rerank_latency_ms=0.0,
             )
 
-        # 3. Rerank
+        # 4. Cross-Encoder Rerank
         t_rerank_start = time.perf_counter()
         rerank_top_n = min(effective_top_k, self._rerank_top_n)
         reranked = self._reranker.rerank(
             query=query,
-            results=search_results,
+            results=candidate_pool,
             top_n=rerank_top_n,
         )
         rerank_ms = (time.perf_counter() - t_rerank_start) * 1000

@@ -35,7 +35,11 @@ class VectorStore(Protocol):
         ...
 
     def search(
-        self, query_embedding: QueryEmbedding, top_k: int = 10
+        self,
+        query_embedding: QueryEmbedding,
+        top_k: int = 10,
+        where: dict[str, Any] | None = None,
+        doc_type: str | None = None,
     ) -> list[VectorSearchResult]:
         """Search for similar chunks. Returns ranked results."""
         ...
@@ -231,17 +235,44 @@ class ChromaVectorStore:
         except Exception as e:
             raise VectorStoreError(f"Failed to upsert chunks: {e}") from e
 
-    def search(
-        self, query_embedding: QueryEmbedding, top_k: int = 10
-    ) -> list[VectorSearchResult]:
-        """Search for similar chunks using cosine similarity."""
+    def get_all_documents(self) -> dict[str, list]:
+        """Fetch all ids, text documents, and metadatas stored in ChromaDB."""
         if self._fallback_store is not None:
-            return self._fallback_store.search(query_embedding, top_k=top_k)
+            return self._fallback_store.get_all_documents()
+        try:
+            data = self._collection.get(include=["documents", "metadatas"])
+            return {
+                "ids": data.get("ids", []),
+                "documents": data.get("documents", []),
+                "metadatas": data.get("metadatas", []),
+            }
+        except Exception as e:
+            logger.warning("chroma_get_all_documents_failed", error=str(e))
+            return {"ids": [], "documents": [], "metadatas": []}
+
+    def search(
+        self,
+        query_embedding: QueryEmbedding,
+        top_k: int = 10,
+        where: dict[str, Any] | None = None,
+        doc_type: str | None = None,
+    ) -> list[VectorSearchResult]:
+        """Search for similar chunks using cosine similarity with optional metadata filtering."""
+        if self._fallback_store is not None:
+            return self._fallback_store.search(
+                query_embedding, top_k=top_k, where=where, doc_type=doc_type
+            )
 
         try:
+            query_where: dict[str, Any] = dict(where) if where else {}
+            if doc_type:
+                query_where["doc_type"] = doc_type.strip().lower()
+
+            count = self._collection.count() or top_k
             results = self._collection.query(
                 query_embeddings=[query_embedding.vector],
-                n_results=min(top_k, self._collection.count() or top_k),
+                n_results=min(top_k, count),
+                where=query_where if query_where else None,
                 include=["documents", "metadatas", "distances"],
             )
 

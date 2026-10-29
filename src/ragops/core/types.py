@@ -135,6 +135,7 @@ class QueryRequest(BaseModel):
     session_id: str = Field(default_factory=lambda: f"session_{uuid.uuid4().hex[:8]}")
     filters: dict[str, Any] = Field(default_factory=dict)
     top_k: int = 10
+    doc_type: str | None = None
     chat_history: list[dict[str, str]] = Field(default_factory=list)
 
 

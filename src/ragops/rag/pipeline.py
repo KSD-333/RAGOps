@@ -170,6 +170,7 @@ class RAGPipeline:
         retrieved_context = self._retriever.retrieve(
             query=processed_query.search_query,
             top_k=request.top_k,
+            doc_type=request.doc_type,
         )
 
         # Dynamic Web & Company Profile Tool:
