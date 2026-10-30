@@ -131,6 +131,8 @@ class Settings(BaseSettings):
     model_config = _COMMON_CONFIG
 
     environment: str = Field(default="development", alias="ENVIRONMENT")
+    warmup_on_start: bool = Field(default=True, alias="WARMUP_ON_START")
+    allow_general_knowledge: bool = Field(default=True, alias="ALLOW_GENERAL_KNOWLEDGE")
 
     groq: GroqSettings = Field(default_factory=GroqSettings)
     ollama: OllamaSettings = Field(default_factory=OllamaSettings)

@@ -400,6 +400,10 @@ def doctor():
 
     db_type = get_active_db_type()
     stor_table.add_row("Relational Database", f"SQLAlchemy ({db_type})", "[bold green]Connected[/bold green]")
+    from ragops.core.warmup import WarmupCoordinator
+    warm_state = WarmupCoordinator.get_instance().get_state()
+    warm_val = f"[bold green]Ready ({warm_state['took_ms']}ms)[/bold green]" if warm_state["status"] == "ready" else f"[bold yellow]{warm_state['status'].capitalize()}[/bold yellow]"
+    stor_table.add_row("Subsystem Warm-up", "Background Orchestrator", warm_val)
 
     try:
         store = ChromaVectorStore()

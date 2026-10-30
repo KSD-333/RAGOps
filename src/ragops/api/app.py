@@ -97,8 +97,10 @@ async def lifespan(app: FastAPI):
     except Exception as llm_err:
         logger.warning("llm_provider_lifespan_init_failed", error=str(llm_err))
 
-    # Launch model warmup in background task so Uvicorn opens listening port in <1 second
-    asyncio.create_task(_async_warmup())
+    # Comprehensive Background Warmup Task
+    from ragops.core.warmup import WarmupCoordinator
+    warmup_coordinator = WarmupCoordinator.get_instance()
+    asyncio.create_task(warmup_coordinator.run_warmup())
 
     yield
     logger.info("ragops_shutting_down")

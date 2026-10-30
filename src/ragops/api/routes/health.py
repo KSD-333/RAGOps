@@ -62,8 +62,10 @@ async def health_check() -> dict[str, str]:
 
 @router.get("/health/ready")
 async def readiness_check() -> dict[str, Any]:
-    """Readiness probe — reports LLM provider status, active routing, and degraded mode flag."""
+    """Readiness probe — reports LLM provider status, active routing, degraded mode flag, and warmup state."""
     settings = get_settings()
+    from ragops.core.warmup import WarmupCoordinator
+    warmup_state = WarmupCoordinator.get_instance().get_state()
     try:
         from ragops.generation.providers.router import get_llm_router
         router_diag = get_llm_router().diagnose()
@@ -73,6 +75,7 @@ async def readiness_check() -> dict[str, Any]:
             "active_provider": router_diag["active_provider"],
             "degraded": router_diag["degraded"],
             "model": router_diag["groq"]["model"],
+            "warmup": warmup_state,
             "ollama": {
                 "installed": router_diag["ollama"]["installed"],
                 "running": router_diag["ollama"]["running"],
@@ -93,6 +96,7 @@ async def readiness_check() -> dict[str, Any]:
             "active_provider": "unknown",
             "degraded": False,
             "model": settings.groq.model,
+            "warmup": warmup_state,
             "error": str(e),
         }
 
