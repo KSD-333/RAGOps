@@ -99,7 +99,7 @@ class WarmupCoordinator:
                 reranker.rerank("warmup", dummy_results, top_n=1)
                 self.stages["reranker"] = {
                     "status": "ready",
-                    "model": reranker.model_name,
+                    "model": getattr(reranker, "_model_name", "ms-marco-MiniLM-L-6-v2"),
                     "took_ms": round((time.perf_counter() - t0) * 1000, 2),
                 }
                 logger.info("warmup_stage_complete", stage="reranker", took_ms=self.stages["reranker"]["took_ms"])
@@ -118,7 +118,7 @@ class WarmupCoordinator:
                 from ragops.core.types import QueryEmbedding
                 store = ChromaVectorStore()
                 dummy_emb = [0.0] * 384
-                store.search(QueryEmbedding(vector=dummy_emb, model="all-MiniLM-L6-v2"), top_k=1)
+                store.search(QueryEmbedding(query="warmup", vector=dummy_emb, model="all-MiniLM-L6-v2"), top_k=1)
                 self.stages["chroma"] = {
                     "status": "ready",
                     "count": store.count(),
@@ -207,7 +207,7 @@ class WarmupCoordinator:
                         "stream": False,
                         "keep_alive": "30m",
                     }
-                    resp = requests.post(url, json=payload, timeout=10.0)
+                    resp = requests.post(url, json=payload, timeout=30.0)
                     self.stages["llm"] = {
                         "status": "ready" if resp.status_code == 200 else "degraded",
                         "provider": "ollama",

@@ -46,6 +46,21 @@ def get_engine():
     # 1. Try configured PostgreSQL or SQLite engine
     try:
         if configured_url.startswith("postgresql"):
+            # Fast TCP socket pre-check (250ms) to eliminate 3-5s connection timeout lag if Postgres daemon is stopped
+            import socket
+            from urllib.parse import urlparse
+            parsed = urlparse(configured_url)
+            host = parsed.hostname or "127.0.0.1"
+            port = parsed.port or 5432
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            sock.settimeout(0.3)
+            try:
+                sock.connect((host, port))
+                sock.close()
+            except Exception as sock_err:
+                sock.close()
+                raise ConnectionError(f"PostgreSQL port {port} on {host} unreachable: {sock_err}")
+
             logger.info("connecting_to_postgresql", url=configured_url.split("@")[-1])
             _engine = create_engine(
                 configured_url,
@@ -54,7 +69,7 @@ def get_engine():
                 pool_pre_ping=True,
                 pool_recycle=1800,
                 echo=False,
-                connect_args={"connect_timeout": 3},
+                connect_args={"connect_timeout": 2},
             )
             # Test connection immediately
             with _engine.connect() as conn:

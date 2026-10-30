@@ -117,34 +117,22 @@ export default function SearchPage({
     }
   }, [currentUser]);
 
-  // Load existing sessions based on active role (Admin sees all; User sees only their own)
-  const fetchSessions = async () => {
-    try {
-      const username = currentUser?.username || 'test1';
-      const role = currentUser?.role || 'user';
-      let url = `${apiBaseUrl}/api/v1/sessions?username=${encodeURIComponent(username)}&role=${encodeURIComponent(role)}`;
-      if (role === 'admin' && adminChatFilter === 'my') {
-        url += `&filter_user=${encodeURIComponent(username)}`;
-      }
-      const res = await fetch(url);
-      if (res.ok) {
-        const json = await res.json();
-        setSessions(json.sessions || []);
-      }
-    } catch (err) {
-      console.warn('Failed to load user chat sessions:', err);
-    }
-  };
-
-  useEffect(() => {
-    fetchSessions();
-  }, [currentUser, apiBaseUrl, adminChatFilter]);
+  // In-flight request tracker to prevent race conditions during rapid session switching
+  const sessionFetchAbortRef = useRef(null);
 
   // Load turn-by-turn messages if an existing session is clicked
   const handleSelectSession = async (sessionId, sessionUser = null) => {
+    if (!sessionId) return;
+    if (sessionFetchAbortRef.current) {
+      sessionFetchAbortRef.current.abort();
+    }
+    const abortCtrl = new AbortController();
+    sessionFetchAbortRef.current = abortCtrl;
+
     setCurrentSessionId(sessionId);
     setCurrentSessionUser(sessionUser);
     setLoading(true);
+
     try {
       const username = currentUser?.username || 'test1';
       const role = currentUser?.role || 'user';
@@ -152,7 +140,7 @@ export default function SearchPage({
       if (sessionUser) {
         url += `&session_user=${encodeURIComponent(sessionUser)}`;
       }
-      const res = await fetch(url);
+      const res = await fetch(url, { signal: abortCtrl.signal });
       if (res.ok) {
         const json = await res.json();
         const loaded = (json.messages || []).map((m) => ({
@@ -182,11 +170,44 @@ export default function SearchPage({
         setMessages(loaded);
       }
     } catch (err) {
-      console.error('Failed to load session messages:', err);
+      if (err.name !== 'AbortError') {
+        console.error('Failed to load session messages:', err);
+      }
     } finally {
-      setLoading(false);
+      if (!abortCtrl.signal.aborted) {
+        setLoading(false);
+      }
     }
   };
+
+  // Load existing sessions based on active role (Admin sees all; User sees only their own)
+  const fetchSessions = async (autoSelect = false) => {
+    try {
+      const username = currentUser?.username || 'test1';
+      const role = currentUser?.role || 'user';
+      let url = `${apiBaseUrl}/api/v1/sessions?username=${encodeURIComponent(username)}&role=${encodeURIComponent(role)}`;
+      if (role === 'admin' && adminChatFilter === 'my') {
+        url += `&filter_user=${encodeURIComponent(username)}`;
+      }
+      const res = await fetch(url);
+      if (res.ok) {
+        const json = await res.json();
+        const newSessions = json.sessions || [];
+        setSessions(newSessions);
+
+        // Auto-load most recent session if requested and no messages are currently loaded
+        if (autoSelect && newSessions.length > 0 && messages.length === 0) {
+          handleSelectSession(newSessions[0].session_id, newSessions[0].username);
+        }
+      }
+    } catch (err) {
+      console.warn('Failed to load user chat sessions:', err);
+    }
+  };
+
+  useEffect(() => {
+    fetchSessions(true);
+  }, [currentUser, apiBaseUrl, adminChatFilter]);
 
   // Start fresh chat
   const handleNewChat = () => {
