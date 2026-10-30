@@ -191,6 +191,7 @@ class RAGResponse(BaseModel):
     answer: str
     sources: list[Source] = Field(default_factory=list)
     trace_id: str = Field(default_factory=lambda: f"trace_{uuid.uuid4().hex[:12]}")
+    intent: str = "kb_question"
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 

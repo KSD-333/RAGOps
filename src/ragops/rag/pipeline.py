@@ -20,6 +20,7 @@ from ragops.generation.llm import LLMClient
 from ragops.generation.prompts import build_system_prompt, build_user_prompt
 from ragops.generation.response import ResponseBuilder
 from ragops.rag.context_builder import ContextBuilder
+from ragops.rag.intent_router import IntentRouter
 from ragops.rag.query_intelligence import QueryIntelligenceEngine
 from ragops.rag.query_transform import QueryTransformer
 from ragops.retrieval.retriever import RAGRetriever
@@ -70,7 +71,96 @@ class RAGPipeline:
         self._context_builder = context_builder or ContextBuilder()
         self._response_builder = response_builder or ResponseBuilder()
         self._query_intel = query_intelligence or QueryIntelligenceEngine()
+        self._intent_router = IntentRouter()
 
+
+    def _get_suggested_questions(self) -> list[str]:
+        """Generate 3 relevant sample questions from actual indexed documents or categories."""
+        try:
+            inventory = self._retriever.get_document_inventory()
+            titles = [inv.get("title", "") for inv in inventory if inv.get("title")]
+            suggestions = []
+            for t in titles:
+                t_lower = t.lower()
+                if "architecture" in t_lower:
+                    suggestions.append("What embedding model and vector database does RAGOps use?")
+                elif "operation" in t_lower or "runbook" in t_lower:
+                    suggestions.append("What are the minimum quality gate criteria for deployment?")
+                elif "security" in t_lower:
+                    suggestions.append("How are API credentials and traffic security governed?")
+                elif "agent" in t_lower:
+                    suggestions.append("What are the key architectural patterns for autonomous agents?")
+            if len(suggestions) < 3:
+                defaults = [
+                    "What embedding model is used by default in RAGOps?",
+                    "What are the promotion criteria in operations runbook?",
+                    "What security and TLS protocols are enforced for API traffic?",
+                ]
+                for d in defaults:
+                    if d not in suggestions and len(suggestions) < 3:
+                        suggestions.append(d)
+            return suggestions[:3]
+        except Exception:
+            return [
+                "What embedding model is used by default in RAGOps?",
+                "What are the promotion criteria in operations runbook?",
+                "What security and TLS protocols are enforced for API traffic?",
+            ]
+
+    def _generate_greeting_reply(self) -> str:
+        """Generate friendly greetings with indexed suggestions."""
+        import random
+        templates = [
+            "Hello! I am your RAGOps assistant. How can I help you explore your documents and procedures today?",
+            "Hi there! Good to see you. I can help answer questions across your knowledge base.",
+            "Hey! I'm here to assist you with policies, technical specifications, and system guidelines.",
+            "Namaste! How can I assist you with your corporate knowledge base today?",
+        ]
+        chosen = random.choice(templates)
+        suggestions = self._get_suggested_questions()
+        sugg_text = "\n\nHere are some questions you can ask me:\n" + "\n".join(f"- {s}" for s in suggestions)
+        return chosen + sugg_text
+
+    def _generate_smalltalk_reply(self, normalized_q: str) -> str:
+        """Generate appropriate smalltalk replies without retrieval."""
+        import random
+        if any(w in normalized_q for w in ["thank", "thx", "ty", "shukriya", "dhanyawad", "appreciate"]):
+            replies = [
+                "You're very welcome! Let me know if you need anything else.",
+                "Glad to help! Feel free to ask any other questions about your documents.",
+                "Happy to help! Let me know if you need further clarification.",
+            ]
+            return random.choice(replies)
+        elif any(w in normalized_q for w in ["bye", "goodbye", "cya", "tata", "alvida"]):
+            return "Goodbye! Have a great day ahead. Feel free to return whenever you need assistance."
+        elif any(w in normalized_q for w in ["how are you", "how r u", "kaise ho", "how is it going"]):
+            return "I'm functioning smoothly and ready to assist! How can I help you with your knowledge base today?"
+        elif any(w in normalized_q for w in ["lol", "haha", "lmao", "rofl", "hehe"]):
+            return "😄 Happy to assist! Let me know what you'd like to explore in the knowledge base."
+        else:
+            return "Understood! Let me know if you have any questions about company policies or technical documents."
+
+    def _generate_identity_reply(self) -> str:
+        """Explain what RAGOps knows with live counts of documents and categories."""
+        try:
+            inventory = self._retriever.get_document_inventory()
+            count = len(inventory)
+            titles = [inv.get("title", "") for inv in inventory if inv.get("title")]
+            doc_str = ", ".join(titles[:4]) if titles else "various internal documents"
+            if len(titles) > 4:
+                doc_str += f" and {len(titles) - 4} more"
+            return (
+                f"I am RAGOps, your enterprise grounded knowledge assistant. "
+                f"I currently index {count} documents in the knowledge base, including: {doc_str}.\n\n"
+                f"You can ask me questions about system architecture, operational runbooks, security handbooks, "
+                f"or company policies, and I will provide cited answers directly grounded in these sources."
+            )
+        except Exception:
+            return (
+                "I am RAGOps, your enterprise grounded knowledge assistant. "
+                "I help you search and understand internal documentation, architecture specifications, "
+                "and operational runbooks with verified citations."
+            )
 
     def query(self, request: QueryRequest) -> RAGResponse:
         """Execute the full RAG pipeline for a user query.
@@ -101,51 +191,88 @@ class RAGPipeline:
             except Exception as hist_err:
                 logger.debug("failed_to_load_session_history", error=str(hist_err))
 
-        # 1. Query Intelligence Layer (Intent, scope, multi-turn rewriting)
-        intent = self._query_intel.analyze_and_rewrite(request.query, chat_history=chat_history)
+        # 0. Early Fast Intent Routing (<5ms, regex/keyword normalized rules)
+        routed_intent = self._intent_router.route(request.query)
+        logger.info("intent_routed", intent=routed_intent.intent, query=request.query[:60])
 
-        # Conversational Chitchat & Acknowledgment handling (e.g. "hi", "hii", "how are you", "thanks")
-        if intent.scope == "conversational":
-            comp_name = ""
-            try:
-                from ragops.storage.repositories import CompanyRepository
-                prof = CompanyRepository().get_profile()
-                if prof and prof.get("company_name") and prof["company_name"].strip().lower() not in ("enterprise", "company", "carraro", "carraro india", "default", ""):
-                    comp_name = f" for {prof['company_name'].strip()}"
-            except Exception:
-                pass
-
-            if intent.intent_type == "conversational_greeting":
-                if comp_name:
-                    reply = f"Hello! I am your RAGOps assistant{comp_name}. How can I help you navigate company documents, policies, or procedures today?"
-                else:
-                    reply = "Hello! I am your RAGOps Assistant. How can I help you navigate your documents, policies, or knowledge base today?"
-            elif intent.intent_type == "conversational_acknowledgment":
-                reply = "You're welcome! Feel free to ask if you have any questions about documents, policies, or procedures."
-            else:
-                reply = "Hello! Please feel free to ask any specific question across your ingested documents and knowledge base."
-
-            est_out_toks = max(15, len(reply) // 4)
-            est_in_toks = max(2, len(request.query) // 4)
+        # Instant friendly non-retrieval responses (NOT written to semantic cache, NO sources/citations)
+        if routed_intent.intent == "greeting":
+            reply = self._generate_greeting_reply()
+            est_out = max(15, len(reply) // 4)
+            est_in = max(2, len(request.query) // 4)
             return RAGResponse(
                 query=request.query,
                 answer=reply,
                 sources=[],
                 trace_id=trace_id,
+                intent="greeting",
                 metadata={
-                    "retrieval_method": "conversational_direct",
-                    "intent": intent.intent_type,
-                    "scope": intent.scope,
+                    "retrieval_method": "intent_direct",
+                    "intent": "greeting",
+                    "scope": "conversational",
                     "cache_hit": False,
                     "model": "assistant-direct",
                     "total_latency_ms": 1.0,
-                    "input_tokens": est_in_toks,
-                    "output_tokens": est_out_toks,
-                    "total_tokens": est_in_toks + est_out_toks,
+                    "input_tokens": est_in,
+                    "output_tokens": est_out,
+                    "total_tokens": est_in + est_out,
                     "cost_usd": 0.0,
                     "session_id": request.session_id,
                 },
             )
+
+        if routed_intent.intent == "smalltalk":
+            reply = self._generate_smalltalk_reply(routed_intent.normalized_query)
+            est_out = max(15, len(reply) // 4)
+            est_in = max(2, len(request.query) // 4)
+            return RAGResponse(
+                query=request.query,
+                answer=reply,
+                sources=[],
+                trace_id=trace_id,
+                intent="smalltalk",
+                metadata={
+                    "retrieval_method": "intent_direct",
+                    "intent": "smalltalk",
+                    "scope": "conversational",
+                    "cache_hit": False,
+                    "model": "assistant-direct",
+                    "total_latency_ms": 1.0,
+                    "input_tokens": est_in,
+                    "output_tokens": est_out,
+                    "total_tokens": est_in + est_out,
+                    "cost_usd": 0.0,
+                    "session_id": request.session_id,
+                },
+            )
+
+        if routed_intent.intent == "identity":
+            reply = self._generate_identity_reply()
+            est_out = max(25, len(reply) // 4)
+            est_in = max(2, len(request.query) // 4)
+            return RAGResponse(
+                query=request.query,
+                answer=reply,
+                sources=[],
+                trace_id=trace_id,
+                intent="identity",
+                metadata={
+                    "retrieval_method": "intent_direct",
+                    "intent": "identity",
+                    "scope": "conversational",
+                    "cache_hit": False,
+                    "model": "assistant-direct",
+                    "total_latency_ms": 1.0,
+                    "input_tokens": est_in,
+                    "output_tokens": est_out,
+                    "total_tokens": est_in + est_out,
+                    "cost_usd": 0.0,
+                    "session_id": request.session_id,
+                },
+            )
+
+        # 1. Query Intelligence Layer (Intent, scope, multi-turn rewriting)
+        intent = self._query_intel.analyze_and_rewrite(request.query, chat_history=chat_history)
 
         # 2. Semantic Answer Cache Check (Exact & embedding-similarity with scope safety gates)
         cached_response = self._query_intel.check_cache(request.query, intent)
@@ -239,17 +366,64 @@ class RAGPipeline:
         has_sufficient_relevance = (len(retrieved_context.chunks) > 0 and max_chunk_score >= 0.10) or is_collection_query
 
         if not has_sufficient_relevance:
+            from ragops.core.config import get_settings
+            settings = get_settings()
+
+            if getattr(settings, "allow_general_knowledge", True) and routed_intent.intent == "general_question":
+                logger.info("answering_from_general_knowledge", query=request.query[:80])
+                try:
+                    gen_prompt = (
+                        f"Answer the following question clearly and directly based on general technical/world knowledge.\n\n"
+                        f"Question: {request.query}\n\n"
+                        f"Important: Do not cite any documents or context."
+                    )
+                    gen_resp = self._llm_client.generate(
+                        system_prompt="You are a helpful and knowledgeable AI assistant. Provide a direct, factual answer.",
+                        user_prompt=gen_prompt,
+                        max_tokens=1024,
+                    )
+                    clean_ans = gen_resp.text.strip()
+                    note = "\n\n*(Note: This answer is provided from general AI knowledge as no matching corporate documents were found in the knowledge base.)*"
+                    full_answer = clean_ans + note
+                    est_in = max(2, len(request.query) // 4)
+                    est_out = max(20, len(full_answer) // 4)
+                    return RAGResponse(
+                        query=request.query,
+                        answer=full_answer,
+                        sources=[],
+                        trace_id=trace_id,
+                        intent="general_question",
+                        metadata={
+                            "retrieval_method": "general_knowledge_fallback",
+                            "model": getattr(self._llm_client, "model_name", "groq"),
+                            "input_tokens": est_in,
+                            "output_tokens": est_out,
+                            "total_tokens": est_in + est_out,
+                            "cost_usd": 0.0,
+                            "session_id": request.session_id or "",
+                            "intent": "general_question",
+                            "scope": "general",
+                            "abstention": False,
+                        },
+                    )
+                except Exception as gen_err:
+                    logger.warning("general_knowledge_generation_failed", error=str(gen_err))
+
+            # Helpful abstention suggesting related topics found in KB
             logger.info(
                 "strict_relevance_gate_abstaining",
                 query=request.query[:80],
                 max_score=max_chunk_score,
                 chunks_retrieved=len(retrieved_context.chunks),
             )
+            suggested_topics = self._get_suggested_questions()
+            topic_str = "\n".join(f"- {s}" for s in suggested_topics)
             abstain_answer = (
                 f"I searched the corporate knowledge base, but could not locate verified documents or policies "
                 f"with sufficient relevance to answer your question regarding '{request.query}'.\n\n"
-                "Please verify that the relevant company policy or document has been uploaded to the catalog, "
-                "or rephrase your question with more specific keywords."
+                f"**Related topics available in the knowledge base:**\n{topic_str}\n\n"
+                f"Please verify that the relevant document has been uploaded to the catalog, "
+                f"or rephrase your question with more specific keywords."
             )
             est_in = max(2, len(request.query) // 4)
             est_out = max(15, len(abstain_answer) // 4)
@@ -258,6 +432,7 @@ class RAGPipeline:
                 answer=abstain_answer,
                 sources=[],
                 trace_id=trace_id,
+                intent=routed_intent.intent,
                 metadata={
                     "retrieval_method": "strict_relevance_gate_abstention",
                     "max_relevance_score": round(max_chunk_score, 4),
@@ -270,7 +445,7 @@ class RAGPipeline:
                     "total_tokens": est_in + est_out,
                     "cost_usd": 0.0,
                     "session_id": request.session_id or "",
-                    "intent": intent.intent_type,
+                    "intent": routed_intent.intent,
                     "scope": intent.scope,
                     "abstention": True,
                 },
@@ -343,7 +518,8 @@ class RAGPipeline:
                 )
 
         # Attach Query Intelligence metadata
-        rag_response.metadata["intent"] = intent.intent_type
+        rag_response.intent = routed_intent.intent
+        rag_response.metadata["intent"] = routed_intent.intent
         rag_response.metadata["scope"] = intent.scope
         rag_response.metadata["target_entity"] = intent.target_entity
         rag_response.metadata["is_rewritten"] = intent.is_rewritten
