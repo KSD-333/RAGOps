@@ -57,35 +57,46 @@ class SentenceTransformerEmbedding:
     Uses all-MiniLM-L6-v2 by default — fast, accurate, 384-dim vectors.
     """
 
+    _model_cache: dict[str, Any] = {}
+
     def __init__(self, model_name: str | None = None):
         settings = get_settings()
         self._model_name = model_name or settings.embedding.model
         self._dimension = settings.embedding.dimension
-        self._model = None
+        self._model = self._model_cache.get(self._model_name)
         self._mock: MockEmbeddingProvider | None = None
 
     def _load_model(self):
-        """Lazy load the sentence transformer model."""
-        if self._model is None and self._mock is None:
-            logger.info("loading_embedding_model", model=self._model_name)
+        """Lazy load the sentence transformer model with singleton in-memory caching."""
+        if self._model is not None:
+            return
+        if self._model_name in SentenceTransformerEmbedding._model_cache:
+            self._model = SentenceTransformerEmbedding._model_cache[self._model_name]
+            return
+        if self._mock is not None:
+            return
+
+        logger.info("loading_embedding_model", model=self._model_name)
+        try:
+            from sentence_transformers import SentenceTransformer
             try:
-                from sentence_transformers import SentenceTransformer
-                try:
-                    self._model = SentenceTransformer(self._model_name)
-                except Exception as first_err:
-                    logger.warning("sentence_transformer_gpu_load_failed_falling_back_to_cpu", error=str(first_err))
-                    self._model = SentenceTransformer(self._model_name, device="cpu")
-            except ImportError:
-                logger.warning(
-                    "sentence_transformers_not_installed_fallback_to_mock",
-                    msg="sentence-transformers is not installed. Using MockEmbeddingProvider.",
-                )
-                self._mock = MockEmbeddingProvider(dimension=self._dimension, model_name=self._model_name)
-            except Exception as e:
-                raise EmbeddingError(
-                    f"Failed to load embedding model: {self._model_name}",
-                    details={"error": str(e)},
-                ) from e
+                model = SentenceTransformer(self._model_name)
+            except Exception as first_err:
+                logger.warning("sentence_transformer_gpu_load_failed_falling_back_to_cpu", error=str(first_err))
+                model = SentenceTransformer(self._model_name, device="cpu")
+            SentenceTransformerEmbedding._model_cache[self._model_name] = model
+            self._model = model
+        except ImportError:
+            logger.warning(
+                "sentence_transformers_not_installed_fallback_to_mock",
+                msg="sentence-transformers is not installed. Using MockEmbeddingProvider.",
+            )
+            self._mock = MockEmbeddingProvider(dimension=self._dimension, model_name=self._model_name)
+        except Exception as e:
+            raise EmbeddingError(
+                f"Failed to load embedding model: {self._model_name}",
+                details={"error": str(e)},
+            ) from e
 
     @property
     def model_name(self) -> str:

@@ -37,29 +37,40 @@ class CrossEncoderReranker:
     Uses ms-marco-MiniLM-L-6-v2 by default — fast and accurate for re-ranking.
     """
 
+    _model_cache: dict[str, Any] = {}
+
     def __init__(self, model_name: str | None = None):
         settings = get_settings()
         self._model_name = model_name or settings.retrieval.reranker_model
-        self._model = None  # Lazy load
+        self._model = self._model_cache.get(self._model_name)
         self._mock = False
 
     def _load_model(self):
-        """Lazy-load the cross-encoder model."""
-        if self._model is None and not self._mock:
+        """Lazy-load the cross-encoder model with singleton in-memory caching."""
+        if self._model is not None:
+            return
+        if self._model_name in CrossEncoderReranker._model_cache:
+            self._model = CrossEncoderReranker._model_cache[self._model_name]
+            return
+        if self._mock:
+            return
+
+        try:
+            from sentence_transformers import CrossEncoder
+            logger.info("loading_reranker_model", model=self._model_name)
             try:
-                from sentence_transformers import CrossEncoder
-                logger.info("loading_reranker_model", model=self._model_name)
-                try:
-                    self._model = CrossEncoder(self._model_name)
-                except Exception as first_err:
-                    logger.warning("cross_encoder_gpu_load_failed_falling_back_to_cpu", error=str(first_err))
-                    self._model = CrossEncoder(self._model_name, device="cpu")
-            except ImportError:
-                logger.warning(
-                    "sentence_transformers_not_installed_reranker_fallback",
-                    msg="sentence-transformers is not installed. Using score-based fallback.",
-                )
-                self._mock = True
+                model = CrossEncoder(self._model_name)
+            except Exception as first_err:
+                logger.warning("cross_encoder_gpu_load_failed_falling_back_to_cpu", error=str(first_err))
+                model = CrossEncoder(self._model_name, device="cpu")
+            CrossEncoderReranker._model_cache[self._model_name] = model
+            self._model = model
+        except ImportError:
+            logger.warning(
+                "sentence_transformers_not_installed_reranker_fallback",
+                msg="sentence-transformers is not installed. Using score-based fallback.",
+            )
+            self._mock = True
 
     def rerank(
         self,

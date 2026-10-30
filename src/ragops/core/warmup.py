@@ -111,6 +111,15 @@ class WarmupCoordinator:
                 }
                 logger.warning("warmup_stage_failed", stage="reranker", error=str(e))
 
+            # Pre-warm RAG pipeline singleton in memory
+            try:
+                from ragops.api.dependencies import get_rag_pipeline
+                p = get_rag_pipeline()
+                p._retriever._embeddings._load_model()
+                p._retriever._reranker._load_model()
+            except Exception as p_err:
+                logger.debug("pipeline_warmup_note", error=str(p_err))
+
             # 2. ChromaDB Collection & Search
             t0 = time.perf_counter()
             try:

@@ -311,14 +311,21 @@ class ChatRepository:
             )
 
             result = []
-            for s in subq:
-                earliest = (
-                    session.query(ChatMessageModel.query)
-                    .filter(ChatMessageModel.session_id == s.session_id)
+            session_ids = [s.session_id for s in subq]
+            titles_by_session = {}
+            if session_ids:
+                earliest_rows = (
+                    session.query(ChatMessageModel.session_id, ChatMessageModel.query)
+                    .filter(ChatMessageModel.session_id.in_(session_ids))
                     .order_by(ChatMessageModel.created_at.asc())
-                    .first()
+                    .all()
                 )
-                title = earliest.query if earliest else "Conversation"
+                for sid, q_text in earliest_rows:
+                    if sid not in titles_by_session and q_text:
+                        titles_by_session[sid] = q_text
+
+            for s in subq:
+                title = titles_by_session.get(s.session_id, "Conversation")
                 if len(title) > 36:
                     title = title[:36] + "..."
 
@@ -390,14 +397,21 @@ class ChatRepository:
             )
 
             sessions = []
-            for r in results:
-                earliest = (
-                    session.query(ChatMessageModel.query)
-                    .filter(ChatMessageModel.session_id == r.session_id)
+            session_ids = [r.session_id for r in results]
+            titles_by_session = {}
+            if session_ids:
+                earliest_rows = (
+                    session.query(ChatMessageModel.session_id, ChatMessageModel.query)
+                    .filter(ChatMessageModel.session_id.in_(session_ids))
                     .order_by(ChatMessageModel.created_at.asc())
-                    .first()
+                    .all()
                 )
-                title = earliest.query if earliest else "Conversation"
+                for sid, q_text in earliest_rows:
+                    if sid not in titles_by_session and q_text:
+                        titles_by_session[sid] = q_text
+
+            for r in results:
+                title = titles_by_session.get(r.session_id, "Conversation")
                 if len(title) > 45:
                     title = title[:45] + "..."
 

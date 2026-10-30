@@ -14,6 +14,7 @@ from ragops.ingestion.pipeline import IngestionPipeline
 from ragops.ingestion.schemas import IngestionRequest, IngestionResult
 
 from typing import Optional
+import asyncio
 import time
 import uuid
 from ragops.storage.repositories import ChatRepository, UserRepository
@@ -65,7 +66,7 @@ async def query_rag(input: QueryInput):
     )
 
     try:
-        response = pipeline.query(request)
+        response = await asyncio.to_thread(pipeline.query, request)
 
         # Asynchronously or safely persist to PostgreSQL
         try:

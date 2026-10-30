@@ -70,7 +70,7 @@ class RAGPipeline:
         self._query_transformer = query_transformer or QueryTransformer()
         self._context_builder = context_builder or ContextBuilder()
         self._response_builder = response_builder or ResponseBuilder()
-        self._query_intel = query_intelligence or QueryIntelligenceEngine()
+        self._query_intel = query_intelligence or QueryIntelligenceEngine(embedding_provider=self._retriever._embeddings)
         self._intent_router = IntentRouter()
 
 

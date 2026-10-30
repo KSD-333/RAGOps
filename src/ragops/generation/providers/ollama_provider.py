@@ -196,9 +196,10 @@ class OllamaProvider(LLMProvider):
                 {"role": "user", "content": user_prompt},
             ],
             "stream": False,
+            "keep_alive": "30m",
             "options": {
                 "temperature": temperature,
-                "num_predict": max_tokens,
+                "num_predict": min(max_tokens, 768),
             },
         }
 
@@ -279,9 +280,10 @@ class OllamaProvider(LLMProvider):
                 {"role": "user", "content": user_prompt},
             ],
             "stream": True,
+            "keep_alive": "30m",
             "options": {
                 "temperature": temperature,
-                "num_predict": max_tokens,
+                "num_predict": min(max_tokens, 768),
             },
         }
 
