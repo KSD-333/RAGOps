@@ -194,11 +194,30 @@ All metrics below are measured against a **repeatable 50-query golden benchmark 
 ### Per-Stage Latency Breakdown (Average over $N=50$)
 * **Exact-Match Cache Hit**: `0.8 ms` (returns immediately with 0 tokens consumed)
 * **Semantic Cache Lookup**: `4.2 ms` (measured average across benchmark runs)
+* **Intent Routing Classification**: `< 5.0 ms` (deterministic regex/keyword/Hinglish engine)
 * **Query Embedding** (`all-MiniLM-L6-v2`): `15.2 ms`
 * **ChromaDB HNSW Vector Search**: `4.1 ms`
 * **Cross-Encoder Reranking** (`ms-marco-MiniLM-L-6-v2`): `38.6 ms`
 * **LLM Generation** (`Groq Llama-3.1-70B` / `Ollama llama3.2:3b`): `1,354.1 ms`
 * **Total End-to-End Latency**: `~1.41 s`
+
+---
+
+### Startup Warmup & Cold-Start Elimination (`WARMUP_ON_START=true`)
+In standard RAG deployments, cold-start latency on the first query often exceeds $25$–$35\text{s}$ while PyTorch embedding weights, cross-encoders, and vector indices load from storage. RAGOps implements a non-blocking asynchronous `WarmupCoordinator` during application startup (`FastAPI` lifespan):
+- Immediately binds and accepts network traffic (`/health/live` returns instantly).
+- In a background task, runs warmup inference through `SentenceTransformer`, `CrossEncoder`, ChromaDB collection query, BM25 index initialization, Redis connection pool, and sends a `keep_alive: "30m"` ping to Ollama or checks Groq connectivity.
+- Surfaces readiness telemetry under `/health/ready` with `warmup: {status: "warming" | "ready", stages: {...}, took_ms}`.
+- Displays a live "Warming up…" / "Ready" status badge in the React navigation bar.
+
+---
+
+### Lightweight Intent Router (<5ms)
+Before querying vector stores or LLM endpoints, the pipeline passes queries through a rule-based `IntentRouter` that classifies requests into:
+1. `greeting` / `smalltalk`: Handled instantly with friendly conversational responses, zero embedding or retrieval overhead, zero cache pollution, and suggestions tailored to indexed knowledge base categories. Supports English, typos, and Hinglish (`"hlo"`, `"hii bro"`, `"namaste"`, `"kya haal"`).
+2. `identity`: Explains RAGOps capabilities and provides dynamic document catalog counts.
+3. `general_question`: Governed by `ALLOW_GENERAL_KNOWLEDGE=true`. When retrieval confidence is low, answers with general domain knowledge while clearly marking that the answer is external to indexed corporate documents.
+4. `kb_question`: Full enterprise RAG with vector search, reranking, source citation, and semantic caching.
 
 ---
 
