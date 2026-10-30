@@ -35,17 +35,22 @@ import {
   RotateCcw
 } from 'lucide-react';
 import { marked } from 'marked';
+import { useAppStore } from '../context/AppContext';
 
 export default function SearchPage({ 
   onChunkClick, 
   onFeedbackRecorded, 
   initialQuery, 
-  apiBaseUrl = '', 
-  currentUser, 
+  apiBaseUrl: propApiBaseUrl = '', 
+  currentUser: propCurrentUser, 
   onOpenAuthModal 
 }) {
-  // Session & Chat history states
-  const [sessions, setSessions] = useState([]);
+  const store = useAppStore();
+  const apiBaseUrl = propApiBaseUrl || store.apiBaseUrl;
+  const currentUser = propCurrentUser || store.currentUser;
+  const sessions = store.sessions;
+  const setSessions = store.setSessions;
+  const catalogData = store.catalogData;
   const [currentSessionId, setCurrentSessionId] = useState(() => {
     return `sess_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
   });

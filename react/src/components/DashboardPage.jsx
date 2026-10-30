@@ -52,8 +52,12 @@ import {
   Minimize2
 } from 'lucide-react';
 import { marked } from 'marked';
+import { useAppStore } from '../context/AppContext';
 
-export default function DashboardPage({ onRerunQuery, apiBaseUrl = '', currentUser, onOpenAuthModal, onChunkClick }) {
+export default function DashboardPage({ onRerunQuery, apiBaseUrl: propApiBaseUrl = '', currentUser: propCurrentUser, onOpenAuthModal, onChunkClick }) {
+  const store = useAppStore();
+  const apiBaseUrl = propApiBaseUrl || store.apiBaseUrl;
+  const currentUser = propCurrentUser || store.currentUser;
   // Navigation tabs within Dashboard (support deep-linking to company knowledge hub)
   const [activeTab, setActiveTab] = useState(() => {
     if (typeof window !== 'undefined') {
@@ -63,10 +67,10 @@ export default function DashboardPage({ onRerunQuery, apiBaseUrl = '', currentUs
     return 'overview';
   });
 
-  // Data states
-  const [feedbackData, setFeedbackData] = useState(null);
-  const [adminAnalytics, setAdminAnalytics] = useState(null);
-  const [userList, setUserList] = useState([]);
+  // Data states (pre-seeded from centralized AppContext store)
+  const [feedbackData, setFeedbackData] = useState(() => store.feedbackData || null);
+  const [adminAnalytics, setAdminAnalytics] = useState(() => store.analytics || null);
+  const [userList, setUserList] = useState(() => store.userList || []);
   const [selectedUser, setSelectedUser] = useState(null);
   const [userChatHistory, setUserChatHistory] = useState([]);
   const [recentLogs, setRecentLogs] = useState([]);

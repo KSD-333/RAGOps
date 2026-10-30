@@ -167,3 +167,44 @@
   color: #f1f5f9;
   font-size: 0.85rem;
 }
+
+/* Light theme overrides */
+.light-theme body {
+  background-color: #f8fafc;
+  color: #0f172a;
+}
+.light-theme {
+  --bg-primary: #f8fafc;
+  --bg-surface: #ffffff;
+  --bg-card: #f1f5f9;
+  --border-subtle: #e2e8f0;
+  --text-primary: #0f172a;
+  --text-muted: #64748b;
+}
+.light-theme .ragops-markdown {
+  color: #1e293b;
+}
+.light-theme .ragops-markdown strong,
+.light-theme .ragops-markdown b {
+  color: #0f172a;
+}
+.light-theme .ragops-markdown code {
+  background: rgba(0, 0, 0, 0.05);
+  border-color: rgba(0, 0, 0, 0.1);
+  color: #4f46e5;
+}
+.light-theme .ragops-markdown pre {
+  background: #f1f5f9;
+  border-color: #cbd5e1;
+}
+.light-theme .ragops-markdown pre code {
+  color: #0f172a;
+}
+.light-theme .ragops-markdown th {
+  background: rgba(0, 0, 0, 0.04);
+  color: #334155;
+}
+.light-theme .ragops-markdown td {
+  border-color: rgba(0, 0, 0, 0.08);
+  color: #334155;
+}
