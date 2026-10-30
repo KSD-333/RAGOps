@@ -83,7 +83,13 @@ export function AppStoreProvider({ children }) {
   const [isOnline, setIsOnline] = useState(true);
   const [modelName, setModelName] = useState('Ollama llama3.2:3b');
   const [activeProvider, setActiveProvider] = useState('auto');
-  const [warmupState, setWarmupState] = useState({ status: 'warming', took_ms: 0, stages: {} });
+  const [warmupState, setWarmupState] = useState(() => {
+    try {
+      const saved = sessionStorage.getItem('ragops_warmup_state');
+      if (saved) return JSON.parse(saved);
+    } catch (e) {}
+    return { status: 'ready', took_ms: 0, stages: {} };
+  });
 
   const [sessions, setSessions] = useState([]);
   const [activeSessionId, setActiveSessionId] = useState(null);
@@ -122,9 +128,24 @@ export function AppStoreProvider({ children }) {
     const role = userToLoad.role || 'user';
 
     try {
-      // 1. Health check & provider info
+      // 1. Health check & provider info (resolved immediately so warmup/provider state updates in ms)
       const healthPromise = fetch(`${base}/health/ready`, { signal })
         .then((r) => (r.ok ? r.json() : null))
+        .then((hData) => {
+          if (hData && !signal.aborted) {
+            setIsOnline(true);
+            setHealthData(hData);
+            if (hData.warmup) {
+              setWarmupState(hData.warmup);
+              try {
+                sessionStorage.setItem('ragops_warmup_state', JSON.stringify(hData.warmup));
+              } catch (e) {}
+            }
+            if (hData.active_provider) setActiveProvider(hData.active_provider);
+            if (hData.model) setModelName(hData.model);
+          }
+          return hData;
+        })
         .catch(() => null);
 
       // 2. Chat Sessions for the active user
@@ -177,10 +198,15 @@ export function AppStoreProvider({ children }) {
       if (healthRes) {
         setIsOnline(true);
         setHealthData(healthRes);
-        if (healthRes.warmup) setWarmupState(healthRes.warmup);
+        if (healthRes.warmup) {
+          setWarmupState(healthRes.warmup);
+          try {
+            sessionStorage.setItem('ragops_warmup_state', JSON.stringify(healthRes.warmup));
+          } catch (e) {}
+        }
         if (healthRes.active_provider) setActiveProvider(healthRes.active_provider);
         if (healthRes.model) setModelName(healthRes.model);
-      } else {
+      } else if (!healthData) {
         setIsOnline(false);
       }
 

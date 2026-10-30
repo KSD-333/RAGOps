@@ -239,9 +239,13 @@ class WarmupCoordinator:
                 }
                 logger.warning("warmup_stage_failed", stage="llm", error=str(e))
 
-        await asyncio.to_thread(_execute_sync_stages)
-        self.completed_at = time.perf_counter()
-        self.total_took_ms = round((self.completed_at - (self.started_at or self.completed_at)) * 1000, 2)
-        self.status = "ready"
-        logger.info("warmup_completed", took_ms=self.total_took_ms, stages=self.stages)
+        try:
+            await asyncio.to_thread(_execute_sync_stages)
+        except Exception as e:
+            logger.error("warmup_unexpected_failure", error=str(e))
+        finally:
+            self.completed_at = time.perf_counter()
+            self.total_took_ms = round((self.completed_at - (self.started_at or self.completed_at)) * 1000, 2)
+            self.status = "ready"
+            logger.info("warmup_completed", took_ms=self.total_took_ms, stages=self.stages)
         return self.get_state()

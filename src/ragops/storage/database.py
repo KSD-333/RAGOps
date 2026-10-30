@@ -149,10 +149,10 @@ def init_db() -> None:
                 ("governance_level", "VARCHAR(50) DEFAULT 'Operational'"),
             ]:
                 try:
-                    conn.execute(text(f"ALTER TABLE documents ADD COLUMN {col_name} {col_type}"))
+                    conn.execute(text(f"ALTER TABLE documents ADD COLUMN IF NOT EXISTS {col_name} {col_type}"))
                     conn.commit()
                 except Exception:
-                    pass
+                    conn.rollback()
 
             for col_name, col_type in [
                 ("cache_hit", "BOOLEAN DEFAULT FALSE"),
@@ -161,20 +161,20 @@ def init_db() -> None:
                 ("provider", "VARCHAR(50) DEFAULT 'unknown'"),
             ]:
                 try:
-                    conn.execute(text(f"ALTER TABLE chat_messages ADD COLUMN {col_name} {col_type}"))
+                    conn.execute(text(f"ALTER TABLE chat_messages ADD COLUMN IF NOT EXISTS {col_name} {col_type}"))
                     conn.commit()
                 except Exception:
-                    pass
+                    conn.rollback()
 
             for col_name, col_type in [
                 ("quarantine", "BOOLEAN DEFAULT FALSE"),
                 ("quarantine_reason", "VARCHAR(500) DEFAULT ''"),
             ]:
                 try:
-                    conn.execute(text(f"ALTER TABLE fact_candidates ADD COLUMN {col_name} {col_type}"))
+                    conn.execute(text(f"ALTER TABLE fact_candidates ADD COLUMN IF NOT EXISTS {col_name} {col_type}"))
                     conn.commit()
                 except Exception:
-                    pass
+                    conn.rollback()
     except Exception as e:
         logger.debug("schema_evolution_check_done", msg=str(e))
 
