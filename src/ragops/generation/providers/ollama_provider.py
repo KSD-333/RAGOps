@@ -36,7 +36,10 @@ class OllamaProvider(LLMProvider):
         auto_pull: bool | None = None,
     ):
         settings = get_settings()
-        self._base_url = (base_url or settings.ollama.base_url).rstrip("/")
+        raw_url = (base_url or settings.ollama.base_url).rstrip("/")
+        if "localhost" in raw_url:
+            raw_url = raw_url.replace("localhost", "127.0.0.1")
+        self._base_url = raw_url
         self._model = model or settings.ollama.model
         self._timeout = timeout_seconds if timeout_seconds is not None else settings.llm.timeout_seconds
         self._max_retries = max_retries if max_retries is not None else settings.llm.max_retries
@@ -151,11 +154,23 @@ class OllamaProvider(LLMProvider):
             logger.error("ollama_pull_model_failed", model=self._model, error=str(e))
             return False
 
-    def health_check(self) -> dict[str, Any]:
-        """Perform comprehensive health check on Ollama."""
+    def health_check(self, force_refresh: bool = False) -> dict[str, Any]:
+        """Perform comprehensive health check on Ollama with 15s cache."""
+        now = time.time()
+        if not force_refresh and hasattr(self, "_cached_health") and hasattr(self, "_cached_health_time"):
+            if now - self._cached_health_time < 15.0:
+                return self._cached_health
+
+        res = self._do_health_check()
+        self._cached_health = res
+        self._cached_health_time = now
+        return res
+
+    def _do_health_check(self) -> dict[str, Any]:
+        """Execute actual probe to local Ollama service in a single fast call."""
         installed = self.is_installed()
-        running = self._ping_server(timeout=2.0)
-        models = self.list_installed_models(timeout=2.0) if running else []
+        models = self.list_installed_models(timeout=1.0) if installed else []
+        running = len(models) > 0 or self._ping_server(timeout=0.5)
         model_ready = any(
             m.lower() == self._model.lower() or m.lower().startswith(f"{self._model.lower()}:")
             for m in models

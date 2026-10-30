@@ -68,8 +68,20 @@ class GroqProvider(LLMProvider):
         """Check if an API key is configured."""
         return bool(self._api_key and self._api_key.strip() and self._api_key != "your_groq_api_key_here")
 
-    def health_check(self) -> dict[str, Any]:
-        """Validate Groq credentials and model availability via /openai/v1/models."""
+    def health_check(self, force_refresh: bool = False) -> dict[str, Any]:
+        """Validate Groq credentials and model availability via /openai/v1/models with 60s cache."""
+        now = time.time()
+        if not force_refresh and hasattr(self, "_cached_health") and hasattr(self, "_cached_health_time"):
+            if now - self._cached_health_time < 60.0:
+                return self._cached_health
+
+        res = self._do_health_check()
+        self._cached_health = res
+        self._cached_health_time = now
+        return res
+
+    def _do_health_check(self) -> dict[str, Any]:
+        """Execute actual network health probe to Groq API."""
         if not self.is_key_present():
             return {
                 "provider": self.name,

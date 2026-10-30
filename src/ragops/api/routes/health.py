@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import asyncio
 from typing import Any
 
 from fastapi import APIRouter, Response
@@ -68,7 +69,7 @@ async def readiness_check() -> dict[str, Any]:
     warmup_state = WarmupCoordinator.get_instance().get_state()
     try:
         from ragops.generation.providers.router import get_llm_router
-        router_diag = get_llm_router().diagnose()
+        router_diag = await asyncio.to_thread(get_llm_router().diagnose)
         return {
             "status": "degraded" if router_diag["degraded"] else "ready",
             "environment": settings.environment,

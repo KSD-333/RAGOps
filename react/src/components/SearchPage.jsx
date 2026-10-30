@@ -122,8 +122,16 @@ export default function SearchPage({
     }
   }, [currentUser]);
 
-  // In-flight request tracker to prevent race conditions during rapid session switching
+  // In-flight request tracker and client-side session cache for 0ms chat switching
   const sessionFetchAbortRef = useRef(null);
+  const sessionCacheRef = useRef({});
+
+  // Automatically keep client cache in sync whenever messages change for active session
+  useEffect(() => {
+    if (currentSessionId && messages.length > 0) {
+      sessionCacheRef.current[currentSessionId] = messages;
+    }
+  }, [messages, currentSessionId]);
 
   // Load turn-by-turn messages if an existing session is clicked
   const handleSelectSession = async (sessionId, sessionUser = null) => {
@@ -136,7 +144,15 @@ export default function SearchPage({
 
     setCurrentSessionId(sessionId);
     setCurrentSessionUser(sessionUser);
-    setIsSessionLoading(true);
+
+    // Instant local cache hit: display messages immediately with zero skeleton lag
+    const cached = sessionCacheRef.current[sessionId];
+    if (cached && cached.length > 0) {
+      setMessages(cached);
+      setIsSessionLoading(false);
+    } else {
+      setIsSessionLoading(true);
+    }
 
     try {
       const username = currentUser?.username || 'test1';

@@ -127,14 +127,14 @@ async def list_user_sessions(
     """
     try:
         chat_repo = ChatRepository()
-        if role == "admin":
-            if filter_user and filter_user != "all":
-                sessions = chat_repo.get_all_sessions(limit=100, user_filter=filter_user)
-            else:
-                sessions = chat_repo.get_all_sessions(limit=100)
-        else:
-            # Non-admin user can ONLY see their own sessions
-            sessions = chat_repo.get_user_sessions(username=username)
+        def _fetch_sessions():
+            if role == "admin":
+                if filter_user and filter_user != "all":
+                    return chat_repo.get_all_sessions(limit=100, user_filter=filter_user)
+                return chat_repo.get_all_sessions(limit=100)
+            return chat_repo.get_user_sessions(username=username)
+
+        sessions = await asyncio.to_thread(_fetch_sessions)
         return {"username": username, "role": role or "user", "sessions": sessions}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to fetch sessions: {str(e)}")
@@ -153,7 +153,7 @@ async def get_session_history(
     try:
         chat_repo = ChatRepository()
         filter_user = session_user or (username if role != "admin" else None)
-        messages = chat_repo.get_session_messages(session_id=session_id, username=filter_user)
+        messages = await asyncio.to_thread(chat_repo.get_session_messages, session_id, filter_user)
 
         # Access control: If non-admin user tries to access another user's session
         if role != "admin" and username and messages:
@@ -249,17 +249,16 @@ async def get_document_count():
 
 
 @router.get("/catalog")
-async def get_document_catalog(doc_type: Optional[str] = None):
-    """Get the auto-classified document inventory and classification summary, auto-reconciled with data/raw."""
+async def get_document_catalog(doc_type: Optional[str] = None, auto_reconcile: bool = False):
+    """Get the auto-classified document inventory and classification summary."""
     try:
         from ragops.storage.repositories import DocumentCatalogRepository
         repo = DocumentCatalogRepository()
-        documents = repo.list_documents(doc_type=doc_type, auto_reconcile=True)
-        summary = repo.get_summary()
-        return {
-            "summary": summary,
-            "documents": documents,
-        }
+        def _fetch_catalog():
+            docs = repo.list_documents(doc_type=doc_type, auto_reconcile=auto_reconcile)
+            summ = repo.get_summary()
+            return {"summary": summ, "documents": docs}
+        return await asyncio.to_thread(_fetch_catalog)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to fetch catalog: {str(e)}")
 

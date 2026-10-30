@@ -144,15 +144,33 @@ class LLMRouter:
             self._last_detected_time = now
         return self._active_provider_cache
 
-    def diagnose(self) -> dict[str, Any]:
-        """Produce full health diagnosis for /health/ready and CLI doctor command."""
+    def diagnose(self, force_refresh: bool = False) -> dict[str, Any]:
+        """Produce full health diagnosis for /health/ready and CLI doctor command with 30s cache."""
+        now = time.time()
+        if not force_refresh and hasattr(self, "_cached_diagnose") and hasattr(self, "_cached_diagnose_time"):
+            if now - self._cached_diagnose_time < 30.0:
+                return self._cached_diagnose
+
         ollama_health = self.ollama.health_check()
         groq_health = self.groq.health_check()
 
-        active = self.detect_active_provider(auto_start_ollama=False)
+        if self._mode == "ollama":
+            active = "ollama"
+        elif self._mode == "groq":
+            active = "groq"
+        else:
+            if ollama_health.get("model_ready"):
+                active = "ollama"
+            elif groq_health.get("reachable"):
+                active = "groq"
+            elif ollama_health.get("running"):
+                active = "ollama"
+            else:
+                active = "degraded"
+
         is_degraded = active == "degraded" or (not ollama_health["model_ready"] and not groq_health["reachable"])
 
-        return {
+        result = {
             "mode": self._mode,
             "active_provider": active,
             "degraded": is_degraded,
@@ -163,6 +181,9 @@ class LLMRouter:
                 "groq": self._breakers["groq"].state,
             },
         }
+        self._cached_diagnose = result
+        self._cached_diagnose_time = now
+        return result
 
     def generate(
         self,
