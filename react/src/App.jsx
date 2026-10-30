@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useAppStore } from './context/AppContext';
 import Navbar from './components/Navbar';
 import SearchPage from './components/SearchPage';
 import DashboardPage from './components/DashboardPage';
@@ -95,8 +96,12 @@ export default function App() {
     setCurrentUser(null);
   };
 
+  const { theme } = useAppStore();
+
   return (
-    <div className={`${activePage === 'search' ? 'h-screen overflow-hidden' : 'min-h-screen'} bg-[#07090e] text-slate-100 flex flex-col font-['Inter'] selection:bg-indigo-500 selection:text-white`}>
+    <div className={`${activePage === 'search' ? 'h-screen overflow-hidden' : 'min-h-screen'} ${
+      theme === 'light' ? 'bg-slate-50 text-slate-900' : 'bg-[#07090e] text-slate-100'
+    } flex flex-col font-['Inter'] selection:bg-indigo-500 selection:text-white transition-colors duration-200`}>
       {/* Top Navigation */}
       <Navbar
         activePage={activePage}
@@ -182,7 +187,7 @@ export default function App() {
       </main>
 
       {/* Enterprise Footer */}
-      <footer className={`border-t border-white/5 bg-[#05070a] text-center text-slate-400 shrink-0 ${
+      <footer className={`border-t ${theme === 'light' ? 'border-slate-200 bg-white text-slate-500' : 'border-white/5 bg-[#05070a] text-slate-400'} text-center shrink-0 ${
         activePage === 'search' ? 'py-2 text-[11px]' : 'py-6 text-xs'
       }`}>
         <div className={`mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-2 ${

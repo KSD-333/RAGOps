@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { 
+  Loader2,
   Search, 
   Sparkles, 
   ShieldAlert, 
@@ -51,12 +52,16 @@ export default function SearchPage({
   const sessions = store.sessions;
   const setSessions = store.setSessions;
   const catalogData = store.catalogData;
+  const theme = store.theme || 'dark';
+  const isLight = theme === 'light';
+
   const [currentSessionId, setCurrentSessionId] = useState(() => {
     return `sess_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
   });
   const [currentSessionUser, setCurrentSessionUser] = useState(() => currentUser?.username || null);
   const [copiedTurnId, setCopiedTurnId] = useState(null);
   const [messages, setMessages] = useState([]);
+  const [isSessionLoading, setIsSessionLoading] = useState(false);
   const [inputPrompt, setInputPrompt] = useState(initialQuery || '');
   const [topK, setTopK] = useState(5);
   const [loading, setLoading] = useState(false);
@@ -131,7 +136,7 @@ export default function SearchPage({
 
     setCurrentSessionId(sessionId);
     setCurrentSessionUser(sessionUser);
-    setLoading(true);
+    setIsSessionLoading(true);
 
     try {
       const username = currentUser?.username || 'test1';
@@ -175,7 +180,7 @@ export default function SearchPage({
       }
     } finally {
       if (!abortCtrl.signal.aborted) {
-        setLoading(false);
+        setIsSessionLoading(false);
       }
     }
   };
@@ -455,17 +460,21 @@ export default function SearchPage({
   };
 
   return (
-    <div className="flex flex-1 h-full min-h-0 rounded-2xl overflow-hidden border border-white/10 bg-[#070b16] shadow-2xl animate-in fade-in duration-200">
+    <div className={`flex flex-1 h-full min-h-0 rounded-2xl overflow-hidden border shadow-2xl animate-in fade-in duration-200 transition-colors ${
+      isLight ? 'border-slate-200 bg-white' : 'border-white/10 bg-[#070b16]'
+    }`}>
       
       {/* =====================================================================
           ENTERPRISE WORKSPACE SIDEBAR
           ===================================================================== */}
-      <aside className={`transition-all duration-300 flex flex-col h-full bg-[#080d19] border-r border-white/10 shrink-0 select-none overflow-hidden ${
+      <aside className={`transition-all duration-300 flex flex-col h-full shrink-0 select-none overflow-hidden border-r ${
+        isLight ? 'bg-slate-100 border-slate-200' : 'bg-[#080d19] border-white/10'
+      } ${
         sidebarOpen ? 'w-80' : 'w-0'
       }`}>
         
         {/* Sidebar Header: New Chat Button (PINNED) */}
-        <div className="p-3.5 border-b border-white/10 shrink-0 space-y-2">
+        <div className={`p-3.5 border-b shrink-0 space-y-2 ${isLight ? 'border-slate-200' : 'border-white/10'}`}>
           <button
             onClick={handleNewChat}
             className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-indigo-600 via-indigo-600 to-indigo-700 hover:from-indigo-500 hover:to-indigo-600 text-white text-xs font-semibold flex items-center justify-between shadow-lg shadow-indigo-600/30 transition-all cursor-pointer group hover:scale-[1.01] active:scale-[0.99]"
@@ -483,7 +492,9 @@ export default function SearchPage({
         </div>
 
         {/* Pinned Section Header: Title & Filter Tabs */}
-        <div className="px-3.5 py-2.5 border-b border-white/5 flex items-center justify-between shrink-0 bg-[#080d19]">
+        <div className={`px-3.5 py-2.5 border-b flex items-center justify-between shrink-0 ${
+          isLight ? 'border-slate-200 bg-slate-200/50' : 'border-white/5 bg-[#080d19]'
+        }`}>
           <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
             <MessageSquare className="w-3 h-3 text-indigo-400" />
             <span>{currentUser?.role === 'admin' ? 'Conversations Audit' : 'Your Conversations'}</span>
@@ -536,7 +547,11 @@ export default function SearchPage({
                   onClick={() => handleSelectSession(sess.session_id, sess.username)}
                   className={`group relative flex items-center justify-between p-3 rounded-xl text-xs transition-all cursor-pointer border ${
                     isActive
-                      ? 'bg-gradient-to-r from-indigo-950/80 via-indigo-900/40 to-transparent text-white border-indigo-500/50 shadow-md shadow-indigo-950/50 border-l-[4px] border-l-indigo-400'
+                      ? isLight
+                        ? 'bg-indigo-50 text-indigo-950 border-indigo-300 shadow-sm border-l-[4px] border-l-indigo-600 font-medium'
+                        : 'bg-gradient-to-r from-indigo-950/80 via-indigo-900/40 to-transparent text-white border-indigo-500/50 shadow-md shadow-indigo-950/50 border-l-[4px] border-l-indigo-400'
+                      : isLight
+                      ? 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60 border-transparent'
                       : 'text-slate-400 hover:text-slate-200 hover:bg-white/[0.04] border-transparent'
                   }`}
                 >
@@ -584,7 +599,9 @@ export default function SearchPage({
         </div>
 
         {/* Sidebar Footer: Active User & Account Switcher (PINNED) */}
-        <div className="p-3.5 border-t border-white/10 bg-[#070b14] flex items-center justify-between shrink-0">
+        <div className={`p-3.5 border-t flex items-center justify-between shrink-0 ${
+          isLight ? 'border-slate-200 bg-slate-200/70' : 'border-white/10 bg-[#070b14]'
+        }`}>
           <div className="flex items-center gap-2.5 overflow-hidden">
             <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs shadow-md ${
               currentUser?.role === 'admin' ? 'bg-amber-500 text-black ring-2 ring-amber-500/30' : 'bg-indigo-600 text-white ring-2 ring-indigo-500/30'
@@ -610,10 +627,14 @@ export default function SearchPage({
       {/* =====================================================================
           MAIN CONVERSATIONAL AREA
           ===================================================================== */}
-      <main className="flex-1 flex flex-col h-full min-w-0 bg-[#070b16] overflow-hidden">
+      <main className={`flex-1 flex flex-col h-full min-w-0 overflow-hidden transition-colors ${
+        isLight ? 'bg-white' : 'bg-[#070b16]'
+      }`}>
         
         {/* Top Header Bar (PINNED) */}
-        <div className="h-16 border-b border-white/10 px-5 sm:px-6 flex items-center justify-between bg-[#0a0e1c]/80 backdrop-blur-xl shrink-0">
+        <div className={`h-16 border-b px-5 sm:px-6 flex items-center justify-between backdrop-blur-xl shrink-0 transition-colors ${
+          isLight ? 'border-slate-200 bg-slate-50/90' : 'border-white/10 bg-[#0a0e1c]/80'
+        }`}>
           <div className="flex items-center gap-3">
             <button
               onClick={() => setSidebarOpen(!sidebarOpen)}
@@ -624,7 +645,9 @@ export default function SearchPage({
             </button>
             
             <div className="flex items-center gap-2.5">
-              <span className="font-['Outfit'] font-bold text-base text-white tracking-tight">RAGOps Chat Assistant</span>
+              <span className={`font-['Outfit'] font-bold text-base tracking-tight ${isLight ? 'text-slate-900' : 'text-white'}`}>
+                RAGOps Chat Assistant
+              </span>
               <span className="text-[11px] px-2.5 py-0.5 rounded-full bg-indigo-500/15 text-indigo-300 border border-indigo-500/30 font-mono font-medium">
                 Groq LLaMA 3.1 70B
               </span>
@@ -675,8 +698,29 @@ export default function SearchPage({
         {/* Message Stream: INDEPENDENT SCROLL CONTAINER */}
         <div ref={chatScrollContainerRef} className="flex-1 min-h-0 overflow-y-auto p-5 sm:p-8 space-y-7">
           
-          {/* Empty Conversation Welcome Screen */}
-          {messages.length === 0 ? (
+          {/* Loading Session Messages Skeleton Indicator */}
+          {isSessionLoading ? (
+            <div className="max-w-4xl mx-auto py-10 space-y-6 animate-pulse">
+              <div className="flex items-center justify-center gap-2.5 text-xs text-indigo-500 font-medium">
+                <Loader2 className="w-4 h-4 animate-spin" />
+                <span>Loading conversation history...</span>
+              </div>
+              <div className="space-y-4">
+                <div className="flex justify-end">
+                  <div className={`h-12 w-2/5 rounded-2xl ${isLight ? 'bg-slate-200' : 'bg-white/10'}`} />
+                </div>
+                <div className="flex justify-start">
+                  <div className={`h-32 w-4/5 rounded-2xl ${isLight ? 'bg-slate-200' : 'bg-white/10'}`} />
+                </div>
+                <div className="flex justify-end">
+                  <div className={`h-10 w-1/3 rounded-2xl ${isLight ? 'bg-slate-200' : 'bg-white/10'}`} />
+                </div>
+                <div className="flex justify-start">
+                  <div className={`h-24 w-3/4 rounded-2xl ${isLight ? 'bg-slate-200' : 'bg-white/10'}`} />
+                </div>
+              </div>
+            </div>
+          ) : messages.length === 0 ? (
             <div className="h-full flex flex-col items-center justify-center max-w-2xl mx-auto text-center space-y-7 py-12 animate-in fade-in duration-300">
               <div className="relative">
                 <div className="w-16 h-16 rounded-3xl bg-gradient-to-br from-indigo-500 via-indigo-600 to-cyan-400 flex items-center justify-center text-white shadow-2xl shadow-indigo-500/30">
@@ -792,7 +836,9 @@ export default function SearchPage({
                           </div>
                         </div>
                       ) : (
-                        <div className="p-6 sm:p-7 rounded-2xl bg-[#0c1120]/95 border border-white/10 space-y-5 shadow-2xl backdrop-blur-md">
+                        <div className={`p-6 sm:p-7 rounded-2xl border space-y-5 shadow-2xl backdrop-blur-md transition-colors ${
+                          isLight ? 'bg-slate-50 border-slate-200 text-slate-800' : 'bg-[#0c1120]/95 border-white/10 text-slate-100'
+                        }`}>
                           
                           {/* Abstention Banner if documents do not contain the answer */}
                           {isAbstaining && (
@@ -990,7 +1036,9 @@ export default function SearchPage({
         </div>
 
         {/* BOTTOM FIXED PROMPT DOCK */}
-        <div className="p-4 sm:p-5 border-t border-white/10 bg-[#0a0e1c]/90 backdrop-blur-xl space-y-2.5">
+        <div className={`p-4 sm:p-5 border-t backdrop-blur-xl space-y-2.5 transition-colors ${
+          isLight ? 'border-slate-200 bg-slate-50/90' : 'border-white/10 bg-[#0a0e1c]/90'
+        }`}>
           
           {/* Detected URL Quick Banner */}
           {(() => {
@@ -1051,7 +1099,11 @@ export default function SearchPage({
           {/* Form */}
           <form 
             onSubmit={handleSendMessage}
-            className="max-w-5xl xl:max-w-6xl mx-auto relative flex items-center bg-[#0e1424] border border-white/15 focus-within:border-indigo-500/80 focus-within:ring-2 focus-within:ring-indigo-500/20 rounded-2xl shadow-2xl transition-all p-2"
+            className={`max-w-5xl xl:max-w-6xl mx-auto relative flex items-center border rounded-2xl shadow-2xl transition-all p-2 ${
+              isLight
+                ? 'bg-white border-slate-300 focus-within:border-indigo-600 focus-within:ring-2 focus-within:ring-indigo-500/20'
+                : 'bg-[#0e1424] border-white/15 focus-within:border-indigo-500/80 focus-within:ring-2 focus-within:ring-indigo-500/20'
+            }`}
           >
             <textarea
               ref={textareaRef}
@@ -1065,7 +1117,9 @@ export default function SearchPage({
                 }
               }}
               placeholder="Ask a question about corporate architecture, manufacturing locations, products, or compliance policies (Shift+Enter for newline)..."
-              className="flex-1 bg-transparent px-3.5 py-2.5 text-[15px] text-white placeholder-slate-500 focus:outline-none resize-none max-h-36 min-h-[46px]"
+              className={`flex-1 bg-transparent px-3.5 py-2.5 text-[15px] focus:outline-none resize-none max-h-36 min-h-[46px] ${
+                isLight ? 'text-slate-900 placeholder-slate-400' : 'text-white placeholder-slate-500'
+              }`}
             />
 
             <button
