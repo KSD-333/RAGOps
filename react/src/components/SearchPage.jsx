@@ -38,6 +38,67 @@ import {
 import { marked } from 'marked';
 import { useAppStore } from '../context/AppContext';
 
+// ChatGPT-style Typewriter Animation Component with smooth word streaming & cursor
+function TypewriterMessage({ content, isNew, onComplete, onTick }) {
+  const [displayedText, setDisplayedText] = useState(isNew ? '' : content);
+  const [isTyping, setIsTyping] = useState(isNew);
+
+  useEffect(() => {
+    if (!isNew || !content) {
+      setDisplayedText(content);
+      setIsTyping(false);
+      return;
+    }
+
+    let currentIndex = 0;
+    const totalLength = content.length;
+    // Chunk size: dynamically adapts so long responses finish typing smoothly within ~1.5 - 2s
+    const chunkSize = Math.max(3, Math.ceil(totalLength / 60));
+    const intervalMs = 18;
+
+    const timer = setInterval(() => {
+      currentIndex += chunkSize;
+      if (currentIndex >= totalLength) {
+        setDisplayedText(content);
+        setIsTyping(false);
+        clearInterval(timer);
+        if (onComplete) onComplete();
+      } else {
+        setDisplayedText(content.slice(0, currentIndex));
+        if (onTick) onTick();
+      }
+    }, intervalMs);
+
+    return () => clearInterval(timer);
+  }, [content, isNew]);
+
+  const handleSkip = () => {
+    setDisplayedText(content);
+    setIsTyping(false);
+    if (onComplete) onComplete();
+  };
+
+  return (
+    <div className="relative">
+      <div 
+        className="ragops-markdown max-w-none font-sans"
+        dangerouslySetInnerHTML={{
+          __html: marked.parse(displayedText || '') + (isTyping ? '<span class="inline-block w-2 h-4 bg-indigo-400 ml-0.5 animate-pulse rounded-sm align-middle"></span>' : ''),
+        }}
+      />
+      {isTyping && (
+        <button
+          type="button"
+          onClick={handleSkip}
+          className="mt-2 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-400 hover:text-indigo-300 text-[11px] font-mono border border-indigo-500/20 transition-colors cursor-pointer"
+        >
+          <span>Skip typing animation ⏭</span>
+        </button>
+      )}
+    </div>
+  );
+}
+
 export default function SearchPage({ 
   onChunkClick, 
   onFeedbackRecorded, 
@@ -86,6 +147,15 @@ export default function SearchPage({
 
   // Admin Chat Filtering: 'all' users vs 'my' admin chats
   const [adminChatFilter, setAdminChatFilter] = useState('all');
+
+  // Filtered sessions for admin ('all' vs 'my')
+  const displayedSessions = useMemo(() => {
+    if (!sessions || sessions.length === 0) return [];
+    if (currentUser?.role === 'admin' && adminChatFilter === 'my') {
+      return sessions.filter((s) => s.username === currentUser?.username);
+    }
+    return sessions;
+  }, [sessions, currentUser, adminChatFilter]);
 
   // Format relevance score from raw cross-encoder logits or similarity to clean 0-100%
   const formatRelevanceScore = (score) => {
@@ -206,10 +276,7 @@ export default function SearchPage({
     try {
       const username = currentUser?.username || 'test1';
       const role = currentUser?.role || 'user';
-      let url = `${apiBaseUrl}/api/v1/sessions?username=${encodeURIComponent(username)}&role=${encodeURIComponent(role)}`;
-      if (role === 'admin' && adminChatFilter === 'my') {
-        url += `&filter_user=${encodeURIComponent(username)}`;
-      }
+      const url = `${apiBaseUrl}/api/v1/sessions?username=${encodeURIComponent(username)}&role=${encodeURIComponent(role)}`;
       const res = await fetch(url);
       if (res.ok) {
         const json = await res.json();
@@ -228,7 +295,7 @@ export default function SearchPage({
 
   useEffect(() => {
     fetchSessions(true);
-  }, [currentUser, apiBaseUrl, adminChatFilter]);
+  }, [currentUser, apiBaseUrl]);
 
   // Start fresh chat
   const handleNewChat = () => {
@@ -329,6 +396,7 @@ export default function SearchPage({
                 trace_id: data.trace_id,
                 metadata: meta,
                 isPending: false,
+                isNew: true,
               }
             : msg
         )
@@ -537,7 +605,7 @@ export default function SearchPage({
                     : 'text-slate-400 hover:text-white'
                 }`}
               >
-                Mine
+                Mine ({sessions.filter((s) => s.username === currentUser?.username).length})
               </button>
             </div>
           )}
@@ -546,13 +614,13 @@ export default function SearchPage({
         {/* Sessions List: INDEPENDENT SCROLL CONTAINER */}
         <div className="flex-1 min-h-0 overflow-y-auto p-2.5 space-y-1.5">
 
-          {sessions.length === 0 ? (
+          {displayedSessions.length === 0 ? (
             <div className="p-6 text-center text-slate-500 text-xs italic space-y-1">
               <div>{currentUser?.role === 'admin' ? 'No conversations recorded for this filter.' : 'No previous chats recorded yet.'}</div>
               <div className="text-[11px] text-slate-600">Start a new conversation to begin!</div>
             </div>
           ) : (
-            sessions.map((sess, sIdx) => {
+            displayedSessions.map((sess, sIdx) => {
               const isActive = sess.session_id === currentSessionId && 
                 (!currentSessionUser || !sess.username || currentSessionUser === sess.username);
               const sessionKey = `${sess.session_id}_${sess.username || ''}_${sIdx}`;
@@ -899,10 +967,16 @@ export default function SearchPage({
                             )}
                           </div>
 
-                          {/* Markdown Rendered Answer with custom ragops-markdown styling */}
-                          <div 
-                            className="ragops-markdown max-w-none font-sans"
-                            dangerouslySetInnerHTML={{ __html: marked.parse(turn.answer || '') }}
+                          {/* Markdown Rendered Answer with Typewriter Animation */}
+                          <TypewriterMessage
+                            content={turn.answer || ''}
+                            isNew={!!turn.isNew}
+                            onComplete={() => {
+                              setMessages((prev) =>
+                                prev.map((m) => (m.id === turn.id ? { ...m, isNew: false } : m))
+                              );
+                            }}
+                            onTick={() => scrollToBottom('auto')}
                           />
 
                           {/* Verified Citations List */}

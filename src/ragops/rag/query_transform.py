@@ -36,6 +36,26 @@ class QueryTransformer:
         "tell", "explain", "describe",
     }
 
+    TYPO_CORRECTIONS: dict[str, str] = {
+        r"\bcrate\b": "create",
+        r"\bcrating\b": "creating",
+        r"\bloaction\b": "location",
+        r"\bloactions\b": "locations",
+        r"\blocatons\b": "locations",
+        r"\blocatoin\b": "location",
+        r"\bpolies\b": "policies",
+        r"\bpolices\b": "policies",
+        r"\bploicy\b": "policy",
+        r"\bdocumnet\b": "document",
+        r"\bdocumnets\b": "documents",
+        r"\bagnet\b": "agent",
+        r"\bagentss\b": "agents",
+        r"\bretrival\b": "retrieval",
+        r"\bretriv\b": "retrieve",
+        r"\bembeding\b": "embedding",
+        r"\bembedings\b": "embeddings",
+    }
+
     def transform(self, request: QueryRequest) -> ProcessedQuery:
         """Transform a query request into a processed query.
 
@@ -64,23 +84,32 @@ class QueryTransformer:
     def _optimize_for_search(self, query: str) -> str:
         """Create a search-optimized version of the query.
 
-        Removes common question prefixes and stopwords while
+        Removes colloquial fillers, common question prefixes, and common typos while
         preserving technical terms and key content.
         """
-        # Remove common question prefixes
-        prefixes = [
-            r"^(can you |could you |please |how do i |how to |what is |what are |tell me about |explain )",
-        ]
         optimized = query
-        for pattern in prefixes:
-            optimized = re.sub(pattern, "", optimized, flags=re.IGNORECASE)
+
+        # 1. Correct common typos in search queries
+        for pattern, replacement in self.TYPO_CORRECTIONS.items():
+            optimized = re.sub(pattern, replacement, optimized, flags=re.IGNORECASE)
+
+        # 2. Repeatedly strip colloquial fillers and question prefixes
+        filler_pattern = (
+            r"^(?:like|so|and|then|also|bro|plz|please|hey|hi|hlo|can you|could you|"
+            r"tell me about|tell me|what is|what are|how do i|how to|explain)\s+"
+        )
+        while re.search(filler_pattern, optimized, flags=re.IGNORECASE):
+            optimized = re.sub(filler_pattern, "", optimized, flags=re.IGNORECASE)
 
         # Remove question marks and excess whitespace
         optimized = optimized.replace("?", "").strip()
         optimized = re.sub(r"\s+", " ", optimized)
 
-        # If optimization made the query too short, use original
+        # If optimization made the query too short (< 2 tokens), fallback to cleaned query
         if len(optimized.split()) < 2:
-            return query
+            cleaned_orig = query.replace("?", "").strip()
+            for pattern, replacement in self.TYPO_CORRECTIONS.items():
+                cleaned_orig = re.sub(pattern, replacement, cleaned_orig, flags=re.IGNORECASE)
+            return cleaned_orig if len(cleaned_orig.split()) >= 1 else query
 
         return optimized

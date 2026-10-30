@@ -24,21 +24,11 @@ export default function App() {
   const [isOnline, setIsOnline] = useState(true);
   const [modelName, setModelName] = useState('Groq LLaMA 3.1 70B');
 
+  // Central App Store
+  const { theme, currentUser, setCurrentUser } = useAppStore();
+
   // Authentication State
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
-  const [currentUser, setCurrentUser] = useState(() => {
-    try {
-      const stored = localStorage.getItem('ragops_user');
-      if (stored) return JSON.parse(stored);
-    } catch (e) {}
-    // Default active user is test1
-    return {
-      id: 2,
-      username: 'test1',
-      email: 'test1@ragops.io',
-      role: 'user',
-    };
-  });
 
   // API base URL for multi-environment: empty string means local origin/proxy, or custom cloud URL
   const [apiBaseUrl, setApiBaseUrl] = useState(() => {
@@ -96,7 +86,6 @@ export default function App() {
     setCurrentUser(null);
   };
 
-  const { theme } = useAppStore();
 
   return (
     <div className={`${activePage === 'search' ? 'h-screen overflow-hidden' : 'min-h-screen'} ${

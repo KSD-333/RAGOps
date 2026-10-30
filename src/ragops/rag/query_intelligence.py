@@ -73,6 +73,21 @@ def is_abstention_text(text: str) -> bool:
     return any(p in t for p in abstention_patterns)
 
 
+def extract_topic_from_turn(last_q: str, last_a: str = "") -> str:
+    """Extract the primary noun phrase or core subject from the previous conversation turn."""
+    if not last_q:
+        return ""
+    pattern = (
+        r"^(?:what\s+is|what\s+are|explain(?:\s+about)?|tell\s+me\s+about|"
+        r"describe|how\s+does|who\s+is|how\s+do\s+i|define|can\s+you\s+explain)\s+(?:(?:an?|the)\s+)?"
+    )
+    cleaned = re.sub(pattern, "", last_q.strip(), flags=re.IGNORECASE).strip(" ?.,!:")
+    cleaned = re.sub(r"\s+(work|function|operate|look like)$", "", cleaned, flags=re.IGNORECASE).strip()
+    if 2 <= len(cleaned) <= 50 and cleaned.lower() not in {"hi", "hello", "hey", "hlo", "thanks", "ok", "yes", "no"}:
+        return cleaned
+    return ""
+
+
 class QueryIntelligenceEngine:
     """Production Query Intelligence Engine with semantic caching and rewriting."""
 
@@ -259,19 +274,48 @@ class QueryIntelligenceEngine:
             # Multi-turn conversational pronoun / referent resolution
             if chat_history and len(chat_history) > 0:
                 last_turn = chat_history[-1]
-                last_q = (last_turn.get("query") or "").lower()
+                last_q = (last_turn.get("query") or "").strip()
+                last_q_lower = last_q.lower()
                 last_a = (last_turn.get("answer") or "").lower()
 
                 # If the previous turn discussed POSH and user asks a follow-up
-                if any(w in last_q or w in last_a for w in ["posh", "sexual harassment", "icc"]):
+                if any(w in last_q_lower or w in last_a for w in ["posh", "sexual harassment", "icc"]):
                     if any(w in q_lower for w in ["committee", "who is in", "members", "procedure", "complaint", "it"]):
                         rewritten = f"What is the procedure or committee membership under the Prevention of Sexual Harassment (POSH) Policy regarding: {q}?"
                         is_rewritten = True
                 # If the previous turn discussed Whistleblowing
-                elif any(w in last_q or w in last_a for w in ["whistleblower", "vigil mechanism"]):
+                elif any(w in last_q_lower or w in last_a for w in ["whistleblower", "vigil mechanism"]):
                     if any(w in q_lower for w in ["report", "who", "ombudsperson", "procedure", "it"]):
                         rewritten = f"What is the reporting mechanism under the WhistleBlowing Vigil Mechanism Policy regarding: {q}?"
                         is_rewritten = True
+                else:
+                    # General Conversational Anaphora & Follow-up Resolution
+                    topic = extract_topic_from_turn(last_q, last_a)
+                    if topic:
+                        q_norm = q_lower.strip(" ?.,!:")
+                        stripped_q = re.sub(r"^(and\s+|so\s+|then\s+|also\s+|like\s+)+", "", q_norm).strip()
+                        create_match = re.search(
+                            r"^(how\s+to\s+|how\s+do\s+i\s+)?(create|build|make|implement|use|develop|code|deploy|test)\s+(one|it|this|that)\b",
+                            stripped_q,
+                        )
+                        if create_match:
+                            action = create_match.group(2)
+                            rewritten = f"how to {action} {topic}"
+                            is_rewritten = True
+                        elif re.search(r"\b(one|it|this|that|them|these|those)\b", stripped_q):
+                            subbed = re.sub(r"\b(one|it|this|that)\b", topic, stripped_q)
+                            rewritten = subbed
+                            is_rewritten = True
+                        elif re.match(r"^(and\s+|so\s+|then\s+|like\s+|also\s+)", q_lower):
+                            rewritten = stripped_q
+                            is_rewritten = True
+
+            # If not rewritten by chat history, check leading conversational fillers
+            if not is_rewritten:
+                cleaned_lead = re.sub(r"^(like|so|and|then|bro|plz|please)\s+", "", q_lower).strip()
+                if cleaned_lead != q_lower and len(cleaned_lead.split()) >= 2:
+                    rewritten = cleaned_lead
+                    is_rewritten = True
 
             # Rule-based rewriting heuristics for common edge cases
             if not is_rewritten:

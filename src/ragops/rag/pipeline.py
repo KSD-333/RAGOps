@@ -473,7 +473,7 @@ class RAGPipeline:
             llm_response = self._llm_client.generate(
                 system_prompt=system_prompt,
                 user_prompt=user_prompt,
-                max_tokens=4096 if is_collection_query else 2048,
+                max_tokens=4096 if is_collection_query else 512,
             )
         except Exception as gen_err:
             logger.warning("primary_llm_generation_failed_falling_back_to_mock", error=str(gen_err))
@@ -482,7 +482,7 @@ class RAGPipeline:
             llm_response = fallback_llm.generate(
                 system_prompt=system_prompt,
                 user_prompt=user_prompt,
-                max_tokens=4096 if is_collection_query else 2048,
+                max_tokens=4096 if is_collection_query else 512,
             )
 
         # 8. Build final response with citations
