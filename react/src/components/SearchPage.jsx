@@ -754,7 +754,11 @@ export default function SearchPage({
               <button
                 type="button"
                 onClick={handleNewChat}
-                className="hidden sm:flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-white/[0.03] hover:bg-white/[0.08] text-slate-400 hover:text-white text-xs border border-white/10 transition-colors cursor-pointer"
+                className={`hidden sm:flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs border transition-colors cursor-pointer ${
+                  isLight 
+                    ? 'bg-white hover:bg-slate-100 text-slate-700 hover:text-slate-900 border-slate-200 shadow-sm' 
+                    : 'bg-white/[0.03] hover:bg-white/[0.08] text-slate-400 hover:text-white border-white/10'
+                }`}
                 title="Start a new clean chat"
               >
                 <RotateCcw className="w-3.5 h-3.5" />
@@ -762,18 +766,22 @@ export default function SearchPage({
               </button>
             )}
 
-            <div className="flex items-center gap-1.5 text-xs text-slate-300 bg-white/[0.04] border border-white/10 rounded-xl px-3 py-1.5">
-              <Sliders className="w-3.5 h-3.5 text-indigo-400" />
-              <span className="text-slate-400">Context:</span>
+            <div className={`flex items-center gap-1.5 text-xs rounded-xl px-3 py-1.5 border transition-colors ${
+              isLight ? 'bg-white border-slate-200 text-slate-700 shadow-sm' : 'bg-white/[0.04] border-white/10 text-slate-300'
+            }`}>
+              <Sliders className="w-3.5 h-3.5 text-indigo-500 dark:text-indigo-400" />
+              <span className={isLight ? 'text-slate-500' : 'text-slate-400'}>Context:</span>
               <select
                 value={topK}
                 onChange={(e) => setTopK(Number(e.target.value))}
-                className="bg-transparent text-white font-mono text-xs focus:outline-none cursor-pointer"
+                className={`bg-transparent font-mono text-xs focus:outline-none cursor-pointer ${
+                  isLight ? 'text-slate-900' : 'text-white'
+                }`}
               >
-                <option value={3} className="bg-[#0b0f19]">Top-3 Chunks</option>
-                <option value={5} className="bg-[#0b0f19]">Top-5 Chunks</option>
-                <option value={8} className="bg-[#0b0f19]">Top-8 Chunks</option>
-                <option value={10} className="bg-[#0b0f19]">Top-10 Chunks</option>
+                <option value={3} className={isLight ? 'bg-white text-slate-900' : 'bg-[#0b0f19] text-white'}>Top-3 Chunks</option>
+                <option value={5} className={isLight ? 'bg-white text-slate-900' : 'bg-[#0b0f19] text-white'}>Top-5 Chunks</option>
+                <option value={8} className={isLight ? 'bg-white text-slate-900' : 'bg-[#0b0f19] text-white'}>Top-8 Chunks</option>
+                <option value={10} className={isLight ? 'bg-white text-slate-900' : 'bg-[#0b0f19] text-white'}>Top-10 Chunks</option>
               </select>
             </div>
           </div>
@@ -816,10 +824,14 @@ export default function SearchPage({
               </div>
 
               <div className="space-y-2.5">
-                <h2 className="text-3xl sm:text-4xl font-extrabold text-white font-['Outfit'] tracking-tight">
+                <h2 className={`text-3xl sm:text-4xl font-extrabold font-['Outfit'] tracking-tight ${
+                  isLight ? 'text-slate-900' : 'text-white'
+                }`}>
                   How can I assist your operations?
                 </h2>
-                <p className="text-sm sm:text-base text-slate-400 max-w-lg mx-auto leading-relaxed">
+                <p className={`text-sm sm:text-base max-w-lg mx-auto leading-relaxed ${
+                  isLight ? 'text-slate-600' : 'text-slate-400'
+                }`}>
                   Enterprise retrieval augmented generation powered by PostgreSQL telemetry, ChromaDB embeddings, and Cross-Encoder reranking.
                 </p>
               </div>
@@ -829,13 +841,17 @@ export default function SearchPage({
                 <button
                   type="button"
                   onClick={() => setInputPrompt("What are the company's manufacturing locations and facilities?")}
-                  className="p-4 rounded-2xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-indigo-500/40 transition-all cursor-pointer text-left group"
+                  className={`p-4 rounded-2xl border transition-all cursor-pointer text-left group ${
+                    isLight 
+                      ? 'bg-white hover:bg-slate-50 border-slate-200 shadow-sm hover:border-indigo-400' 
+                      : 'bg-white/[0.03] hover:bg-white/[0.06] border-white/10 hover:border-indigo-500/40'
+                  }`}
                 >
-                  <div className="flex items-center gap-2 text-indigo-400 font-semibold text-xs mb-1 group-hover:text-indigo-300">
+                  <div className="flex items-center gap-2 text-indigo-500 dark:text-indigo-400 font-semibold text-xs mb-1 group-hover:text-indigo-400">
                     <Building className="w-3.5 h-3.5" />
                     <span>Manufacturing &amp; Plants</span>
                   </div>
-                  <div className="text-xs text-slate-400 leading-relaxed">
+                  <div className={`text-xs leading-relaxed ${isLight ? 'text-slate-600' : 'text-slate-400'}`}>
                     Locations in Pune, Rovigo, Campodarsego, and global production hubs.
                   </div>
                 </button>
@@ -843,13 +859,17 @@ export default function SearchPage({
                 <button
                   type="button"
                   onClick={() => setInputPrompt("What are the key policies in the corporate Code of Ethics?")}
-                  className="p-4 rounded-2xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-cyan-500/40 transition-all cursor-pointer text-left group"
+                  className={`p-4 rounded-2xl border transition-all cursor-pointer text-left group ${
+                    isLight 
+                      ? 'bg-white hover:bg-slate-50 border-slate-200 shadow-sm hover:border-cyan-400' 
+                      : 'bg-white/[0.03] hover:bg-white/[0.06] border-white/10 hover:border-cyan-500/40'
+                  }`}
                 >
-                  <div className="flex items-center gap-2 text-cyan-400 font-semibold text-xs mb-1 group-hover:text-cyan-300">
+                  <div className="flex items-center gap-2 text-cyan-600 dark:text-cyan-400 font-semibold text-xs mb-1 group-hover:text-cyan-400">
                     <BookOpen className="w-3.5 h-3.5" />
                     <span>Code of Ethics &amp; Compliance</span>
                   </div>
-                  <div className="text-xs text-slate-400 leading-relaxed">
+                  <div className={`text-xs leading-relaxed ${isLight ? 'text-slate-600' : 'text-slate-400'}`}>
                     Anti-corruption, safety standards, environmental rules, and human rights.
                   </div>
                 </button>
@@ -857,13 +877,17 @@ export default function SearchPage({
                 <button
                   type="button"
                   onClick={() => setInputPrompt("What agricultural and construction machinery solutions are produced?")}
-                  className="p-4 rounded-2xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-amber-500/40 transition-all cursor-pointer text-left group"
+                  className={`p-4 rounded-2xl border transition-all cursor-pointer text-left group ${
+                    isLight 
+                      ? 'bg-white hover:bg-slate-50 border-slate-200 shadow-sm hover:border-amber-400' 
+                      : 'bg-white/[0.03] hover:bg-white/[0.06] border-white/10 hover:border-amber-500/40'
+                  }`}
                 >
-                  <div className="flex items-center gap-2 text-amber-400 font-semibold text-xs mb-1 group-hover:text-amber-300">
+                  <div className="flex items-center gap-2 text-amber-500 dark:text-amber-400 font-semibold text-xs mb-1 group-hover:text-amber-400">
                     <Zap className="w-3.5 h-3.5" />
                     <span>Transmission Systems &amp; Products</span>
                   </div>
-                  <div className="text-xs text-slate-400 leading-relaxed">
+                  <div className={`text-xs leading-relaxed ${isLight ? 'text-slate-600' : 'text-slate-400'}`}>
                     Gearboxes, specialized tractors, axles, drives, and OEM engineering.
                   </div>
                 </button>
@@ -871,13 +895,17 @@ export default function SearchPage({
                 <button
                   type="button"
                   onClick={() => setInputPrompt("Verify zero hallucination: who is the company CEO and executive management?")}
-                  className="p-4 rounded-2xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-emerald-500/40 transition-all cursor-pointer text-left group"
+                  className={`p-4 rounded-2xl border transition-all cursor-pointer text-left group ${
+                    isLight 
+                      ? 'bg-white hover:bg-slate-50 border-slate-200 shadow-sm hover:border-emerald-400' 
+                      : 'bg-white/[0.03] hover:bg-white/[0.06] border-white/10 hover:border-emerald-500/40'
+                  }`}
                 >
-                  <div className="flex items-center gap-2 text-emerald-400 font-semibold text-xs mb-1 group-hover:text-emerald-300">
+                  <div className="flex items-center gap-2 text-emerald-600 dark:text-emerald-400 font-semibold text-xs mb-1 group-hover:text-emerald-400">
                     <ShieldAlert className="w-3.5 h-3.5" />
                     <span>Grounded Fact Verification</span>
                   </div>
-                  <div className="text-xs text-slate-400 leading-relaxed">
+                  <div className={`text-xs leading-relaxed ${isLight ? 'text-slate-600' : 'text-slate-400'}`}>
                     Strict citation-grounded validation with zero hallucination enforcement.
                   </div>
                 </button>
@@ -895,7 +923,11 @@ export default function SearchPage({
                   
                   {/* USER PROMPT MESSAGE BUBBLE */}
                   <div className="flex items-start gap-3.5 justify-end">
-                    <div className="max-w-3xl bg-gradient-to-r from-indigo-600/25 via-indigo-600/20 to-indigo-700/25 border border-indigo-500/40 rounded-2xl rounded-tr-sm px-5 py-3.5 text-white text-[15px] shadow-lg leading-relaxed">
+                    <div className={`max-w-3xl rounded-2xl rounded-tr-sm px-5 py-3.5 text-[15px] leading-relaxed shadow-md ${
+                      isLight 
+                        ? 'bg-indigo-600 text-white shadow-indigo-100' 
+                        : 'bg-gradient-to-r from-indigo-600/25 via-indigo-600/20 to-indigo-700/25 border border-indigo-500/40 text-white shadow-lg'
+                    }`}>
                       <p className="whitespace-pre-wrap">{turn.query}</p>
                     </div>
                     <div className="w-9 h-9 rounded-xl bg-indigo-600 flex items-center justify-center text-white font-bold text-xs shrink-0 mt-0.5 shadow-md shadow-indigo-600/30">
@@ -981,9 +1013,9 @@ export default function SearchPage({
 
                           {/* Verified Citations List */}
                           {turn.sources && turn.sources.length > 0 && (
-                            <div className="pt-4 border-t border-white/10 space-y-2.5">
-                              <div className="text-slate-400 font-semibold text-xs flex items-center gap-1.5">
-                                <BookOpen className="w-3.5 h-3.5 text-cyan-400" />
+                            <div className={`pt-4 border-t space-y-2.5 ${isLight ? 'border-slate-200' : 'border-white/10'}`}>
+                              <div className={`${isLight ? 'text-slate-600' : 'text-slate-400'} font-semibold text-xs flex items-center gap-1.5`}>
+                                <BookOpen className="w-3.5 h-3.5 text-cyan-500 dark:text-cyan-400" />
                                 <span>Verified Corporate Sources ({turn.sources.length}):</span>
                               </div>
                               <div className="flex flex-wrap items-center gap-2">
@@ -991,9 +1023,13 @@ export default function SearchPage({
                                   <button
                                     key={sIdx}
                                     onClick={() => onChunkClick && onChunkClick(src)}
-                                    className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-white/[0.04] hover:bg-cyan-500/15 border border-white/10 hover:border-cyan-500/40 text-cyan-300 text-xs font-mono transition-all cursor-pointer shadow-sm"
+                                    className={`flex items-center gap-2 px-3 py-1.5 rounded-xl border text-xs font-mono transition-all cursor-pointer shadow-sm ${
+                                      isLight
+                                        ? 'bg-slate-100 hover:bg-cyan-50 border-slate-200 hover:border-cyan-300 text-cyan-800'
+                                        : 'bg-white/[0.04] hover:bg-cyan-500/15 border-white/10 hover:border-cyan-500/40 text-cyan-300'
+                                    }`}
                                   >
-                                    <FileText className="w-3.5 h-3.5 text-cyan-400 opacity-80" />
+                                    <FileText className="w-3.5 h-3.5 text-cyan-500 opacity-80" />
                                     <span className="font-semibold">{src.document} {src.page ? `(p.${src.page})` : ''}</span>
                                     <ExternalLink className="w-3 h-3 opacity-60" />
                                   </button>
@@ -1080,23 +1116,29 @@ export default function SearchPage({
 
                           {/* Collapsible Chunk Details */}
                           {isTurnExpanded && (
-                            <div className="mt-3 p-4 rounded-xl bg-[#07090e] border border-white/10 space-y-3 animate-in fade-in duration-150">
-                              <div className="text-[11px] font-bold text-slate-300 uppercase tracking-wider flex items-center justify-between">
+                            <div className={`mt-3 p-4 rounded-xl border space-y-3 animate-in fade-in duration-150 ${
+                              isLight ? 'bg-slate-50 border-slate-200 text-slate-800' : 'bg-[#07090e] border-white/10 text-slate-300'
+                            }`}>
+                              <div className={`text-[11px] font-bold uppercase tracking-wider flex items-center justify-between ${
+                                isLight ? 'text-slate-700' : 'text-slate-300'
+                              }`}>
                                 <span>Retrieved Chunks Sent to LLM Context:</span>
-                                <span className="font-mono text-indigo-400 text-[10px]">{chunks.length} chunks</span>
+                                <span className="font-mono text-indigo-500 text-[10px]">{chunks.length} chunks</span>
                               </div>
                               <div className="space-y-2">
                                 {chunks.map((chk, cIdx) => (
-                                  <div key={cIdx} className="p-3 rounded-xl bg-white/[0.02] border border-white/5 space-y-1.5">
+                                  <div key={cIdx} className={`p-3 rounded-xl border space-y-1.5 ${
+                                    isLight ? 'bg-white border-slate-200 shadow-sm' : 'bg-white/[0.02] border-white/5'
+                                  }`}>
                                     <div className="flex items-center justify-between text-[11px] font-mono">
-                                      <span className="text-indigo-400 font-semibold">
+                                      <span className="text-indigo-500 dark:text-indigo-400 font-semibold">
                                         [{cIdx + 1}] {chk.source || 'doc'} {chk.page ? `(page ${chk.page})` : ''}
                                       </span>
-                                      <span className="text-emerald-400 font-bold">
+                                      <span className="text-emerald-600 dark:text-emerald-400 font-bold">
                                         Relevance: {formatRelevanceScore(chk.score)}
                                       </span>
                                     </div>
-                                    <p className="text-xs text-slate-300 font-mono leading-relaxed">
+                                    <p className={`text-xs font-mono leading-relaxed ${isLight ? 'text-slate-700' : 'text-slate-300'}`}>
                                       {chk.text || 'No text snippet'}
                                     </p>
                                   </div>
@@ -1104,11 +1146,13 @@ export default function SearchPage({
                               </div>
 
                               {/* Hop-by-hop latency breakdown */}
-                              <div className="pt-2.5 border-t border-white/5 grid grid-cols-4 gap-2 text-[11px] font-mono text-center text-slate-400">
-                                <div>Embed: <span className="text-white font-semibold">{meta.embed_latency_ms || 0}ms</span></div>
-                                <div>Search: <span className="text-white font-semibold">{meta.search_latency_ms || 0}ms</span></div>
-                                <div>Rerank: <span className="text-white font-semibold">{meta.rerank_latency_ms || 0}ms</span></div>
-                                <div>LLM: <span className="text-white font-semibold">{meta.generation_latency_ms || 0}ms</span></div>
+                              <div className={`pt-2.5 border-t grid grid-cols-4 gap-2 text-[11px] font-mono text-center ${
+                                isLight ? 'border-slate-200 text-slate-500' : 'border-white/5 text-slate-400'
+                              }`}>
+                                <div>Embed: <span className={`font-semibold ${isLight ? 'text-slate-800' : 'text-white'}`}>{meta.embed_latency_ms || 0}ms</span></div>
+                                <div>Search: <span className={`font-semibold ${isLight ? 'text-slate-800' : 'text-white'}`}>{meta.search_latency_ms || 0}ms</span></div>
+                                <div>Rerank: <span className={`font-semibold ${isLight ? 'text-slate-800' : 'text-white'}`}>{meta.rerank_latency_ms || 0}ms</span></div>
+                                <div>LLM: <span className={`font-semibold ${isLight ? 'text-slate-800' : 'text-white'}`}>{meta.generation_latency_ms || 0}ms</span></div>
                               </div>
                             </div>
                           )}
@@ -1235,9 +1279,13 @@ export default function SearchPage({
             ===================================================================== */}
         {isUrlModalOpen && crawledPreview && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-in fade-in duration-200">
-            <div className="w-full max-w-4xl max-h-[90vh] flex flex-col rounded-2xl bg-[#0d1220] border border-cyan-500/50 shadow-2xl overflow-hidden">
+            <div className={`w-full max-w-4xl max-h-[90vh] flex flex-col rounded-2xl shadow-2xl overflow-hidden border ${
+              isLight ? 'bg-white border-cyan-500/40 text-slate-800' : 'bg-[#0d1220] border-cyan-500/50 text-slate-300'
+            }`}>
               {/* Header */}
-              <div className="p-5 border-b border-white/10 flex items-center justify-between bg-gradient-to-r from-cyan-950/60 via-indigo-950/40 to-black/40">
+              <div className={`p-5 border-b flex items-center justify-between ${
+                isLight ? 'border-slate-200 bg-slate-50' : 'border-white/10 bg-gradient-to-r from-cyan-950/60 via-indigo-950/40 to-black/40'
+              }`}>
                 <div className="flex items-center gap-3">
                   <div className="w-10 h-10 rounded-xl bg-cyan-600/30 border border-cyan-500/40 flex items-center justify-center text-cyan-400">
                     <Sparkles className="w-5 h-5 text-cyan-300" />

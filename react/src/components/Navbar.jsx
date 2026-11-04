@@ -26,6 +26,7 @@ export default function Navbar({ activePage, setActivePage, onOpenAuthModal }) {
   } = useAppStore();
 
   const [showModelTooltip, setShowModelTooltip] = useState(false);
+  const isLight = theme === 'light';
 
   // Computed Swagger URL
   const swaggerUrl = apiBaseUrl 
@@ -35,7 +36,9 @@ export default function Navbar({ activePage, setActivePage, onOpenAuthModal }) {
   const isWarming = warmupState?.status === 'warming';
 
   return (
-    <header className="sticky top-0 z-50 bg-[#080b11]/90 backdrop-blur-md border-b border-white/[0.08] shadow-sm">
+    <header className={`sticky top-0 z-50 backdrop-blur-md border-b shadow-sm transition-colors duration-200 ${
+      isLight ? 'bg-white/95 border-slate-200 text-slate-800' : 'bg-[#080b11]/90 border-white/[0.08] text-slate-100'
+    }`}>
       <div className="mx-auto px-3 sm:px-4 lg:px-6 h-13 flex items-center justify-between gap-3 max-w-[1720px]">
         
         {/* Brand Logo & Name */}
@@ -47,23 +50,29 @@ export default function Navbar({ activePage, setActivePage, onOpenAuthModal }) {
             <Layers className="w-4 h-4" />
           </div>
           <div className="flex items-center gap-1.5">
-            <span className="font-['Outfit'] font-bold text-base text-white tracking-tight">
-              RAG<span className="text-indigo-400">Ops</span>
+            <span className={`font-['Outfit'] font-bold text-base tracking-tight ${isLight ? 'text-slate-900' : 'text-white'}`}>
+              RAG<span className={isLight ? "text-indigo-600" : "text-indigo-400"}>Ops</span>
             </span>
-            <span className="hidden sm:inline-block text-[10px] px-1.5 py-0.2 rounded bg-white/[0.06] text-slate-300 font-medium">
+            <span className={`hidden sm:inline-block text-[10px] px-1.5 py-0.5 rounded font-medium ${
+              isLight ? 'bg-slate-100 text-slate-600 border border-slate-200' : 'bg-white/[0.06] text-slate-300'
+            }`}>
               v0.1
             </span>
           </div>
         </div>
 
         {/* Central Segmented Pill Navigation */}
-        <nav className="flex items-center p-0.5 bg-[#0e131f] border border-white/10 rounded-lg shrink-0">
+        <nav className={`flex items-center p-0.5 border rounded-lg shrink-0 transition-colors ${
+          isLight ? 'bg-slate-100 border-slate-200' : 'bg-[#0e131f] border-white/10'
+        }`}>
           <button
             onClick={() => setActivePage('search')}
             className={`flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-medium transition-all cursor-pointer ${
               activePage === 'search'
                 ? 'bg-indigo-600 text-white shadow-sm'
-                : 'text-slate-400 hover:text-white'
+                : isLight
+                ? 'text-slate-600 hover:text-slate-900 hover:bg-white/70'
+                : 'text-slate-400 hover:text-white hover:bg-white/[0.04]'
             }`}
           >
             <Search className="w-3.5 h-3.5" />
@@ -75,7 +84,9 @@ export default function Navbar({ activePage, setActivePage, onOpenAuthModal }) {
             className={`flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-medium transition-all cursor-pointer ${
               activePage === 'dashboard'
                 ? 'bg-indigo-600 text-white shadow-sm'
-                : 'text-slate-400 hover:text-white'
+                : isLight
+                ? 'text-slate-600 hover:text-slate-900 hover:bg-white/70'
+                : 'text-slate-400 hover:text-white hover:bg-white/[0.04]'
             }`}
           >
             <LayoutDashboard className="w-3.5 h-3.5" />
@@ -90,7 +101,9 @@ export default function Navbar({ activePage, setActivePage, onOpenAuthModal }) {
             className={`flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-medium transition-all cursor-pointer ${
               activePage === 'docs'
                 ? 'bg-indigo-600 text-white shadow-sm'
-                : 'text-slate-400 hover:text-white'
+                : isLight
+                ? 'text-slate-600 hover:text-slate-900 hover:bg-white/70'
+                : 'text-slate-400 hover:text-white hover:bg-white/[0.04]'
             }`}
           >
             <BookOpen className="w-3.5 h-3.5" />
@@ -103,12 +116,16 @@ export default function Navbar({ activePage, setActivePage, onOpenAuthModal }) {
           
           {/* Warmup Badge */}
           {isWarming ? (
-            <div className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-amber-500/10 border border-amber-500/30 text-amber-300 text-[11px] font-medium animate-pulse">
-              <Loader2 className="w-3 h-3 animate-spin text-amber-400" />
+            <div className={`flex items-center gap-1.5 px-2 py-1 rounded-md text-[11px] font-medium animate-pulse border ${
+              isLight ? 'bg-amber-50 border-amber-200 text-amber-800' : 'bg-amber-500/10 border-amber-500/30 text-amber-300'
+            }`}>
+              <Loader2 className="w-3 h-3 animate-spin text-amber-500" />
               <span>Warming up…</span>
             </div>
           ) : warmupState?.took_ms > 0 ? (
-            <div className="hidden md:flex items-center gap-1 px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400 text-[10px] font-mono" title={`Subsystems ready in ${warmupState.took_ms}ms`}>
+            <div className={`hidden md:flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-mono border ${
+              isLight ? 'bg-emerald-50 border-emerald-200 text-emerald-700' : 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400'
+            }`} title={`Subsystems ready in ${warmupState.took_ms}ms`}>
               <CheckCircle2 className="w-2.5 h-2.5" />
               <span>Ready ({Math.round(warmupState.took_ms)}ms)</span>
             </div>
@@ -120,7 +137,9 @@ export default function Navbar({ activePage, setActivePage, onOpenAuthModal }) {
               onClick={() => setShowModelTooltip(!showModelTooltip)}
               onMouseEnter={() => setShowModelTooltip(true)}
               onMouseLeave={() => setShowModelTooltip(false)}
-              className="flex items-center gap-1.5 px-2 py-1 rounded-lg bg-white/[0.04] hover:bg-white/[0.08] border border-white/10 text-xs text-slate-300 transition-all cursor-pointer"
+              className={`flex items-center gap-1.5 px-2 py-1 rounded-lg border text-xs transition-all cursor-pointer ${
+                isLight ? 'bg-slate-100/70 hover:bg-slate-100 border-slate-200 text-slate-700' : 'bg-white/[0.04] hover:bg-white/[0.08] border-white/10 text-slate-300'
+              }`}
             >
               <span className={`w-2 h-2 rounded-full ${
                 !isOnline 
@@ -138,15 +157,17 @@ export default function Navbar({ activePage, setActivePage, onOpenAuthModal }) {
 
             {/* Model Tooltip */}
             {showModelTooltip && (
-              <div className="absolute top-full mt-2 right-0 z-50 bg-[#0f1422] border border-white/10 text-white text-xs rounded-xl p-2.5 shadow-xl w-60 animate-in fade-in zoom-in-95 duration-100">
-                <div className="flex items-center gap-1.5 text-emerald-400 font-medium mb-1">
+              <div className={`absolute top-full mt-2 right-0 z-50 border text-xs rounded-xl p-2.5 shadow-xl w-60 animate-in fade-in zoom-in-95 duration-100 ${
+                isLight ? 'bg-white border-slate-200 text-slate-800 shadow-slate-200/50' : 'bg-[#0f1422] border-white/10 text-white'
+              }`}>
+                <div className="flex items-center gap-1.5 text-emerald-500 font-medium mb-1">
                   <CheckCircle2 className="w-3 h-3" />
                   <span>Subsystem Connected</span>
                 </div>
-                <div className="text-[11px] text-slate-400 font-mono space-y-0.5">
-                  <div>Provider: <span className="text-white font-semibold capitalize">{activeProvider}</span></div>
-                  <div>Model: <span className="text-cyan-300 truncate block">{modelName}</span></div>
-                  <div>Status: <span className="text-emerald-300">{isOnline ? 'Online' : 'Offline'}</span></div>
+                <div className={`text-[11px] font-mono space-y-0.5 ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>
+                  <div>Provider: <span className={`font-semibold capitalize ${isLight ? 'text-slate-800' : 'text-white'}`}>{activeProvider}</span></div>
+                  <div>Model: <span className="text-cyan-600 dark:text-cyan-300 truncate block">{modelName}</span></div>
+                  <div>Status: <span className="text-emerald-600 dark:text-emerald-300">{isOnline ? 'Online' : 'Offline'}</span></div>
                 </div>
               </div>
             )}
@@ -155,17 +176,23 @@ export default function Navbar({ activePage, setActivePage, onOpenAuthModal }) {
           {/* Dark / Light Theme Toggle */}
           <button
             onClick={toggleTheme}
-            className="p-1.5 rounded-lg bg-white/[0.04] hover:bg-white/[0.08] border border-white/10 text-slate-400 hover:text-white transition-all cursor-pointer"
+            className={`p-1.5 rounded-lg border transition-all cursor-pointer ${
+              isLight 
+                ? 'bg-slate-100/70 hover:bg-slate-100 border-slate-200 text-slate-700 hover:text-slate-900' 
+                : 'bg-white/[0.04] hover:bg-white/[0.08] border-white/10 text-slate-400 hover:text-white'
+            }`}
             title={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}
           >
-            {theme === 'dark' ? <Sun className="w-3.5 h-3.5" /> : <Moon className="w-3.5 h-3.5" />}
+            {theme === 'dark' ? <Sun className="w-3.5 h-3.5 text-amber-400" /> : <Moon className="w-3.5 h-3.5 text-indigo-600" />}
           </button>
 
           {/* User Account / Auth Switcher Badge */}
           <button
             type="button"
             onClick={onOpenAuthModal}
-            className="flex items-center gap-1.5 px-2 py-1 rounded-lg bg-white/[0.04] hover:bg-white/[0.08] border border-white/10 text-xs text-white transition-all cursor-pointer"
+            className={`flex items-center gap-1.5 px-2 py-1 rounded-lg border text-xs transition-all cursor-pointer ${
+              isLight ? 'bg-slate-100/70 hover:bg-slate-100 border-slate-200 text-slate-800' : 'bg-white/[0.04] hover:bg-white/[0.08] border-white/10 text-white'
+            }`}
             title="Click to switch accounts (admin, test1, test2)"
           >
             <div className={`w-4 h-4 rounded-full flex items-center justify-center text-[9px] font-bold ${
@@ -177,7 +204,7 @@ export default function Navbar({ activePage, setActivePage, onOpenAuthModal }) {
               {currentUser?.username || 'Sign In'}
             </span>
             {currentUser?.role === 'admin' && (
-              <span className="text-[9px] px-1 py-0.2 rounded font-mono font-bold uppercase bg-amber-500/20 text-amber-300">
+              <span className="text-[9px] px-1 py-0.2 rounded font-mono font-bold uppercase bg-amber-500/20 text-amber-500">
                 Admin
               </span>
             )}
@@ -189,7 +216,11 @@ export default function Navbar({ activePage, setActivePage, onOpenAuthModal }) {
             target="_blank"
             rel="noopener noreferrer"
             title="Open Swagger OpenAPI Documentation"
-            className="hidden lg:flex items-center gap-1 px-2 py-1 rounded-md bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-300 border border-indigo-500/20 text-xs font-medium transition-all"
+            className={`hidden lg:flex items-center gap-1 px-2 py-1 rounded-md border text-xs font-medium transition-all ${
+              isLight 
+                ? 'bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border-indigo-200' 
+                : 'bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-300 border-indigo-500/20'
+            }`}
           >
             <span>API</span>
             <ExternalLink className="w-3 h-3" />

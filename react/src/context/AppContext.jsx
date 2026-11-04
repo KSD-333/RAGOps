@@ -22,26 +22,40 @@ export function AppStoreProvider({ children }) {
     return localStorage.getItem('ragops_theme') || 'dark';
   });
 
+  const applyThemeToDOM = useCallback((newTheme) => {
+    if (typeof document === 'undefined') return;
+    const root = document.documentElement;
+    if (newTheme === 'light') {
+      root.classList.remove('dark');
+      root.classList.add('light-theme');
+      root.setAttribute('data-theme', 'light');
+      if (document.body) {
+        document.body.classList.remove('bg-[#07090e]', 'text-[#f8fafc]');
+        document.body.classList.add('bg-slate-50', 'text-slate-900');
+      }
+    } else {
+      root.classList.remove('light-theme');
+      root.classList.add('dark');
+      root.setAttribute('data-theme', 'dark');
+      if (document.body) {
+        document.body.classList.remove('bg-slate-50', 'text-slate-900');
+        document.body.classList.add('bg-[#07090e]', 'text-[#f8fafc]');
+      }
+    }
+  }, []);
+
   const toggleTheme = useCallback(() => {
     setThemeState((prev) => {
       const next = prev === 'dark' ? 'light' : 'dark';
       localStorage.setItem('ragops_theme', next);
-      if (next === 'light') {
-        document.documentElement.classList.add('light-theme');
-      } else {
-        document.documentElement.classList.remove('light-theme');
-      }
+      applyThemeToDOM(next);
       return next;
     });
-  }, []);
+  }, [applyThemeToDOM]);
 
   useEffect(() => {
-    if (theme === 'light') {
-      document.documentElement.classList.add('light-theme');
-    } else {
-      document.documentElement.classList.remove('light-theme');
-    }
-  }, [theme]);
+    applyThemeToDOM(theme);
+  }, [theme, applyThemeToDOM]);
 
   // 3. User Authentication State (RESTORE IMMEDIATELY from localStorage)
   const [currentUser, setCurrentUserState] = useState(() => {
