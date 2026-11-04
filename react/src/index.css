@@ -406,3 +406,100 @@
   border-left-color: #6366f1;
   color: #3730a3;
 }
+
+/* =========================================================================
+   EXTRA LIGHT THEME CONTRAST OVERRIDES FOR DASHBOARD & CITATIONS
+   ========================================================================= */
+
+/* All bg-black overlays in Light Theme become clean slate-50 / white surfaces */
+.light-theme [class*="bg-black\/"] {
+  background-color: #f8fafc !important;
+  border-color: #e2e8f0 !important;
+  color: #0f172a !important;
+}
+
+.light-theme input[class*="bg-black\/"],
+.light-theme textarea[class*="bg-black\/"] {
+  background-color: #ffffff !important;
+  border-color: #cbd5e1 !important;
+  color: #0f172a !important;
+}
+
+/* Document & Source citations in Light Theme */
+.light-theme .text-cyan-300,
+.light-theme .text-cyan-400 {
+  color: #0e7490 !important; /* cyan-700 for high contrast readability */
+}
+
+.light-theme .text-cyan-500 {
+  color: #0891b2 !important;
+}
+
+.light-theme .text-indigo-300,
+.light-theme .text-indigo-400 {
+  color: #4338ca !important; /* indigo-700 */
+}
+
+.light-theme .text-emerald-300,
+.light-theme .text-emerald-400 {
+  color: #047857 !important; /* emerald-700 */
+}
+
+.light-theme .text-amber-300,
+.light-theme .text-amber-400 {
+  color: #b45309 !important; /* amber-700 */
+}
+
+.light-theme .text-rose-300,
+.light-theme .text-rose-400 {
+  color: #be123c !important; /* rose-700 */
+}
+
+/* Dark gradient boxes on dashboard become clean white cards */
+.light-theme [class*="from-\[\#0c101a\]"],
+.light-theme [class*="from-indigo-950"] {
+  background-image: none !important;
+  background-color: #ffffff !important;
+  border-color: #e2e8f0 !important;
+  color: #0f172a !important;
+}
+
+/* Links inside markdown answers */
+.ragops-markdown a {
+  color: #818cf8;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  font-weight: 600;
+}
+
+.light-theme .ragops-markdown a {
+  color: #4338ca !important;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  font-weight: 600;
+}
+
+/* Automatic fallback for all dark hex cards in light mode */
+.light-theme [class*="bg-[#0b0f19]"],
+.light-theme [class*="bg-[#080d19]"],
+.light-theme [class*="bg-[#0d1222]"],
+.light-theme [class*="bg-[#090d17]"],
+.light-theme [class*="bg-[#0f1424]"],
+.light-theme [class*="bg-[#07090e]"],
+.light-theme [class*="bg-[#090d16]"],
+.light-theme [class*="bg-[#0f1422]"] {
+  background-color: #ffffff !important;
+  border-color: #e2e8f0 !important;
+  color: #0f172a !important;
+  box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.05), 0 1px 2px -1px rgb(0 0 0 / 0.05) !important;
+}
+
+/* Light mode text contrast helper */
+.light-theme [class*="text-slate-200"],
+.light-theme [class*="text-slate-300"] {
+  color: #334155 !important;
+}
+
+.light-theme .text-white:not([class*="bg-indigo"]):not([class*="bg-cyan"]):not([class*="bg-emerald"]):not([class*="bg-rose"]):not([class*="bg-violet"]):not([class*="bg-amber"]):not(button):not(button *):not([class*="font-mono"]) {
+  color: #0f172a !important;
+}

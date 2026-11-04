@@ -1014,32 +1014,40 @@ export default function SearchPage({
                           {/* Verified Citations List */}
                           {turn.sources && turn.sources.length > 0 && (
                             <div className={`pt-4 border-t space-y-2.5 ${isLight ? 'border-slate-200' : 'border-white/10'}`}>
-                              <div className={`${isLight ? 'text-slate-600' : 'text-slate-400'} font-semibold text-xs flex items-center gap-1.5`}>
-                                <BookOpen className="w-3.5 h-3.5 text-cyan-500 dark:text-cyan-400" />
+                              <div className={`${isLight ? 'text-slate-700' : 'text-slate-400'} font-semibold text-xs flex items-center gap-1.5`}>
+                                <BookOpen className={`w-3.5 h-3.5 ${isLight ? 'text-cyan-700' : 'text-cyan-400'}`} />
                                 <span>Verified Corporate Sources ({turn.sources.length}):</span>
                               </div>
                               <div className="flex flex-wrap items-center gap-2">
-                                {turn.sources.map((src, sIdx) => (
-                                  <button
-                                    key={sIdx}
-                                    onClick={() => onChunkClick && onChunkClick(src)}
-                                    className={`flex items-center gap-2 px-3 py-1.5 rounded-xl border text-xs font-mono transition-all cursor-pointer shadow-sm ${
-                                      isLight
-                                        ? 'bg-slate-100 hover:bg-cyan-50 border-slate-200 hover:border-cyan-300 text-cyan-800'
-                                        : 'bg-white/[0.04] hover:bg-cyan-500/15 border-white/10 hover:border-cyan-500/40 text-cyan-300'
-                                    }`}
-                                  >
-                                    <FileText className="w-3.5 h-3.5 text-cyan-500 opacity-80" />
-                                    <span className="font-semibold">{src.document} {src.page ? `(p.${src.page})` : ''}</span>
-                                    <ExternalLink className="w-3 h-3 opacity-60" />
-                                  </button>
-                                ))}
+                                {turn.sources.map((src, sIdx) => {
+                                  const docName = typeof src === 'string' ? src : (src.document || src.title || src.source || src.name || 'document.pdf');
+                                  const pageNum = typeof src === 'object' && src.page ? ` (p.${src.page})` : '';
+                                  return (
+                                    <button
+                                      key={sIdx}
+                                      onClick={() => onChunkClick && onChunkClick(src)}
+                                      className={`flex items-center gap-2 px-3 py-1.5 rounded-xl border text-xs font-mono transition-all cursor-pointer shadow-sm ${
+                                        isLight
+                                          ? 'bg-cyan-50/90 hover:bg-cyan-100 border-cyan-300 text-cyan-950 font-bold'
+                                          : 'bg-white/[0.04] hover:bg-cyan-500/15 border-white/10 hover:border-cyan-500/40 text-cyan-300'
+                                      }`}
+                                    >
+                                      <FileText className={`w-3.5 h-3.5 ${isLight ? 'text-cyan-700' : 'text-cyan-400'} opacity-90`} />
+                                      <span className={isLight ? 'text-cyan-950 font-bold' : 'text-cyan-200 font-semibold'}>
+                                        {docName}{pageNum}
+                                      </span>
+                                      <ExternalLink className={`w-3 h-3 ${isLight ? 'text-cyan-700' : 'opacity-60'}`} />
+                                    </button>
+                                  );
+                                })}
                               </div>
                             </div>
                           )}
 
                           {/* Telemetry Footer: Latencies, Tokens, Chunks button & Copy / Feedback */}
-                          <div className="pt-4 border-t border-white/10 flex flex-wrap items-center justify-between gap-3 text-xs">
+                          <div className={`pt-4 border-t flex flex-wrap items-center justify-between gap-3 text-xs ${
+                            isLight ? 'border-slate-200' : 'border-white/10'
+                          }`}>
                             
                             {/* Latency & Token Badges */}
                             <div className="flex flex-wrap items-center gap-2.5 text-[11px] font-mono text-slate-400">
@@ -1060,7 +1068,7 @@ export default function SearchPage({
                                 <button
                                   type="button"
                                   onClick={() => setExpandedChunkMsgIdx(isTurnExpanded ? null : idx)}
-                                  className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-white/[0.03] hover:bg-white/[0.08] text-slate-300 font-mono text-xs cursor-pointer border border-white/10 transition-colors"
+                                  className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg font-mono text-xs cursor-pointer border transition-colors ${isLight ? "bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-300" : "bg-white/[0.03] hover:bg-white/[0.08] text-slate-300 border-white/10"}`}
                                 >
                                   <span>Chunks ({chunks.length})</span>
                                   {isTurnExpanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5 text-slate-400" />}

@@ -49,9 +49,9 @@ export default function ChunkModal({ chunk, onClose }) {
             </div>
             <div>
               <span className={`text-xs font-mono px-2.5 py-0.5 rounded-full font-semibold border ${
-                isLight ? 'bg-cyan-50 text-cyan-800 border-cyan-200' : 'bg-cyan-500/10 text-cyan-400 border border-cyan-500/20'
+                isLight ? 'bg-cyan-50 text-cyan-900 border-cyan-300 font-bold' : 'bg-cyan-500/10 text-cyan-400 border border-cyan-500/20'
               }`}>
-                {chunk.document || 'source.md'}
+                {typeof chunk === 'string' ? chunk : (chunk.document || chunk.title || chunk.source || 'source.md')}
               </span>
               <h3 className={`text-base font-semibold mt-1 ${isLight ? 'text-slate-900' : 'text-white'}`}>
                 Retrieved Context Chunk ({chunk.chunk_id || 'chunk_1'})

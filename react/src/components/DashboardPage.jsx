@@ -58,6 +58,7 @@ export default function DashboardPage({ onRerunQuery, apiBaseUrl: propApiBaseUrl
   const store = useAppStore();
   const apiBaseUrl = propApiBaseUrl || store.apiBaseUrl;
   const currentUser = propCurrentUser || store.currentUser;
+  const isLight = store?.theme === 'light';
   // Navigation tabs within Dashboard (support deep-linking to company knowledge hub)
   const [activeTab, setActiveTab] = useState(() => {
     if (typeof window !== 'undefined') {
@@ -1049,13 +1050,13 @@ export default function DashboardPage({ onRerunQuery, apiBaseUrl: propApiBaseUrl
       </div>
 
       {/* Tab Navigation Pill Bar */}
-      <div className="flex items-center gap-2 p-1.5 bg-[#090d16] border border-white/10 rounded-2xl w-fit overflow-x-auto">
+      <div className={`flex items-center gap-2 p-1.5 border rounded-2xl w-fit overflow-x-auto ${isLight ? "bg-slate-100 border-slate-200 shadow-sm" : "bg-[#090d16] border-white/10"}`}>
         <button
           onClick={() => setActiveTab('overview')}
           className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs sm:text-sm font-semibold transition-all cursor-pointer ${
             activeTab === 'overview'
               ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/30'
-              : 'text-slate-400 hover:text-white hover:bg-white/[0.04]'
+              : isLight ? 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/70' : 'text-slate-400 hover:text-white hover:bg-white/[0.04]'
           }`}
         >
           <Activity className="w-4 h-4 shrink-0" />
@@ -1067,7 +1068,7 @@ export default function DashboardPage({ onRerunQuery, apiBaseUrl: propApiBaseUrl
           className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs sm:text-sm font-semibold transition-all cursor-pointer ${
             activeTab === 'users'
               ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/30'
-              : 'text-slate-400 hover:text-white hover:bg-white/[0.04]'
+              : isLight ? 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/70' : 'text-slate-400 hover:text-white hover:bg-white/[0.04]'
           }`}
         >
           <Users className="w-4 h-4 shrink-0" />
@@ -1082,7 +1083,7 @@ export default function DashboardPage({ onRerunQuery, apiBaseUrl: propApiBaseUrl
           className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs sm:text-sm font-semibold transition-all cursor-pointer ${
             activeTab === 'traces'
               ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/30'
-              : 'text-slate-400 hover:text-white hover:bg-white/[0.04]'
+              : isLight ? 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/70' : 'text-slate-400 hover:text-white hover:bg-white/[0.04]'
           }`}
         >
           <Search className="w-4 h-4 shrink-0" />
@@ -1094,7 +1095,7 @@ export default function DashboardPage({ onRerunQuery, apiBaseUrl: propApiBaseUrl
           className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs sm:text-sm font-semibold transition-all cursor-pointer ${
             activeTab === 'faqs'
               ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/30'
-              : 'text-slate-400 hover:text-white hover:bg-white/[0.04]'
+              : isLight ? 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/70' : 'text-slate-400 hover:text-white hover:bg-white/[0.04]'
           }`}
         >
           <HelpCircle className="w-4 h-4 shrink-0" />
@@ -1109,7 +1110,7 @@ export default function DashboardPage({ onRerunQuery, apiBaseUrl: propApiBaseUrl
           className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs sm:text-sm font-semibold transition-all cursor-pointer ${
             activeTab === 'catalog'
               ? 'bg-gradient-to-r from-indigo-600 to-cyan-600 text-white shadow-md shadow-indigo-600/30'
-              : 'text-slate-400 hover:text-white hover:bg-white/[0.04]'
+              : isLight ? 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/70' : 'text-slate-400 hover:text-white hover:bg-white/[0.04]'
           }`}
         >
           <Building className="w-4 h-4 shrink-0 text-cyan-400" />
@@ -1130,7 +1131,7 @@ export default function DashboardPage({ onRerunQuery, apiBaseUrl: propApiBaseUrl
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             
             {/* KPI 1: Total Queries */}
-            <div className="p-5 rounded-2xl bg-[#0f1422] border border-white/10 hover:border-indigo-500/40 transition-colors shadow-lg">
+            <div className={`p-5 rounded-2xl border transition-colors shadow-md ${isLight ? "bg-white border-slate-200 hover:border-indigo-400 shadow-slate-200/50 text-slate-900" : "bg-[#0f1422] border-white/10 hover:border-indigo-500/40 shadow-lg text-white"}`}>
               <div className="flex items-center justify-between text-slate-400 text-xs mb-3">
                 <span className="font-semibold uppercase tracking-wider">Enterprise Inferences</span>
                 <MessageSquare className="w-4 h-4 text-indigo-400" />
@@ -1145,7 +1146,7 @@ export default function DashboardPage({ onRerunQuery, apiBaseUrl: propApiBaseUrl
             </div>
 
             {/* KPI 2: Total Tokens */}
-            <div className="p-5 rounded-2xl bg-[#0f1422] border border-white/10 hover:border-cyan-500/40 transition-colors shadow-lg">
+            <div className={`p-5 rounded-2xl border transition-colors shadow-md ${isLight ? "bg-white border-slate-200 hover:border-cyan-400 shadow-slate-200/50 text-slate-900" : "bg-[#0f1422] border-white/10 hover:border-cyan-500/40 shadow-lg text-white"}`}>
               <div className="flex items-center justify-between text-slate-400 text-xs mb-3">
                 <span className="font-semibold uppercase tracking-wider">Cumulative Tokens</span>
                 <Coins className="w-4 h-4 text-cyan-400" />
@@ -1159,7 +1160,7 @@ export default function DashboardPage({ onRerunQuery, apiBaseUrl: propApiBaseUrl
             </div>
 
             {/* KPI 3: Grounded Accuracy */}
-            <div className="p-5 rounded-2xl bg-[#0f1422] border border-white/10 hover:border-emerald-500/40 transition-colors shadow-lg">
+            <div className={`p-5 rounded-2xl border transition-colors shadow-md ${isLight ? "bg-white border-slate-200 hover:border-emerald-400 shadow-slate-200/50 text-slate-900" : "bg-[#0f1422] border-white/10 hover:border-emerald-500/40 shadow-lg text-white"}`}>
               <div className="flex items-center justify-between text-slate-400 text-xs mb-3">
                 <span className="font-semibold uppercase tracking-wider">Grounded Precision</span>
                 <CheckCircle2 className="w-4 h-4 text-emerald-400" />
@@ -1174,7 +1175,7 @@ export default function DashboardPage({ onRerunQuery, apiBaseUrl: propApiBaseUrl
             </div>
 
             {/* KPI 4: P95 Latency SLA */}
-            <div className="p-5 rounded-2xl bg-[#0f1422] border border-white/10 hover:border-amber-500/40 transition-colors shadow-lg">
+            <div className={`p-5 rounded-2xl border transition-colors shadow-md ${isLight ? "bg-white border-slate-200 hover:border-amber-400 shadow-slate-200/50 text-slate-900" : "bg-[#0f1422] border-white/10 hover:border-amber-500/40 shadow-lg text-white"}`}>
               <div className="flex items-center justify-between text-slate-400 text-xs mb-3">
                 <span className="font-semibold uppercase tracking-wider">P95 SLA Latency</span>
                 <Clock className="w-4 h-4 text-amber-400" />
@@ -1190,7 +1191,7 @@ export default function DashboardPage({ onRerunQuery, apiBaseUrl: propApiBaseUrl
           </div>
 
           {/* Billing & Quota Progress Box */}
-          <div className="p-6 rounded-2xl bg-gradient-to-br from-[#0c101a] via-[#0f1424] to-[#12192e] border border-indigo-500/30 shadow-xl space-y-6">
+          <div className={`p-6 rounded-2xl border shadow-xl space-y-6 ${isLight ? "bg-white border-slate-200 shadow-slate-200/50" : "bg-gradient-to-br from-[#0c101a] via-[#0f1424] to-[#12192e] border-indigo-500/30"}`}>
             <div className="flex flex-wrap items-center justify-between gap-4">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-xl bg-indigo-600/30 border border-indigo-500/40 flex items-center justify-center text-indigo-400 shadow-md">
@@ -1276,7 +1277,7 @@ export default function DashboardPage({ onRerunQuery, apiBaseUrl: propApiBaseUrl
           </div>
 
           {/* Query Intelligence & Semantic Cache Performance Card */}
-          <div className="p-6 rounded-2xl bg-[#0f1422] border border-white/10 shadow-xl space-y-4">
+          <div className={`p-6 rounded-2xl border shadow-md space-y-4 ${isLight ? "bg-white border-slate-200 shadow-slate-200/50 text-slate-900" : "bg-[#0f1422] border-white/10 shadow-xl text-white"}`}>
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div className="flex items-center gap-3">
                 <div className="w-9 h-9 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center border border-emerald-500/30">
@@ -1380,7 +1381,7 @@ export default function DashboardPage({ onRerunQuery, apiBaseUrl: propApiBaseUrl
             {/* User Directory Column */}
             <div className="lg:col-span-4 xl:col-span-3 space-y-4">
               <div className="flex items-center justify-between pb-1">
-                <h3 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
+                <h3 className={`text-sm font-bold uppercase tracking-wider flex items-center gap-2 ${isLight ? "text-slate-900" : "text-white"}`}>
                   <Users className="w-4 h-4 text-indigo-400" />
                   <span>Registered Users ({userList.length})</span>
                 </h3>
@@ -1401,8 +1402,12 @@ export default function DashboardPage({ onRerunQuery, apiBaseUrl: propApiBaseUrl
                       }}
                       className={`p-3.5 rounded-xl border transition-all cursor-pointer flex items-center justify-between group ${
                         isSelected
-                          ? 'bg-gradient-to-r from-indigo-950/70 to-indigo-900/40 border-indigo-500 shadow-lg shadow-indigo-950/50 ring-1 ring-indigo-500/30'
-                          : 'bg-[#0b0f19] border-white/10 hover:border-white/20 hover:bg-white/[0.02]'
+                          ? isLight
+                            ? 'bg-indigo-50/90 border-indigo-400 shadow-md ring-1 ring-indigo-400 text-indigo-950 font-bold'
+                            : 'bg-gradient-to-r from-indigo-950/70 to-indigo-900/40 border-indigo-500 shadow-lg shadow-indigo-950/50 ring-1 ring-indigo-500/30'
+                          : isLight
+                            ? 'bg-white border-slate-200 hover:border-indigo-300 hover:bg-slate-50 shadow-sm'
+                            : 'bg-[#0b0f19] border-white/10 hover:border-white/20 hover:bg-white/[0.02]'
                       }`}
                     >
                       <div className="flex items-center gap-3 min-w-0">
@@ -1415,7 +1420,7 @@ export default function DashboardPage({ onRerunQuery, apiBaseUrl: propApiBaseUrl
                         </div>
                         <div className="min-w-0">
                           <div className="flex items-center gap-1.5 flex-wrap">
-                            <span className="text-sm font-bold text-white truncate">{u.username}</span>
+                            <span className={`text-sm font-bold truncate ${isLight ? "text-slate-900" : "text-white"}`}>{u.username}</span>
                             <span className={`text-[9px] px-1.5 py-0.2 rounded font-mono font-bold uppercase ${
                               u.role === 'admin'
                                 ? 'bg-amber-500/20 text-amber-300'
@@ -1465,15 +1470,15 @@ export default function DashboardPage({ onRerunQuery, apiBaseUrl: propApiBaseUrl
             <div className="lg:col-span-8 xl:col-span-9 space-y-4">
               
               {/* Header Bar for Selected User */}
-              <div className="p-4 rounded-2xl bg-[#0b0f19] border border-white/10 flex flex-wrap items-center justify-between gap-3 shadow-lg">
+              <div className={`p-4 rounded-2xl border flex flex-wrap items-center justify-between gap-3 shadow-sm ${isLight ? "bg-white border-slate-200" : "bg-[#0b0f19] border-white/10 shadow-lg"}`}>
                 <div className="flex items-center gap-3">
                   <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-500 to-cyan-500 flex items-center justify-center text-white font-bold text-sm shadow-md">
                     <MessageSquare className="w-5 h-5" />
                   </div>
                   <div>
                     <div className="flex items-center gap-2">
-                      <h3 className="text-sm font-bold text-white uppercase tracking-wider">
-                        Chat Provenance for <span className="text-indigo-400 font-mono">@{selectedUser}</span>
+                      <h3 className={`text-sm font-bold uppercase tracking-wider ${isLight ? "text-slate-900" : "text-white"}`}>
+                        Chat Provenance for <span className={`${isLight ? "text-indigo-700" : "text-indigo-400"} font-mono`}>@{selectedUser}</span>
                       </h3>
                       <span className="text-[10px] px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 font-mono font-bold">
                         {userChatHistory.length} turns
@@ -1637,7 +1642,7 @@ export default function DashboardPage({ onRerunQuery, apiBaseUrl: propApiBaseUrl
                                       </span>
                                     </div>
 
-                                    <h4 className="text-xs font-semibold text-white group-hover:text-indigo-300 transition-colors line-clamp-2 leading-relaxed">
+                                    <h4 className={`text-xs font-semibold transition-colors line-clamp-2 leading-relaxed ${isLight ? "text-slate-900 group-hover:text-indigo-600" : "text-white group-hover:text-indigo-300"}`}>
                                       "{thread.firstQuery}"
                                     </h4>
 
@@ -1677,10 +1682,10 @@ export default function DashboardPage({ onRerunQuery, apiBaseUrl: propApiBaseUrl
                       }`}>
                         
                         {activeSession ? (
-                          <div className="rounded-2xl bg-[#080d19] border border-white/10 shadow-2xl overflow-hidden flex flex-col">
+                          <div className={`rounded-2xl border overflow-hidden flex flex-col shadow-sm ${isLight ? "bg-white border-slate-200" : "bg-[#080d19] border-white/10 shadow-2xl"}`}>
                             
                             {/* Chat Header */}
-                            <div className="p-4 bg-white/[0.02] border-b border-white/10 flex flex-wrap items-center justify-between gap-3 shrink-0">
+                            <div className={`p-4 border-b flex flex-wrap items-center justify-between gap-3 shrink-0 ${isLight ? "bg-slate-50 border-slate-200" : "bg-white/[0.02] border-white/10"}`}>
                               <div className="flex items-center gap-2">
                                 {/* Mobile Back Button */}
                                 <button
@@ -1695,7 +1700,7 @@ export default function DashboardPage({ onRerunQuery, apiBaseUrl: propApiBaseUrl
                                   <div className="flex items-center gap-2 flex-wrap">
                                     <span className="text-xs font-mono font-bold text-indigo-300 flex items-center gap-1.5">
                                       <span>Session:</span>
-                                      <span className="text-white">{activeSession.sessionId}</span>
+                                      <span className={isLight ? "text-slate-900 font-bold" : "text-white"}>{activeSession.sessionId}</span>
                                     </span>
                                     <button
                                       type="button"
@@ -1763,7 +1768,7 @@ export default function DashboardPage({ onRerunQuery, apiBaseUrl: propApiBaseUrl
                                     </div>
 
                                     {/* User Question */}
-                                    <div className="p-4 rounded-xl bg-gradient-to-r from-indigo-950/40 to-slate-900/60 border border-indigo-500/30 text-white text-xs font-medium space-y-1.5 shadow-sm">
+                                    <div className={`p-4 rounded-xl border text-xs font-medium space-y-1.5 shadow-sm ${isLight ? "bg-indigo-50/70 border-indigo-200 text-slate-900" : "bg-gradient-to-r from-indigo-950/40 to-slate-900/60 border-indigo-500/30 text-white"}`}>
                                       <div className="flex items-center justify-between text-[10px] text-indigo-300 font-mono uppercase tracking-wider font-semibold">
                                         <span className="flex items-center gap-1.5">
                                           <User className="w-3.5 h-3.5" />
@@ -1790,11 +1795,11 @@ export default function DashboardPage({ onRerunQuery, apiBaseUrl: propApiBaseUrl
                                           )}
                                         </div>
                                       </div>
-                                      <p className="text-slate-100 font-sans text-sm leading-relaxed whitespace-pre-wrap">{item.query}</p>
+                                      <p className={`font-sans text-sm leading-relaxed whitespace-pre-wrap ${isLight ? "text-slate-900 font-medium" : "text-slate-100"}`}>{item.query}</p>
                                     </div>
 
                                     {/* Assistant Generated Response */}
-                                    <div className="p-4 sm:p-5 rounded-xl bg-black/50 border border-white/10 space-y-3.5 text-xs text-slate-300 font-sans leading-relaxed shadow-md">
+                                    <div className={`p-4 sm:p-5 rounded-xl border space-y-3.5 text-xs font-sans leading-relaxed shadow-sm ${isLight ? "bg-slate-50 border-slate-200 text-slate-800" : "bg-black/50 border-white/10 text-slate-300"}`}>
                                       <div className="flex items-center justify-between text-[11px] font-semibold text-cyan-400 border-b border-white/5 pb-2">
                                         <span className="flex items-center gap-1.5">
                                           <Bot className="w-4 h-4 text-cyan-400" />
@@ -1828,19 +1833,25 @@ export default function DashboardPage({ onRerunQuery, apiBaseUrl: propApiBaseUrl
                                       {/* Citations & Chunks Inspection Toggle */}
                                       <div className="flex flex-wrap items-center justify-between gap-2 pt-3 border-t border-white/5 text-xs">
                                         <div className="flex flex-wrap items-center gap-1.5 text-slate-400 text-[11px]">
-                                          <span className="font-semibold text-slate-300">Citations:</span>
+                                          <span className={`font-semibold ${isLight ? 'text-slate-700' : 'text-slate-300'}`}>Citations:</span>
                                           {citations.length > 0 ? (
-                                            citations.map((c, i) => (
-                                              <span 
-                                                key={i} 
-                                                onClick={() => onChunkClick && onChunkClick(c)}
-                                                className={`px-2 py-0.5 rounded bg-white/[0.05] text-[10px] text-cyan-300 font-mono border border-white/5 ${
-                                                  onChunkClick ? 'hover:border-cyan-500/40 hover:bg-cyan-500/10 cursor-pointer' : ''
-                                                }`}
-                                              >
-                                                {c.document} {c.page ? `p.${c.page}` : ''}
-                                              </span>
-                                            ))
+                                            citations.map((c, i) => {
+                                              const cDoc = typeof c === 'string' ? c : (c.document || c.title || c.source || c.name || 'document.pdf');
+                                              const cPage = typeof c === 'object' && c.page ? ` (p.${c.page})` : '';
+                                              return (
+                                                <span 
+                                                  key={i} 
+                                                  onClick={() => onChunkClick && onChunkClick(c)}
+                                                  className={`px-2.5 py-1 rounded text-[11px] font-mono border transition-all ${
+                                                    isLight
+                                                      ? 'bg-cyan-50 border-cyan-300 text-cyan-950 font-bold hover:bg-cyan-100 cursor-pointer shadow-sm'
+                                                      : 'bg-white/[0.05] text-cyan-300 border-white/5 hover:border-cyan-500/40 cursor-pointer'
+                                                  }`}
+                                                >
+                                                  {cDoc}{cPage}
+                                                </span>
+                                              );
+                                            })
                                           ) : (
                                             <span className="text-[11px] text-slate-500 italic">No citations</span>
                                           )}
@@ -1858,7 +1869,7 @@ export default function DashboardPage({ onRerunQuery, apiBaseUrl: propApiBaseUrl
 
                                       {/* Collapsible Chunks Sent to LLM */}
                                       {isExpanded && (
-                                        <div className="mt-3 p-3.5 rounded-xl bg-[#07090e] border border-white/10 space-y-2.5 animate-in fade-in duration-150">
+                                        <div className={`mt-3 p-3.5 rounded-xl border space-y-2.5 animate-in fade-in duration-150 ${isLight ? "bg-slate-100/90 border-slate-200 text-slate-800" : "bg-[#07090e] border-white/10 text-slate-300"}`}>
                                           <div className="text-[11px] font-bold text-slate-300 uppercase tracking-wider mb-1 flex items-center justify-between">
                                             <span>Retrieved Grounding Chunks Context:</span>
                                             <span className="text-[10px] font-mono text-slate-500">{chunks.length} chunks</span>
@@ -1871,19 +1882,21 @@ export default function DashboardPage({ onRerunQuery, apiBaseUrl: propApiBaseUrl
                                                 <div 
                                                   key={cIdx} 
                                                   onClick={() => onChunkClick && onChunkClick(chk)}
-                                                  className={`p-3 rounded-lg bg-white/[0.02] border border-white/5 space-y-1.5 ${
-                                                    onChunkClick ? 'hover:border-cyan-500/40 hover:bg-cyan-500/5 cursor-pointer' : ''
+                                                  className={`p-3 rounded-lg border space-y-1.5 transition-all ${
+                                                    isLight
+                                                      ? 'bg-white border-slate-200 text-slate-800 shadow-sm hover:border-cyan-400 hover:bg-cyan-50/40 cursor-pointer'
+                                                      : 'bg-white/[0.02] border-white/5 hover:border-cyan-500/40 hover:bg-cyan-500/5 cursor-pointer'
                                                   }`}
                                                 >
                                                   <div className="flex items-center justify-between text-[11px] font-mono">
-                                                    <span className="text-indigo-400 font-semibold truncate max-w-[280px]">
+                                                    <span className={`font-semibold truncate max-w-[280px] ${isLight ? 'text-indigo-800 font-bold' : 'text-indigo-400'}`}>
                                                       [{cIdx + 1}] {chk.source || 'doc'} {chk.page ? `(p.${chk.page})` : ''}
                                                     </span>
-                                                    <span className="text-emerald-400 font-bold shrink-0">
+                                                    <span className={`font-bold shrink-0 ${isLight ? 'text-emerald-700' : 'text-emerald-400'}`}>
                                                       Score: {chk.score ? `${Math.round(chk.score * 100)}%` : 'Grounded'}
                                                     </span>
                                                   </div>
-                                                  <p className="text-[11px] text-slate-400 line-clamp-3 font-mono leading-relaxed">
+                                                  <p className={`text-[11px] line-clamp-3 font-mono leading-relaxed ${isLight ? 'text-slate-700' : 'text-slate-400'}`}>
                                                     {chk.text || 'No text snippet'}
                                                   </p>
                                                 </div>
@@ -1935,10 +1948,10 @@ export default function DashboardPage({ onRerunQuery, apiBaseUrl: propApiBaseUrl
         <div className="space-y-6 animate-in fade-in duration-150">
           
           {/* Header & Controls Toolbar */}
-          <div className="p-5 rounded-2xl bg-[#0b0f19] border border-white/10 space-y-4 shadow-xl">
+          <div className={`p-5 rounded-2xl border space-y-4 shadow-sm ${isLight ? "bg-white border-slate-200" : "bg-[#0b0f19] border-white/10 shadow-xl"}`}>
             <div className="flex flex-wrap items-center justify-between gap-4">
               <div>
-                <h3 className="text-base font-bold text-white flex items-center gap-2">
+                <h3 className={`text-base font-bold flex items-center gap-2 ${isLight ? "text-slate-900" : "text-white"}`}>
                   <Search className="w-5 h-5 text-indigo-400" />
                   <span>Distributed Request Tracing &amp; Retrieval Inspector</span>
                 </h3>
@@ -1978,7 +1991,7 @@ export default function DashboardPage({ onRerunQuery, apiBaseUrl: propApiBaseUrl
                     placeholder="Search traces by query, @user, or trace ID..."
                     value={traceSearchQuery}
                     onChange={(e) => setTraceSearchQuery(e.target.value)}
-                    className="pl-8 pr-3 py-1.5 bg-black/40 border border-white/10 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 font-mono w-56 sm:w-72"
+                    className={`pl-8 pr-3 py-1.5 border rounded-xl text-xs font-mono w-56 sm:w-72 focus:outline-none focus:border-indigo-500 ${isLight ? "bg-slate-50 border-slate-200 text-slate-900 placeholder-slate-400" : "bg-black/40 border-white/10 text-white placeholder-slate-500"}`}
                   />
                 </div>
 
@@ -2080,8 +2093,12 @@ export default function DashboardPage({ onRerunQuery, apiBaseUrl: propApiBaseUrl
                     key={logKey}
                     className={`rounded-xl border transition-all overflow-hidden ${
                       isExpanded
-                        ? 'bg-[#0d1222] border-indigo-500/50 shadow-xl ring-1 ring-indigo-500/20'
-                        : 'bg-[#0b0f19] border-white/10 hover:border-indigo-500/30 hover:bg-white/[0.01]'
+                        ? isLight
+                          ? 'bg-indigo-50/70 border-indigo-300 shadow-md ring-1 ring-indigo-400/30'
+                          : 'bg-[#0d1222] border-indigo-500/50 shadow-xl ring-1 ring-indigo-500/20'
+                        : isLight
+                          ? 'bg-white border-slate-200 hover:border-indigo-300 hover:bg-slate-50 shadow-sm'
+                          : 'bg-[#0b0f19] border-white/10 hover:border-indigo-500/30 hover:bg-white/[0.01]'
                     }`}
                   >
                     {/* Compact Card Header: Always Visible ("Show necessary info above") */}
@@ -2144,7 +2161,7 @@ export default function DashboardPage({ onRerunQuery, apiBaseUrl: propApiBaseUrl
 
                       {/* Bottom Row: Query & Expand Toggle Button */}
                       <div className="flex items-center justify-between gap-3">
-                        <div className="text-sm font-semibold text-white truncate max-w-3xl flex items-center gap-2">
+                        <div className={`text-sm font-semibold truncate max-w-3xl flex items-center gap-2 ${isLight ? "text-slate-900 font-bold" : "text-white"}`}>
                           <Search className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
                           <span className="truncate">"{log.query}"</span>
                         </div>
@@ -2172,7 +2189,7 @@ export default function DashboardPage({ onRerunQuery, apiBaseUrl: propApiBaseUrl
                       <div className="px-4 pb-4 pt-1 space-y-4 border-t border-white/5 animate-in fade-in duration-150">
                         
                         {/* AI Generated Response */}
-                        <div className="p-4 rounded-xl bg-black/50 border border-white/10 space-y-2.5 text-xs text-slate-300 font-sans shadow-inner">
+                        <div className={`p-4 rounded-xl border space-y-2.5 text-xs font-sans shadow-inner ${isLight ? "bg-slate-50 border-slate-200 text-slate-800" : "bg-black/50 border-white/10 text-slate-300"}`}>
                           <div className="flex items-center justify-between text-[11px] font-semibold text-cyan-400 border-b border-white/5 pb-2">
                             <span className="flex items-center gap-1.5">
                               <Bot className="w-4 h-4 text-cyan-400" />
@@ -2210,7 +2227,7 @@ export default function DashboardPage({ onRerunQuery, apiBaseUrl: propApiBaseUrl
                           </div>
 
                           <div 
-                            className="ragops-markdown max-w-none text-slate-200"
+                            className={`ragops-markdown max-w-none ${isLight ? "text-slate-800" : "text-slate-200"}`}
                             dangerouslySetInnerHTML={{ __html: marked.parse(log.answer || 'No response recorded.') }}
                           />
                         </div>
@@ -2283,11 +2300,11 @@ export default function DashboardPage({ onRerunQuery, apiBaseUrl: propApiBaseUrl
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             
             {/* Left: Frequently Asked Questions (FAQ) */}
-            <div className="p-6 rounded-2xl bg-[#0b0f19] border border-white/10 space-y-4">
+            <div className={`p-6 rounded-2xl border space-y-4 shadow-sm ${isLight ? "bg-white border-slate-200" : "bg-[#0b0f19] border-white/10"}`}>
               <div className="flex items-center justify-between border-b border-white/10 pb-3">
                 <div className="flex items-center gap-2">
                   <HelpCircle className="w-5 h-5 text-indigo-400" />
-                  <h3 className="text-sm font-bold text-white uppercase tracking-wider">
+                  <h3 className={`text-sm font-bold uppercase tracking-wider ${isLight ? "text-slate-900" : "text-white"}`}>
                     Most Frequently Asked Queries
                   </h3>
                 </div>
@@ -2301,7 +2318,7 @@ export default function DashboardPage({ onRerunQuery, apiBaseUrl: propApiBaseUrl
                   frequentQueries.map((item, idx) => (
                     <div 
                       key={idx}
-                      className="p-3 rounded-xl bg-white/[0.02] border border-white/5 flex items-center justify-between gap-3 hover:border-indigo-500/30 transition-all cursor-pointer group"
+                      className={`p-3 rounded-xl border flex items-center justify-between gap-3 transition-all cursor-pointer group ${isLight ? "bg-slate-50/80 border-slate-200 hover:bg-slate-100 hover:border-indigo-300" : "bg-white/[0.02] border-white/5 hover:border-indigo-500/30"}`}
                       onClick={() => onRerunQuery(item.query)}
                     >
                       <div className="flex items-center gap-2.5">
@@ -2309,7 +2326,7 @@ export default function DashboardPage({ onRerunQuery, apiBaseUrl: propApiBaseUrl
                           {idx + 1}
                         </span>
                         <div>
-                          <p className="text-xs font-semibold text-white group-hover:text-indigo-300 transition-colors">
+                          <p className={`text-xs font-semibold transition-colors ${isLight ? "text-slate-900 group-hover:text-indigo-600" : "text-white group-hover:text-indigo-300"}`}>
                             {item.query}
                           </p>
                           <span className="text-[10px] text-slate-400 font-mono">
@@ -2331,11 +2348,11 @@ export default function DashboardPage({ onRerunQuery, apiBaseUrl: propApiBaseUrl
             </div>
 
             {/* Right: Risk & Churn Signals (POSH, Policy & Leaving Intent) */}
-            <div className="p-6 rounded-2xl bg-[#0b0f19] border border-white/10 space-y-4">
+            <div className={`p-6 rounded-2xl border space-y-4 shadow-sm ${isLight ? "bg-white border-slate-200" : "bg-[#0b0f19] border-white/10"}`}>
               <div className="flex items-center justify-between border-b border-white/10 pb-3">
                 <div className="flex items-center gap-2">
                   <ShieldAlert className="w-5 h-5 text-rose-400" />
-                  <h3 className="text-sm font-bold text-white uppercase tracking-wider">
+                  <h3 className={`text-sm font-bold uppercase tracking-wider ${isLight ? "text-slate-900" : "text-white"}`}>
                     Compliance, POSH &amp; Churn Signals
                   </h3>
                 </div>
@@ -2400,7 +2417,7 @@ export default function DashboardPage({ onRerunQuery, apiBaseUrl: propApiBaseUrl
       {activeTab === 'catalog' && (
         <div className="space-y-8 animate-in fade-in duration-150">
           {/* Section 1: Source-Backed Company Knowledge Hub & Review-Before-Publish Workflow */}
-          <div className="p-6 rounded-2xl bg-gradient-to-br from-[#0c101a] via-[#0f1424] to-[#12192e] border border-indigo-500/30 shadow-2xl space-y-6">
+          <div className={`p-6 rounded-2xl border shadow-xl space-y-6 ${isLight ? "bg-white border-slate-200 shadow-slate-200/50" : "bg-gradient-to-br from-[#0c101a] via-[#0f1424] to-[#12192e] border-indigo-500/30 shadow-2xl"}`}>
             
             {/* Header with Title, Stats & Action Bar */}
             <div className="flex flex-wrap items-center justify-between gap-4 border-b border-white/10 pb-4">
@@ -2572,7 +2589,7 @@ export default function DashboardPage({ onRerunQuery, apiBaseUrl: propApiBaseUrl
             )}
 
             {/* Universal Website Input Bar & Deep Crawl Action */}
-            <div className="p-4 rounded-xl bg-[#090d17] border border-indigo-500/20 space-y-3">
+            <div className={`p-4 rounded-xl border space-y-3 ${isLight ? "bg-slate-50 border-indigo-200 shadow-sm" : "bg-[#090d17] border-indigo-500/20"}`}>
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <label className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-2">
                   <Globe className="w-4 h-4 text-cyan-400" />
@@ -3612,7 +3629,7 @@ export default function DashboardPage({ onRerunQuery, apiBaseUrl: propApiBaseUrl
           </div>
 
           {/* Section 2: Document Upload & Auto-Classification Zone (Directly Under Company Info) */}
-          <div className="p-6 rounded-2xl bg-[#0f1422] border border-white/10 shadow-xl space-y-5">
+          <div className={`p-6 rounded-2xl border space-y-5 shadow-sm ${isLight ? "bg-white border-slate-200" : "bg-[#0f1422] border-white/10 shadow-xl"}`}>
             <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/10 pb-4">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-xl bg-cyan-600/20 border border-cyan-500/30 flex items-center justify-center text-cyan-400 shadow-md">
@@ -3840,7 +3857,7 @@ export default function DashboardPage({ onRerunQuery, apiBaseUrl: propApiBaseUrl
           </div>
 
           {/* Section 4: Filter Bar, Search, and Storage Sync & Batch Embed Actions */}
-          <div className="p-4 rounded-2xl bg-[#0f1422] border border-white/10 flex flex-wrap items-center justify-between gap-4">
+          <div className={`p-4 rounded-2xl border flex flex-wrap items-center justify-between gap-4 shadow-sm ${isLight ? "bg-white border-slate-200" : "bg-[#0f1422] border-white/10"}`}>
             <div className="flex flex-wrap items-center gap-2">
               <span className="text-xs font-semibold text-slate-400 flex items-center gap-1.5 mr-2">
                 <Filter className="w-3.5 h-3.5 text-indigo-400" />
@@ -3909,7 +3926,7 @@ export default function DashboardPage({ onRerunQuery, apiBaseUrl: propApiBaseUrl
           </div>
 
           {/* Section 5: Document Inventory Table with Embed Status, Chunks & Actions */}
-          <div className="rounded-2xl bg-[#0f1422] border border-white/10 overflow-hidden shadow-xl">
+          <div className={`rounded-2xl border overflow-hidden shadow-sm ${isLight ? "bg-white border-slate-200" : "bg-[#0f1422] border-white/10 shadow-xl"}`}>
             <div className="overflow-x-auto">
               <table className="w-full text-left text-xs">
                 <thead>
@@ -3940,7 +3957,7 @@ export default function DashboardPage({ onRerunQuery, apiBaseUrl: propApiBaseUrl
                     .map((doc, idx) => (
                       <tr key={doc.id || idx} className="hover:bg-white/[0.02] transition-colors">
                         <td className="py-3 px-4 font-mono text-slate-500">{idx + 1}</td>
-                        <td className="py-3 px-4 font-semibold text-white">
+                        <td className={`py-3 px-4 font-semibold ${isLight ? "text-slate-900" : "text-white"}`}>
                           {doc.title}
                         </td>
                         <td className="py-3 px-4">
@@ -3958,13 +3975,13 @@ export default function DashboardPage({ onRerunQuery, apiBaseUrl: propApiBaseUrl
                             {doc.doc_type}
                           </span>
                         </td>
-                        <td className="py-3 px-4 text-slate-300">
+                        <td className={`py-3 px-4 ${isLight ? "text-slate-700" : "text-slate-300"}`}>
                           {doc.category}
                         </td>
                         <td className="py-3 px-4 text-slate-400 font-mono text-[11px]">
                           {doc.governance_level || 'Board Level'}
                         </td>
-                        <td className="py-3 px-4 font-mono text-[11px] text-slate-400 truncate max-w-xs">
+                        <td className={`py-3 px-4 font-mono text-[11px] truncate max-w-xs ${isLight ? "text-slate-900 font-bold" : "text-slate-400"}`}>
                           {doc.source}
                         </td>
                         <td className="py-3 px-4 font-mono text-[11px] text-slate-400 whitespace-nowrap">
