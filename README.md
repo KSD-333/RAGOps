@@ -1,4 +1,4 @@
-# RAGOps — End-to-End Enterprise RAG Platform with Observability & Guardrails
+# RAGOps — Enterprise Retrieval-Augmented Generation & Observability Platform
 
 [![CI Pipeline](https://github.com/KSD-333/RAGOps/actions/workflows/ci.yml/badge.svg)](https://github.com/KSD-333/RAGOps/actions/workflows/ci.yml)
 [![Quality Gate](https://github.com/KSD-333/RAGOps/actions/workflows/evaluation.yml/badge.svg)](https://github.com/KSD-333/RAGOps/actions/workflows/evaluation.yml)
@@ -10,150 +10,373 @@
 [![Redis / Memurai](https://img.shields.io/badge/cache-Redis%20%7C%20Memurai-dc382d.svg)](https://redis.io/)
 [![Ollama + Groq](https://img.shields.io/badge/llm-Ollama%20%7C%20Groq%20Cloud-f55036.svg)](https://groq.com/)
 
-> **A production-grade, enterprise-hardened Retrieval-Augmented Generation (RAG) and LLMOps platform designed to demonstrate modern AI engineering practices beyond a basic chatbot. Built with a two-stage retrieval pipeline (Dense ChromaDB + Cross-Encoder reranking), multi-tier Redis semantic cache (<2ms exact & ~4.2ms semantic), local-first Ollama with Groq cloud fallback, conversational anaphora & typo normalization, ChatGPT-style typewriter streaming UI, Model Context Protocol (MCP) server, and the 4 Core Enterprise Pillars: RBAC + OAuth, Multi-Layer Guardrails, Cache + Resilient Router, and Observability + Continuous Evals with Wilson 95% confidence intervals.**
+**RAGOps** is a production-grade, enterprise-hardened Retrieval-Augmented Generation (RAG) platform and LLMOps execution environment. It bridges the gap between proof-of-concept AI chatbots and mission-critical enterprise systems by enforcing strict role-based access controls (RBAC), multi-tier semantic caching, two-stage vector and cross-encoder retrieval, zero-hallucination guardrails, distributed request tracing, and automated regression quality gates.
 
 ---
 
-## 1. Concrete System Architecture
+## Table of Contents
 
-```text
-                               ┌─────────────────────────────────────────────────────────┐
-                               │           Modern React 19 Web Interface                 │
-                               │  (Typewriter Streaming • Master-Detail • Trace Viewer)  │
-                               └────────────────────────────┬────────────────────────────┘
-                                                            │ HTTP / JSON
-                                                            ▼
-                               ┌─────────────────────────────────────────────────────────┐
-                               │                 FastAPI Gateway Layer                   │
-                               │   RBAC Auth (admin / user) • CORS • Lifespan Manager    │
-                               └────────────────────────────┬────────────────────────────┘
-                                                            │
-                     ┌──────────────────────────────────────┴──────────────────────────────────────┐
-                     ▼                                                                             ▼
-    ┌─────────────────────────────────┐                                           ┌─────────────────────────────────┐
-    │     Query Intelligence Engine   │                                           │  Autonomous Corporate Extractor │
-    │ ├─ Exact (<2ms) / Semantic (~4ms│                                           │ ├─ Multi-page Site Crawler      │
-    │ ├─ Conversational Query Rewrite │                                           │ ├─ Prompt-Injection Defense     │
-    │ ├─ Typo & Prefix Normalizer     │                                           │ ├─ Autonomous Search Tool (Gaps)│
-    │ └─ Intent Classifier (<5ms)     │                                           │ └─ Quarantined Candidate Queue  │
-    └────────────────┬────────────────┘                                           └────────────────┬────────────────┘
-                     │                                                                             │
-                     ▼                                                                             ▼
-    ┌─────────────────────────────────┐                                           ┌─────────────────────────────────┐
-    │    Dense / BM25 Hybrid Search   │                                           │   Human-in-the-Loop Validation  │
-    │ Sentence-Transformers Embeddings│                                           │ Review, edit, approve, or reject│
-    │ ChromaDB HNSW + Document ACLs   │                                           │ structured corporate facts      │
-    └────────────────┬────────────────┘                                           └────────────────┬────────────────┘
-                     │ Top-K Candidates (Chunks)                                                   │
-                     ▼                                                                             │
-    ┌─────────────────────────────────┐                                                            │
-    │     Cross-Encoder Reranker      │                                                            │
-    │ ms-marco-MiniLM-L-6-v2 Scoring  │                                                            │
-    │ Relevance Gate (tau >= 0.10)    │                                                            │
-    └────────────────┬────────────────┘                                                            │
-                     │ Calibrated Grounding Context                                                │
-                     ▼                                                                             │
-    ┌─────────────────────────────────┐                                                            │
-    │   Multi-Provider LLM Router     │                                                            │
-    │ Ollama (Local) → Groq (Cloud)   │                                                            │
-    │ ├─ Dynamic fallback & breaker   │                                                            │
-    │ ├─ Anti-hallucination templates │                                                            │
-    │ ├─ Instruction isolation bounds │                                                            │
-    │ └─ Zero-knowledge abstention    │                                                            │
-    └────────────────┬────────────────┘                                                            │
-                     │ Answer + Provenance (Typewriter Stream)                                     │
-                     ▼                                                                             ▼
-┌──────────────────────────────────────────────────────────────────────────────────────────────────────────────────┐
-│                                 PostgreSQL / SQLite Telemetry & Datastore                                        │
-│ ├─ User Authentication & RBAC (admin, test1, test2 with salted SHA-256) [Demo accounts for testing]             │
-│ ├─ Multi-session Chat History & Turn Provenance (Latency Waterfall: Embed, Search, Rerank, LLM)                │
-│ ├─ Grounding Chunks & Citations Store                                                                            │
-│ ├─ User Feedback Ratings (thumbs up / thumbs down) & Hallucination Triage Queue                                  │
-│ ├─ Corporate Facts Catalog, Candidates & Event Outbox                                                            │
-│ ├─ Ingested Document Catalog (Auto-classification: Policy, Code, Programme, Governance, Manual)                  │
-│ └─ Risk Signal Radar (POSH / Non-compliance / Churn Detection)                                                   │
-└──────────────────────────────────────────────────────────┬───────────────────────────────────────────────────────┘
-                                                           │
-                                                           ▼
-┌──────────────────────────────────────────────────────────────────────────────────────────────────────────────────┐
-│                                   Automated Evaluation & Continuous Improvement                                  │
-│ ├─ Golden Benchmark Runner (Recall@5, Wilson 95% CI, Abstention Accuracy, P95 Latency, RAGAS)                    │
-│ ├─ CI/CD Quality Gate (<5% regression threshold blocks deployment)                                              │
-│ ├─ Fine-Tuning Training Data JSON Exporter                                                                       │
-│ └─ Prometheus / Grafana / Jaeger Distributed Tracing                                                             │
-└──────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
+- [1. System Architecture](#1-system-architecture)
+  - [High-Level System Topology](#high-level-system-topology)
+  - [End-to-End Query Execution Lifecycle](#end-to-end-query-execution-lifecycle)
+  - [Autonomous Corporate Extractor & Human-in-the-Loop Pipeline](#autonomous-corporate-extractor--human-in-the-loop-pipeline)
+- [2. Core Enterprise Pillars](#2-core-enterprise-pillars)
+  - [Pillar 1: Enterprise RBAC, OAuth 2.0 & Sensitive Document ACLs](#pillar-1-enterprise-rbac-oauth-20--sensitive-document-acls)
+  - [Pillar 2: Defensive Guardrails & Anti-Hallucination Gate](#pillar-2-defensive-guardrails--anti-hallucination-gate)
+  - [Pillar 3: Multi-Tier Semantic Cache & Resilient LLM Router](#pillar-3-multi-tier-semantic-cache--resilient-llm-router)
+  - [Pillar 4: Observability, Distributed Tracing & Continuous Evals](#pillar-4-observability-distributed-tracing--continuous-evals)
+- [3. Key Platform Capabilities](#3-key-platform-capabilities)
+- [4. Model Context Protocol (MCP) Integration](#4-model-context-protocol-mcp-integration)
+- [5. Performance & Quality Benchmarks](#5-performance--quality-benchmarks)
+- [6. Repository Structure](#6-repository-structure)
+- [7. Quickstart & Deployment](#7-quickstart--deployment)
+  - [Option A: Standalone Docker Deployment](#option-a-standalone-docker-deployment)
+  - [Option B: Full Production Stack via Docker Compose](#option-b-full-production-stack-via-docker-compose)
+  - [Option C: Local Development Environment](#option-c-local-development-environment)
+- [8. Default Development Credentials](#8-default-development-credentials)
+- [9. Complete REST API Reference](#9-complete-rest-api-reference)
+- [10. CLI Reference](#10-cli-reference)
+- [11. Configuration & Environment Variables](#11-configuration--environment-variables)
+- [12. Production Operations & Troubleshooting](#12-production-operations--troubleshooting)
+- [13. Security & Hardening Policy](#13-security--hardening-policy)
+- [14. License](#14-license)
+
+---
+
+## 1. System Architecture
+
+RAGOps separates **query-time inference**, **multi-tier caching**, **document ingestion**, and **telemetry logging** into decoupled, fault-tolerant subsystems.
+
+### High-Level System Topology
+
+```mermaid
+flowchart TB
+    subgraph Clients["Client & Integration Layer"]
+        UI["React 19 Web Console\n(Typewriter UI • Master-Detail • Trace Viewer)"]
+        MCP["Model Context Protocol (MCP)\n(Claude Desktop • Cursor • Continue • IDEs)"]
+        SDK["External Systems / REST API\n(Jira • Confluence • Microservices)"]
+    end
+
+    subgraph Gateway["API Gateway & Security Layer (FastAPI)"]
+        AUTH["RBAC & OAuth Authenticator\n(Salted SHA-256 / Session Token / Role ACL)"]
+        ROUTER["FastAPI Application Router\n(Rate Limiting • CORS • Lifespan Manager)"]
+        WARM["WarmupCoordinator\n(Async Pre-warming PyTorch & Vector Index)"]
+    end
+
+    subgraph QueryEngine["Query Intelligence & Caching Subsystem"]
+        TRANSFORM["Query Normalizer & Rewriter\n(Typo Correction • Anaphora Resolution)"]
+        L1["L1: In-Memory Hot LRU (<0.1ms)"]
+        L2["L2: Redis Exact Hash Match (<2ms)"]
+        L3["L3: Redis Cosine Semantic Cache (~4.2ms)"]
+    end
+
+    subgraph Retrieval["Two-Stage Retrieval Pipeline"]
+        DENSE["Stage 1: Dense Vector Search\nSentence-Transformers (384-d) + ChromaDB HNSW\n(Metadata Pre-Filter: where role_access in user_roles)"]
+        RERANK["Stage 2: Cross-Encoder Reranker\nms-marco-MiniLM-L-6-v2 (Joint Attention)\nConfidence Gate (tau >= 0.10)"]
+    end
+
+    subgraph Generation["LLM Routing & Guardrails"]
+        PROMPT["Instruction Isolation Boundary\n=== BEGIN/END REFERENCE DATA ==="]
+        LLMROUTER["Resilient LLM Router & Circuit Breaker\nPrimary: Local Ollama (llama3.2:3b)\nFallback: Cloud Groq (gpt-oss-120b)"]
+        ABSTAIN["Zero-Hallucination Abstention Gate\n(Score < 0.10 -> Authoritative Refusal in <85ms)"]
+    end
+
+    subgraph Persistence["Storage & Telemetry Backbone"]
+        DB[(PostgreSQL 16 / SQLite Engine\nUsers • Sessions • Chats • Corporate Facts • Candidates)]
+        CACHE[(Redis / Memurai Cache\nExact Query Hashes • Normalized Embeddings)]
+        VDB[(ChromaDB Vector Store\nPartitioned Collections • Persistent HNSW Index)]
+        OUTBOX["Transactional Event Outbox\n(Idempotent Vector Sync Worker)"]
+    end
+
+    subgraph Observability["Continuous Observability & Evals"]
+        OTEL["OpenTelemetry Distributed Tracing\n(Unique Trace IDs • Hop-by-Hop Latency Waterfall)"]
+        METRICS["Prometheus Metrics & Grafana Dashboards\n(/metrics • P50/P95 Latency • Hit Rates)"]
+        EVAL["Golden Benchmark Runner\n(Recall@5 • Wilson 95% CI • CI/CD Quality Gate)"]
+    end
+
+    UI --> AUTH
+    MCP --> AUTH
+    SDK --> AUTH
+    AUTH --> ROUTER
+    ROUTER --> TRANSFORM
+
+    TRANSFORM --> L1
+    L1 -. Miss .-> L2
+    L2 -. Miss .-> L3
+    L3 -. Hit (>=0.90) .-> UI
+    L3 -. Miss .-> DENSE
+
+    DENSE --> RERANK
+    RERANK -- Score < 0.10 --> ABSTAIN
+    ABSTAIN --> DB
+    ABSTAIN --> UI
+
+    RERANK -- Score >= 0.10 --> PROMPT
+    PROMPT --> LLMROUTER
+    LLMROUTER --> UI
+
+    ROUTER --> DB
+    ROUTER --> CACHE
+    DENSE --> VDB
+    OUTBOX --> VDB
+
+    ROUTER --> OTEL
+    ROUTER --> METRICS
+    DB --> EVAL
 ```
 
 ---
 
-## 2. Key Platform Capabilities
+### End-to-End Query Execution Lifecycle
 
-### 💬 ChatGPT-Style Multi-Session Conversational Workspace
-- **Typewriter Streaming & Real-Time UX**: Generates ChatGPT-style typewriter text flow (~18ms token animation, auto-scroll with manual scroll override, blinking cursor `▍`, and instant "Skip" button) with no blank-screen flashes.
-- **Persistent Sessions**: Create, rename, switch between, and purge conversation sessions stored in PostgreSQL or SQLite.
-- **Conversational Query Rewriting & Anaphora Resolution**: Solves pronoun ellipsis across turns (e.g., automatically resolving *"what is agent"* followed by *"and how to create one"* into *"how to create agent"* before vector search).
-- **Typo Normalization & Prefix Stripping**: Automatically repairs typos (e.g., `"crate"` $\rightarrow$ `"create"`, `"polies"` $\rightarrow$ `"policies"`) and strips conversational filler words (`"like "`, `"so "`, `"bro "`, `"and "`) to ensure high embedding match scores.
-- **Session Isolation**: Standard users only view and interact with their own conversation history, while administrators retain global audit capabilities.
+The sequence below illustrates the sub-second decision matrix executed for every user question:
 
-### ⚡ High-Performance Redis / Memurai Semantic Cache (<2ms Exact & ~4.2ms Semantic)
-- **Multi-Tier Caching Architecture**:
-  - **Tier 1 (In-Memory Hot Cache)**: Instantaneous $<0.1\text{ ms}$ lookup.
-  - **Tier 2 (Redis / Memurai Exact Match)**: Sub-2ms ($<2\text{ ms}$) instant response for identical query hashes (`ragops:cache:exact:{company}:{hash}`).
-  - **Tier 3 (Redis Semantic Relevance Match)**: Pre-filters cached queries by scope and intent, computes cosine similarity against candidate embedding vectors (averaging $\sim 4.2\text{ ms}$ on benchmarks), and delivers a direct cache hit if query similarity is $\ge 90\% - 95\%$ (configurable via `CACHE_SIMILARITY_THRESHOLD=0.90`).
-  - **Tier 4 (Durable Database Cache)**: Backed by PostgreSQL / SQLite `SemanticCacheModel` with automatic backfill into Redis.
-- **Zero-Touch Auto-Start**: Automatically detects if Redis is offline on backend launch (`ragops serve` / FastAPI startup) and starts the Memurai Windows Service or daemon process silently in the background (`CREATE_NO_WINDOW = 0x08000000`), eliminating manual intervention and CMD popups.
-- **Memurai Support on Windows**: Out-of-the-box compatibility with native Windows Memurai instances on `127.0.0.1:6379`.
-- **Zero-Hallucination Cache Guardrail**: LLM abstentions and refusal answers are strictly barred from being cached or served from cache.
-- **Scope & Entity Isolation**: Prevents semantic cross-matching across different document scopes (e.g., collection-wide count vs document-specific policies).
-- **Cost & Latency Elimination**: Avoids 1,000–3,000ms LLM turnaround times and reduces API token costs to $0.00 for frequently asked inquiries.
-- **Live Cache Dashboard Telemetry**: Exposes Redis connection status, memory footprint, hit counters, and latency/cost savings via `/api/v1/cache/stats` and the Web UI console.
+```mermaid
+sequenceDiagram
+    autonumber
+    actor User as User / Client
+    participant GW as API Gateway (FastAPI)
+    participant QI as Query Intelligence & Cache
+    participant VDB as ChromaDB Vector Store
+    participant RK as Cross-Encoder Reranker
+    participant LLM as LLM Router (Ollama/Groq)
+    participant DB as PostgreSQL / SQLite Telemetry
 
-### 🛡️ Enterprise RBAC & Simulated Account Switcher
-- **Role-Based Access Control**: Strict segregation between `admin` and standard `user` accounts.
-- **Cryptographic Security**: Passwords hashed with `SHA-256` plus unique 32-character random salts.
-- **Integrated Account Switcher**: Easily toggle between `admin`, `test1` (HR/general queries), and `test2` (dev/infrastructure queries) from the Web UI to test RBAC boundaries.
-- **Automatic Fallback**: Seamlessly connects to PostgreSQL via SQLAlchemy and `asyncpg`, with graceful failover to local SQLite if PostgreSQL is offline.
+    User->>GW: POST /api/v1/query (prompt, session_id, token)
+    GW->>GW: Validate RBAC Role & Session Ownership
+    GW->>QI: Normalize Typos & Resolve Anaphora ("and how to create one")
+    
+    QI->>QI: Check L1 Memory & L2 Redis Exact Hash (<2ms)
+    alt Exact Cache Hit
+        QI-->>User: Return Cached Answer (Sub-2ms)
+    else Cache Miss
+        QI->>QI: Check L3 Redis Semantic Similarity (Cosine >= 0.90)
+        alt Semantic Cache Hit
+            QI-->>User: Return Semantic Match (~4.2ms)
+        else Complete Miss
+            QI->>VDB: Query Vector Embedding with Metadata ACL Filter
+            VDB-->>RK: Return Top-K Candidates (Chunks)
+            RK->>RK: Compute Joint Cross-Attention Scores
+            
+            alt Maximum Score < tau (0.10)
+                RK-->>GW: Low Relevance Confidence
+                GW->>DB: Log Zero-Token Abstention
+                GW-->>User: Return Authoritative Grounded Abstention (<85ms)
+            else High Confidence Score (>= 0.10)
+                RK->>LLM: Pack Grounding Chunks inside Instruction Isolation
+                LLM->>LLM: Stream Generated Tokens with Verified Citations
+                LLM-->>GW: Generation Complete
+                GW->>QI: Store Valid Turn in Redis Semantic Cache
+                GW->>DB: Record Trace, Latencies, Citations & Token Usage
+                GW-->>User: Stream Response to Typewriter UI
+            end
+        end
+    end
+```
 
-### 🌐 Autonomous Corporate Web Intelligence & Knowledge Hub
-- **Universal Multi-Page Crawler**: Traverses company websites, discovering subpages, leadership bios, manufacturing plants, and OEM partnerships.
-- **AI Gap-Filling Search Tool**: Automatically formulates web search queries when critical data (such as corporate headquarters or executive leadership) is missing from crawled pages.
-- **Human-in-the-Loop Fact Review**: Extracted corporate facts are staged into a PostgreSQL candidate queue with confidence scores and source URLs. Administrators can review, inline-edit, approve, or reject facts before vectorizing.
-- **Verified ChromaDB Embedding**: Approved facts are compiled into grounded vector chunks and indexed into ChromaDB.
-- **Event Outbox Architecture**: Staged publishing events ensure idempotent delivery and audit tracking across microservices.
+---
 
-### 🔍 Master-Detail User Directory & Side-by-Side Chat Audit
-- **Clean Master-Detail Layout**: Replaces cluttered full-page dumps with an interactive, space-saving split view.
-- **Session List (Left Panel)**: Displays user conversation threads with first-prompt snippet, timestamp, turn count badge (`💬 X prompts`), token spend, and high-priority `RISK` tags. Includes real-time keyword search and risk-only filtering.
-- **Side-by-Side Conversation Viewer (Right Panel)**: Displays the active conversation thread with prompt bubbles, markdown-formatted AI responses (`ragops-markdown`), clickable citation tags, and expandable grounding chunks.
-- **One-Click Actions**: One-click prompt copying, answer copying, session ID copying, and rerun in search.
+### Autonomous Corporate Extractor & Human-in-the-Loop Pipeline
 
-### 📊 Distributed Request Tracing & Retrieval Inspector
-- **Compact Space-Saving Cards**: Eliminates endless scrolling by displaying all necessary metadata in a dense ~65px summary bar: Trace ID, `@username`, timestamp, color-coded latency badge (green `<1000ms`, amber `1000–2500ms`, rose `>2500ms`), token counts (`In: Xt • Out: Yt`), and risk tags.
-- **Click-to-Expand AI Response**: Clicking anywhere on the card header or "View AI Response" button smoothly reveals the grounded response and complete multi-hop latency waterfall:
-  $$\text{Total Latency} = \text{Embedding} + \text{ChromaDB Vector Search} + \text{Cross-Encoder Reranking} + \text{LLM Generation}$$
-- **Global Toolbar Controls**: Bulk **Expand All** and **Collapse All** buttons, live keyword search, and filter pills (**All**, **Risk Signals**, **Slow >1.5s**).
+RAGOps features an autonomous corporate intelligence subsystem that traverses enterprise domains, discovers infrastructure facts, and stages them through a review-before-publish workflow:
 
-### 🚨 Frequent Questions & Risk Signals Radar
-- **Semantic Clustering**: Automatically groups high-frequency queries to surface common user pain points and average response latencies.
-- **Corporate Risk Detection**: Proactively alerts administrators on:
-  - **POSH & Compliance Violations**: Queries concerning harassment policies, internal reporting, or ethical breaches.
-  - **Churn Risk Signals**: Negative employee sentiment, leaving intent, or client attrition keywords.
-- **One-Click Query Rerun**: Rerun any flagged query directly in the Search Console to verify grounded guardrails.
+```mermaid
+flowchart LR
+    subgraph IngestionSource["Data Ingestion Sources"]
+        WEB["Enterprise Websites\n(Deep Crawl Engine)"]
+        PDF["Local Documents & PDFs\n(Policy, Code, Governance, Manual)"]
+        SEARCH["Autonomous Search Tool\n(Fills Information Gaps Live)"]
+    end
 
-### 📑 Document Catalog & Storage Reconciliation Engine
-- **Automated Classification**: Automatically tags uploaded PDFs and Markdown documents as **Policy**, **Code**, **Programme**, **Governance**, or **Manual**.
-- **Disk Storage Reconciliation**: `/api/v1/catalog/sync` reconciles files physically stored on disk in `data/raw/` with database records and ChromaDB embeddings.
-- **Selective & Batch Vector Ingestion**: Re-embed individual pending documents or trigger bulk ChromaDB indexing directly from the Web UI.
+    subgraph ExtractionStage["Extraction & Normalization"]
+        EXTRACT["LLM Fact Extractor\n(Executive Bios, Plants, OEM Clients)"]
+        CHUNK["Token-Aware Semantic Chunker\n(512 tokens • 50-token overlap)"]
+    end
 
-### 💰 Enterprise Token Billing & Quota Tracker
-- **Real-Time Token Accounting**: Accurately tracks input tokens, output tokens, and estimated USD spend across all requests.
-- **Contract Budget Calculator**: Configurable token thresholds and monetary pricing (supports ₹, $, €, £).
-- **ML Training Dataset Exporter**: Export filtered positive grounded Q&A pairs as standard JSON datasets for fine-tuning open-source LLMs.
+    subgraph HumanInTheLoop["Human-in-the-Loop Validation"]
+        QUEUE["Quarantined Candidate Queue\n(PostgreSQL FactCandidateModel)"]
+        REVIEW{"Admin Console Review\n(Approve • Edit • Reject)"}
+        OUTBOX["Transactional Event Outbox\n(Guaranteed At-Least-Once Delivery)"]
+    end
 
-### 🔌 Model Context Protocol (MCP) Integration
-RAGOps provides a first-class Model Context Protocol (MCP) server over `stdio` transport, enabling AI desktop clients (such as Claude Desktop, Cursor, and Continue) and enterprise tools (Jira, Confluence) to query your enterprise knowledge base, ingest documents, inspect traces, and monitor cache statistics directly:
+    subgraph ProductionStore["Active Vector Knowledge Base"]
+        CHROMA["ChromaDB HNSW Vector Store\n(Grounded Enterprise Citations)"]
+        RELATIONAL["PostgreSQL Knowledge Catalog\n(Versioned Corporate Intelligence)"]
+    end
 
-#### Claude Desktop Configuration (`claude_desktop_config.json`)
+    WEB --> EXTRACT
+    SEARCH --> EXTRACT
+    PDF --> CHUNK
+
+    EXTRACT --> QUEUE
+    CHUNK --> OUTBOX
+    QUEUE --> REVIEW
+
+    REVIEW -- Approved / Edited --> OUTBOX
+    REVIEW -- Rejected --> DISMISS["Purged from Queue"]
+    OUTBOX --> CHROMA
+    OUTBOX --> RELATIONAL
+```
+
+---
+
+## 2. Core Enterprise Pillars
+
+Modern enterprise RAG systems fail when treated as simple wrappers around an LLM and a vector database. RAGOps is architected around four distinct production pillars:
+
+```mermaid
+flowchart TD
+    subgraph P1["Pillar 1: RBAC + OAuth & Access Control"]
+        A1["User Authentication (OAuth2 / Salted SHA-256)"] --> A2["Role Segregation: Admin vs User"]
+        A2 --> A3["Document & Chunk Metadata ACLs"]
+        A3 --> A4["Pre-Retrieval Filter (where role_access in user_roles)"]
+        A4 --> A5["Zero-Leakage Guarantee (Confidential / Salary PDFs)"]
+    end
+
+    subgraph P2["Pillar 2: Production Guardrails & Defensive RAG"]
+        B1["Input Prompt Injection Scanner"] --> B2["Instruction Delimiters (=== BEGIN/END ===)"]
+        B2 --> B3["Calibrated Reranker Gate (Score < 0.10)"]
+        B3 --> B4["Zero-Hallucination Authoritative Abstention"]
+        B4 --> B5["PII / Sensitive Token Masking"]
+    end
+
+    subgraph P3["Pillar 3: Multi-Tier Semantic Cache & Router"]
+        C1["Tier 1: Hot In-Memory LRU (<0.1ms)"] --> C2["Tier 2: Redis Exact Hash Match (<2ms)"]
+        C2 --> C3["Tier 3: Redis Cosine Semantic Cache (~4.2ms)"]
+        C3 --> C4["Resilient LLM Router: Local Ollama → Groq Cloud"]
+        C4 --> C5["Silent Win32 Background Spawn & WarmupCoordinator"]
+    end
+
+    subgraph P4["Pillar 4: Observability, Tracing & Evals"]
+        D1["OpenTelemetry Distributed Tracing & Trace IDs"] --> D2["Multi-Hop Latency Waterfall Breakdown"]
+        D2 --> D3["Token Accounting & Contract Billing"]
+        D3 --> D4["Golden Benchmark Suite (N=50) + Wilson 95% CI"]
+        D4 --> D5["Automated CI/CD Quality Gates & Regressions"]
+    end
+```
+
+---
+
+### Pillar 1: Enterprise RBAC, OAuth 2.0 & Sensitive Document ACLs
+
+#### The "Unauthorized Salary Inquiry" Challenge in Enterprise RAG
+In naive RAG implementations, all corporate documents reside in a shared vector database. When an unauthorized user submits:
+> *"What is the CEO's current compensation and bonus package?"*
+
+Naive vector retrieval retrieves executive compensation chunks and inserts them directly into the LLM context. System prompt instructions (e.g., *"Do not disclose executive compensation"*) are easily bypassed using prompt injection or indirect role-play attacks.
+
+#### The RAGOps Defense-in-Depth Solution:
+1. **Pre-Retrieval Index-Layer ACL Filtering**:
+   During document ingestion, vector chunks are tagged with access metadata: `{"role_access": ["admin", "executive"]}` vs `{"role_access": ["user", "admin"]}`.
+   The API gateway extracts the authenticated identity and applies metadata filters directly inside the ChromaDB query:
+   ```python
+   # Evaluated inside ChromaDB before chunks ever reach the reranker or LLM context
+   results = collection.query(
+       query_embeddings=query_vec,
+       n_results=top_k,
+       where={"role_access": {"$in": user_roles}}
+   )
+   ```
+2. **Grounded Abstention Without Information Disclosure**:
+   Because unauthorized chunks are filtered out at the vector index layer, the cross-encoder returns a relevance score of $0.00$. The pipeline halts immediately:
+   > *"I searched the corporate knowledge base, but could not locate verified documents or policies with sufficient relevance to answer your question regarding 'CEO salary'."*
+   The system never discloses that a confidential salary document exists.
+3. **Session Ownership & Tenant Isolation**:
+   Standard users are restricted to viewing and managing their own conversation sessions (`/api/v1/sessions`). Administrators retain global audit capabilities.
+
+---
+
+### Pillar 2: Defensive Guardrails & Anti-Hallucination Gate
+
+1. **Prompt Injection & Adversarial Defense (`PromptInjectionDetector`)**:
+   Pre-screens all incoming queries for jailbreak signatures (`"ignore all previous instructions"`, `"system override"`, `"DAN mode"`).
+2. **Instruction Isolation Delimiters**:
+   Retrieved context is walled off inside explicit boundary delimiters:
+   ```text
+   === BEGIN REFERENCE DATA ===
+   [Document 1 | Source: corporate_policy.pdf | Chunk: chunk_002]
+   ...
+   === END REFERENCE DATA ===
+   ```
+   The system prompt enforces the **Untrusted Reference Principle**: all text between delimiters is treated strictly as passive data. Embedded instructions or prompt manipulation within documents are ignored.
+3. **Calibrated Cross-Encoder Grounding Gate ($\tau = 0.10$)**:
+   Queries and candidate chunks pass through a cross-encoder (`ms-marco-MiniLM-L-6-v2`) computing joint attention across query-document pairs. If the top candidate score falls below $\tau = 0.10$, the request halts in $<85\text{ ms}$, returning an authoritative refusal and consuming $0$ LLM tokens.
+4. **Zero-Knowledge Cache Guardrail**:
+   Refusal answers, abstention notices, and error messages are strictly excluded from the Redis semantic cache to prevent negative cache poisoning.
+
+---
+
+### Pillar 3: Multi-Tier Semantic Cache & Resilient LLM Router
+
+#### Multi-Tier Caching Architecture
+
+| Tier | Layer | Measured Latency | Scope |
+|:---|:---|:---|:---|
+| **Tier 1** | In-Memory LRU Hot Cache | $< 0.1\text{ ms}$ | High-frequency queries in active memory |
+| **Tier 2** | Redis / Memurai Exact Match | **0.8 ms** ($< 2.0\text{ ms}$) | SHA-256 hash match (`ragops:cache:exact:{company}:{hash}`) |
+| **Tier 3** | Redis Cosine Semantic Cache | **4.2 ms** ($< 10.0\text{ ms}$) | Cosine similarity ($\ge 0.90$) against candidate embeddings |
+| **Tier 4** | PostgreSQL / SQLite Durable Cache | $< 15.0\text{ ms}$ | Persistent cross-restart store with auto-backfill into Redis |
+
+#### Resilient LLM Router with Circuit Breaker
+- **Local-First Ollama**: Default model `llama3.2:3b` runs completely offline with zero external cloud dependencies.
+- **Cloud Groq Fallback**: If local Ollama is offline or times out, the router automatically fails over to Groq Cloud API (`openai/gpt-oss-120b`).
+- **Three-Strike Circuit Breaker**: If a provider fails 3 consecutive times, its circuit breaker opens for 60 seconds, preventing latency spikes from repeated connection timeouts.
+- **Graceful Degraded Mode**: If all LLM providers are unavailable, the platform continues serving vector searches, document ingestion, and semantic cache hits, providing actionable diagnostic logs.
+
+#### Non-Blocking Startup Warmup (`WarmupCoordinator`)
+During application lifespan initialization, `WarmupCoordinator` pre-warms PyTorch embedding weights, cross-encoders, and database connections asynchronously in a background thread. This eliminates first-query cold-start latency, bringing initial query response times from $>25\text{s}$ down to sub-second speeds.
+
+---
+
+### Pillar 4: Observability, Distributed Tracing & Continuous Evals
+
+#### 1. Distributed Request Tracing & Latency Waterfall
+Every request receives a cryptographically unique `trace_id`. The Web UI and API expose the exact latency waterfall across every pipeline hop:
+$$\text{Total Latency} = \text{Embedding} + \text{ChromaDB Vector Search} + \text{Cross-Encoder Reranking} + \text{LLM Generation}$$
+
+```text
+[Trace 4f9a8b1c] Total: 1,412ms
+├── 1. Embed Query (all-MiniLM-L6-v2)    : 15.2ms  ( 1.1%)
+├── 2. ChromaDB HNSW Dense Search       :  4.1ms  ( 0.3%)
+├── 3. Cross-Encoder Rerank (ms-marco)   : 38.6ms  ( 2.7%)
+└── 4. LLM Generation (llama3.2:3b)      : 1,354.1ms (95.9%)
+```
+
+#### 2. Golden Benchmark Suite with Wilson 95% Confidence Intervals
+RAGOps includes an automated 50-query golden benchmark suite ($N = 50$, 35 in-domain retrieval queries, 15 out-of-domain/adversarial probes):
+- **Retrieval Recall@5**: $94.3\%$ ($33/35$ hits), $[81.4\%, 98.4\%]$ Wilson 95% CI.
+- **Grounded Abstention Accuracy**: $100.0\%$ ($15/15$ abstentions), $[79.6\%, 100.0\%]$ Wilson 95% CI.
+- **Citation Precision / Support**: $91.4\%$ ($32/35$ citations), $[77.6\%, 97.0\%]$ Wilson 95% CI.
+- **Overall System Correctness**: $94.0\%$ ($47/50$ correct), $[83.8\%, 97.9\%]$ Wilson 95% CI.
+
+#### 3. Continuous CI/CD Quality Gate
+Automated evaluations run via `python scripts/run_evaluation.py --fail-on-gate`. The CI pipeline automatically blocks deployment if:
+- Retrieval Recall@5 falls below $0.85$
+- Faithfulness falls below $0.90$
+- P95 Latency exceeds $3,000\text{ ms}$
+- Quality regression vs. production baseline exceeds $5\%$
+
+---
+
+## 3. Key Platform Capabilities
+
+- **Typewriter Streaming & Real-Time UX**: Generates ChatGPT-style typewriter text flow (~18ms token animation, auto-scroll with manual override, blinking cursor `▍`, and instant "Skip" button) with seamless light and dark mode support.
+- **Conversational Memory & Query Rewriting**: Solves multi-turn pronoun ellipsis (e.g., resolving *"what is agent"* followed by *"and how to create one"* into *"how to create agent"* before vector search).
+- **Typo Normalization & Prefix Stripping**: Automatically repairs input typos (e.g., `"crate"` $\rightarrow$ `"create"`, `"polies"` $\rightarrow$ `"policies"`) and strips conversational fillers (`"like "`, `"so "`, `"bro "`, `"and "`) to ensure high embedding match scores.
+- **Full Theme Support (Light & Dark Mode)**: High-contrast surfaces conforming to WCAG 2.1 AAA contrast ratios across all chat bubbles, citations, and 6 administrative dashboard views.
+- **Document Catalog & Disk Storage Reconciliation**: Automatically classifies documents as **Policy**, **Code**, **Programme**, **Governance**, or **Manual**, with disk sync (`/api/v1/catalog/sync`) to reconcile physical files in `data/raw/` with ChromaDB and database records.
+- **Corporate Risk Radar**: Proactively flags compliance, POSH, and employee/customer churn risk signals from query logs for administrator review.
+- **Token Accounting & Spending Telemetry**: Real-time token consumption tracking and contract budget calculation across all registered user accounts.
+- **Fine-Tuning Dataset Exporter**: Export filtered positive grounded Q&A pairs as standard JSON datasets for LLM fine-tuning.
+
+---
+
+## 4. Model Context Protocol (MCP) Integration
+
+RAGOps provides a first-class Model Context Protocol (MCP) server over `stdio` transport, allowing AI desktop environments (Claude Desktop, Cursor, Continue) to interact directly with your enterprise knowledge base:
+
+### Claude Desktop Configuration (`claude_desktop_config.json`)
+
 ```json
 {
   "mcpServers": {
@@ -169,169 +392,19 @@ RAGOps provides a first-class Model Context Protocol (MCP) server over `stdio` t
 }
 ```
 
-#### Available MCP Tools
-- **`search_knowledge_base(query, top_k=5)`**: Query enterprise documents with dense/hybrid search, cross-encoder reranking, and citation provenance.
-- **`list_documents()`**: List all indexed documents, chunk counts, and total inventory.
-- **`ingest_document(path)`**: Safely ingest a document from `data/raw/` into ChromaDB (with built-in path-traversal protection).
-- **`get_trace(trace_id)`**: Inspect execution traces, latencies, chunk provenance, and token usage for any query.
-- **`cache_stats()`**: Fetch real-time hit rates, memory consumption, and entries in the Redis semantic cache.
+### Available MCP Tools
+
+| Tool | Parameters | Description |
+|---|---|---|
+| `search_knowledge_base` | `query: str, top_k: int = 5` | Query enterprise knowledge base with dense/hybrid search, cross-encoder reranking, and citation provenance |
+| `list_documents` | — | List all cataloged documents, classifications, and total chunk inventory |
+| `ingest_document` | `path: str` | Ingest local PDF or Markdown file from `data/raw/` into ChromaDB (with path-traversal protection) |
+| `get_trace` | `trace_id: str` | Retrieve execution trace, multi-hop latencies, chunks sent, and token usage for any query |
+| `cache_stats` | — | Fetch real-time hit rate %, memory consumption, and cache entry count from Redis |
 
 ---
 
-## 3. The Four Production RAG Pillars (Enterprise Architecture)
-
-Modern enterprise RAG systems fail when treated as simple wrappers around an LLM and a vector database. RAGOps is architected around four distinct production pillars:
-
-```mermaid
-flowchart TD
-    subgraph P1["Pillar 5: RBAC + OAuth & Access Control"]
-        A1["User Authentication (OAuth2 / Salted SHA-256)"] --> A2["Role Segregation: Admin vs User"]
-        A2 --> A3["Document & Chunk Metadata ACLs"]
-        A3 --> A4["Pre-Retrieval Filter (where role_access in user_roles)"]
-        A4 --> A5["Zero-Leakage Guarantee (Confidential / Salary PDFs)"]
-    end
-
-    subgraph P2["Pillar 6: Production Guardrails & Defensive RAG"]
-        B1["Input Prompt Injection Scanner"] --> B2["Instruction Delimiters (=== BEGIN/END ===)"]
-        B2 --> B3["Calibrated Reranker Gate (Score < 0.10)"]
-        B3 --> B4["Zero-Hallucination Authoritative Abstention"]
-        B4 --> B5["PII / Sensitive Token Masking"]
-    end
-
-    subgraph P3["Pillar 7: Multi-Tier Semantic Cache & Router"]
-        C1["Tier 1: Hot In-Memory LRU (<0.1ms)"] --> C2["Tier 2: Redis Exact Hash Match (<2ms)"]
-        C2 --> C3["Tier 3: Redis Cosine Semantic Cache (~4.2ms)"]
-        C3 --> C4["Resilient LLM Router: Local Ollama → Groq Cloud"]
-        C4 --> C5["Silent Win32 Background Spawn & WarmupCoordinator"]
-    end
-
-    subgraph P4["Pillar 8: Observability, Tracing & Evals"]
-        D1["OpenTelemetry Distributed Tracing & Trace IDs"] --> D2["Multi-Hop Latency Waterfall Breakdown"]
-        D2 --> D3["Token Accounting & Contract Billing"]
-        D3 --> D4["Golden Benchmark Suite (N=50) + Wilson 95% CI"]
-        D4 --> D5["Automated CI/CD Quality Gates & Regressions"]
-    end
-```
-
----
-
-### Pillar 5: Enterprise RBAC, OAuth 2.0 & Sensitive Data ACLs
-
-#### The "Employee Querying CEO Salary" Challenge in Enterprise RAG
-In naive RAG systems, all enterprise documents are indexed into a single global vector store. When an unauthorized employee asks:
-> *"What is the CEO's current base salary and bonus package?"*
-
-Naive vector retrieval matches the query against executive compensation PDFs, inserts those chunks directly into the LLM context, and the model outputs confidential payroll figures. Prompt-based instructions like *"Do not reveal salaries to non-managers"* are notoriously vulnerable to prompt injection, jailbreaks, and indirect prompt extraction.
-
-#### The RAGOps Defense-in-Depth Solution:
-1. **Pre-Retrieval Metadata ACL Filtering**:
-   - During document ingestion, chunks carry metadata tags: `{"role_access": ["admin", "executive"]}` vs `{"role_access": ["user", "admin"]}`.
-   - The FastAPI Gateway extracts the authenticated identity (`request.state.user.role`).
-   - When retrieving from ChromaDB, metadata filters are enforced at the index layer:
-     ```python
-     # Enforced before vector candidates ever reach the reranker or LLM context
-     results = collection.query(
-         query_embeddings=query_vec,
-         n_results=top_k,
-         where={"role_access": {"$in": user_roles}}
-     )
-     ```
-2. **Grounded Abstention Without Information Disclosure**:
-   - Because unauthorized chunks are filtered out before scoring, the cross-encoder returns a relevance score of $0.00$.
-   - The pipeline triggers an authoritative grounded abstention:
-     > *"I searched the corporate knowledge base, but could not locate verified documents or policies with sufficient relevance to answer your question regarding 'CEO salary'."*
-   - The system does not even disclose that a salary document exists in the repository.
-3. **Session Ownership & Tenant Isolation**:
-   - Standard users can only view, modify, and delete their own multi-turn chat sessions (`/api/v1/sessions`).
-   - Administrators possess master-detail audit views to investigate risks, audit latencies, and export training pairs without compromising data integrity.
-4. **FastMCP Integration with Granular Tool Isolation**:
-   - Enterprise desktop clients (Claude Desktop, Cursor) communicate through Model Context Protocol (MCP) using least-privilege tool execution, ensuring tool operations conform to the authenticated caller's security scope.
-
----
-
-### Pillar 6: Multi-Layer Guardrails & Defensive RAG
-
-#### 1. Prompt Injection & Jailbreak Defense
-- **Heuristic & Pattern Detection (`PromptInjectionDetector`)**: Pre-screens queries for jailbreaks, prompt override commands (`"ignore all previous instructions"`, `"you are now in DAN mode"`, `"system override"`), and format manipulation payloads.
-- **Strict Instruction Isolation Delimiters**:
-  Retrieved context is explicitly walled off inside boundary delimiters:
-  ```text
-  === BEGIN REFERENCE DATA ===
-  [Document 1 | Source: corporate_policy.pdf | Chunk: chunk_002]
-  ...
-  === END REFERENCE DATA ===
-  ```
-- **Untrusted Reference Principle**:
-  The system prompt instructs the LLM that text between reference delimiters is strictly reference knowledge. Any commands, instructions, or role changes embedded inside document text are completely ignored.
-
-#### 2. Calibrated Cross-Encoder Grounding Gate ($\tau = 0.10$)
-- Naive RAG uses cosine similarity from bi-encoders, which suffers from high false-positive rates on semantic overlap.
-- RAGOps routes candidate chunks through a full cross-encoder reranker (`ms-marco-MiniLM-L-6-v2`) that performs joint attention across query-document pairs.
-- If the highest reranker score falls below the calibrated confidence threshold ($\tau = 0.10$), the pipeline halts before dispatching tokens to the LLM and delivers an immediate grounded refusal in $<85\text{ ms}$, burning zero LLM tokens.
-- **Measured Accuracy**: $100\%$ abstention on 15 out-of-domain and adversarial probe questions ($[79.6\%, 100.0\%]$ Wilson 95% CI).
-
-#### 3. PII & Sensitive Pattern Masking
-- Telemetry logging, trace cards, and chat audits automatically mask detected sensitive patterns (SSNs, credit card numbers, Bearer tokens, private API keys) before storing to PostgreSQL/SQLite.
-
-#### 4. Zero-Knowledge Cache Guardrail
-- Refusal answers, abstention notices, and error messages are strictly excluded from Redis semantic cache, preventing negative cache poisoning attacks.
-
----
-
-### Pillar 7: Multi-Tier Semantic Cache & Resilient Router
-
-#### 1. Four-Tier Caching Architecture
-| Tier | Layer | Average Latency | Scope |
-|:---|:---|:---|:---|
-| **Tier 1** | In-Memory LRU Hot Cache | $< 0.1\text{ ms}$ | High-frequency queries in active process memory |
-| **Tier 2** | Redis / Memurai Exact Hash Cache | **0.8 ms** ($< 2.0\text{ ms}$) | SHA-256 hash match (`ragops:cache:exact:{company}:{hash}`) |
-| **Tier 3** | Redis Cosine Semantic Cache | **4.2 ms** ($< 10.0\text{ ms}$) | Pre-filtered cosine similarity ($\ge 0.90$ threshold) against candidate embedding vectors |
-| **Tier 4** | PostgreSQL / SQLite Durable Cache | $< 15.0\text{ ms}$ | Persistent cross-restart store with auto-backfill into Redis |
-
-#### 2. Resilient LLM Router with Circuit Breaker
-- **Local-First Ollama**: Default model `llama3.2:3b` runs 100% offline with zero cloud API dependencies.
-- **Cloud Groq Fallback**: If local Ollama is offline or times out, the router automatically fails over to Groq Cloud API (`openai/gpt-oss-120b` or configured Groq model).
-- **Three-Strike Circuit Breaker**: If a provider fails 3 times consecutively, its circuit breaker trips to `OPEN` for 60 seconds, preventing latency spikes from repeated failing timeouts.
-- **Graceful Degraded Mode**: If all LLM providers are unavailable, the system continues serving document ingestion, hybrid vector search, and semantic cache hits, returning clear setup diagnostics instead of crashing.
-
-#### 3. Zero-Touch Windows Daemon Management & Silent Startup
-- **Elimination of Windows CMD Popups**: Utility calls (`sc.exe start Memurai`, `net start Memurai`, `ollama.exe serve`) are spawned with Win32 `CREATE_NO_WINDOW = 0x08000000`, eliminating the 18–20 flashing black CMD windows on backend launch.
-- **Uvicorn Reload Isolation**: Uvicorn is explicitly configured with `reload_dirs=["src/ragops"]` and `reload_excludes=["*.log", "*.db", "*.sqlite3*", "data/*", "react/*", ".git/*"]`, permanently resolving the infinite server reload loop caused by ChromaDB SQLite WAL writes.
-- **Non-blocking Startup Warmup (`WarmupCoordinator`)**: Pre-warms embedding weights, cross-encoders, and vector index connections asynchronously during FastAPI startup lifespan, reducing cold-start first-query delay from $25\text{s}+$ down to sub-second ready state.
-
----
-
-### Pillar 8: Enterprise Observability, Distributed Tracing & Continuous Evals
-
-#### 1. Distributed Request Tracing & Latency Waterfall
-Every request receives a cryptographically unique `trace_id`. The Web UI and API expose the exact latency waterfall across every pipeline hop:
-$$\text{Total Latency} = \text{Embedding} + \text{ChromaDB Vector Search} + \text{Cross-Encoder Reranking} + \text{LLM Generation}$$
-
-```text
-[Trace 4f9a8b1c] Total: 1,412ms
-├── 1. Embed Query (all-MiniLM-L6-v2)    : 15.2ms  ( 1.1%)
-├── 2. ChromaDB HNSW Dense Search       :  4.1ms  ( 0.3%)
-├── 3. Cross-Encoder Rerank (ms-marco)   : 38.6ms  ( 2.7%)
-└── 4. LLM Generation (llama3.2:3b)      : 1,354.1ms (95.9%)
-```
-
-#### 2. Automated Golden Benchmark Suite & Wilson 95% Confidence Intervals
-RAGOps runs an automated 50-query golden benchmark suite ($N = 50$, 35 in-domain retrieval queries, 15 out-of-domain/adversarial probes):
-- **Retrieval Recall@5**: $94.3\%$ ($33/35$ hits), $[81.4\%, 98.4\%]$ Wilson 95% CI.
-- **Grounded Abstention Accuracy**: $100.0\%$ ($15/15$ abstentions), $[79.6\%, 100.0\%]$ Wilson 95% CI.
-- **Citation Precision / Support**: $91.4\%$ ($32/35$ citations), $[77.6\%, 97.0\%]$ Wilson 95% CI.
-- **Overall System Correctness**: $94.0\%$ ($47/50$ correct), $[83.8\%, 97.9\%]$ Wilson 95% CI.
-
-#### 3. Continuous CI/CD Quality Gate
-Evaluations run via `python scripts/run_evaluation.py --fail-on-gate`. The CI pipeline blocks merge or deployment if:
-- Retrieval Recall@5 drops below $0.85$
-- Faithfulness drops below $0.90$
-- P95 Latency exceeds $3,000\text{ ms}$
-- Regression vs. production baseline exceeds $5\%$
-
----
-
-## 4. Measured Performance & Quality Benchmarks
+## 5. Performance & Quality Benchmarks
 
 | Metric | Sample Size ($n$) | Target Threshold | Measured Result | 95% Wilson Confidence Interval | Status |
 | :--- | :--- | :--- | :--- | :--- | :--- |
@@ -346,28 +419,27 @@ Evaluations run via `python scripts/run_evaluation.py --fail-on-gate`. The CI pi
 
 ---
 
-## 5. Repository Structure
+## 6. Repository Structure
 
 ```text
 ragops/
-├── README.md                           # Master platform documentation, architecture & guide
-├── POSTGRES_SETUP_GUIDE.md             # Dedicated PostgreSQL operations & setup guide
-├── INTERVIEW_PREP_GUIDE.md             # Senior engineer system design & defense guide
-├── HOW_IT_WORKS_AND_OPERATIONS_GUIDE.md# End-to-end operations and data flow handbook
-├── pyproject.toml                      # Python dependencies and build metadata
-├── .env.example                        # Environment variables template
+├── README.md                           # Master platform architecture & production operations guide
+├── POSTGRES_SETUP_GUIDE.md             # Dedicated PostgreSQL operations & setup handbook
+├── HOW_IT_WORKS_AND_OPERATIONS_GUIDE.md# End-to-end data flow & pipeline operational runbook
+├── pyproject.toml                      # Python build configuration and dependencies
+├── .env.example                        # Complete environment variables template
 │
-├── react/                              # Enterprise React 19 + Tailwind v4 Web Console
+├── react/                              # Enterprise React 19 + Tailwind CSS Frontend
 │   ├── src/
 │   │   ├── App.jsx                     # Root application container & page routing
-│   │   ├── index.css                   # Tailwind v4 styles, custom scrollbars, ragops-markdown
+│   │   ├── index.css                   # Theme definitions, custom scrollbars, ragops-markdown
 │   │   └── components/
-│   │       ├── Navbar.jsx              # Responsive header, environment badge, auth switcher
-│   │       ├── SearchPage.jsx          # Typewriter streaming chat, session sidebar, crawler
-│   │       ├── DashboardPage.jsx       # 6-tab enterprise observability & intelligence suite
+│   │       ├── Navbar.jsx              # Responsive header, theme toggle, auth switcher
+│   │       ├── SearchPage.jsx          # Typewriter streaming chat, session sidebar, web crawler
+│   │       ├── DashboardPage.jsx       # 6-tab enterprise observability & administration suite
 │   │       ├── AuthModal.jsx           # RBAC simulated user switcher (admin, test1, test2)
-│   │       ├── ChunkModal.jsx          # Interactive chunk inspector & raw payload viewer
-│   │       ├── ErrorBoundary.jsx       # React ErrorBoundary preventing blank screen crashes
+│   │       ├── ChunkModal.jsx          # Grounded chunk inspector & raw payload viewer
+│   │       ├── ErrorBoundary.jsx       # Application ErrorBoundary preventing UI crashes
 │   │       └── DocsPage.jsx            # Interactive API reference & target server switcher
 │   ├── dist/                           # Compiled production static bundle
 │   └── package.json
@@ -386,9 +458,9 @@ ragops/
 │   │       └── health.py               # Liveness, readiness probe, Prometheus /metrics
 │   │
 │   ├── company/                        # Corporate Intelligence Subsystem
-│   │   ├── crawler.py                  # Multi-page website web crawler
-│   │   ├── extractor.py                # LLM fact extraction engine (locations, clients, hubs)
-│   │   ├── service.py                  # Knowledge reconciliation, candidate staging
+│   │   ├── crawler.py                  # Multi-page web crawler
+│   │   ├── extractor.py                # LLM fact extraction engine (plants, clients, leadership)
+│   │   ├── service.py                  # Knowledge reconciliation & candidate staging
 │   │   └── schema.py                   # Pydantic schemas for corporate facts
 │   │
 │   ├── tools/                          # Autonomous Search & Extraction Tools
@@ -404,7 +476,7 @@ ragops/
 │   ├── retrieval/                      # Vector & Dense Search
 │   │   ├── embeddings.py               # Sentence-Transformers persistent embeddings
 │   │   ├── vector_store.py             # ChromaDB vector store wrapper & metadata ACL filtering
-│   │   ├── reranker.py                 # Cross-encoder reranking (ms-marco-MiniLM-L-6-v2)
+│   │   ├── reranker.py                 # Cross-encoder reranker (ms-marco-MiniLM-L-6-v2)
 │   │   └── retriever.py                # Multi-stage retrieval coordinator
 │   │
 │   ├── generation/                     # LLM Generation Layer
@@ -438,17 +510,17 @@ ragops/
 
 ---
 
-## 6. Quickstart & Deployment
+## 7. Quickstart & Deployment
 
 ### Prerequisites
 - **Python 3.11+** or **Docker**
-- **Ollama** (for local-first inference) or **Groq API Key** (from [console.groq.com](https://console.groq.com))
+- **Ollama** (for local-first inference) or **Groq Cloud API Key** (from [console.groq.com](https://console.groq.com))
 - *(Optional)* **Redis / Memurai on Windows** (`127.0.0.1:6379`) for ultra-fast caching (auto-managed by RAGOps)
 - *(Optional)* **PostgreSQL 15+** (auto-falls back to SQLite if PostgreSQL is offline)
 
 ---
 
-### Option A: Run via Docker (Zero-Setup Deployment)
+### Option A: Standalone Docker Deployment
 
 ```bash
 # Pull production image from Docker Hub
@@ -462,12 +534,12 @@ docker run -d \
   --name ragops-service \
   ketan333/ragops:latest
 
-# Open the Web UI: http://localhost:8000/
+# Access the Web UI: http://localhost:8000/
 ```
 
 ---
 
-### Option B: Full Production Stack via Docker Compose (with PostgreSQL & Grafana)
+### Option B: Full Production Stack via Docker Compose
 
 ```bash
 # 1. Clone repository
@@ -477,10 +549,10 @@ cd RAGOps
 # 2. Configure environment
 cp .env.example .env
 
-# 3. Launch all services
+# 3. Launch full microservices stack
 docker compose -f compose/docker-compose.yml up -d
 
-# Services available:
+# Endpoints:
 # - Web Console & API:    http://localhost:8000/
 # - PostgreSQL:           localhost:5432 (user: ragops, db: ragops)
 # - Prometheus:           http://localhost:9090/
@@ -490,21 +562,21 @@ docker compose -f compose/docker-compose.yml up -d
 
 ---
 
-### Option C: Local Development Setup (Python + React)
+### Option C: Local Development Environment
 
 ```bash
 # 1. Clone repository
 git clone https://github.com/KSD-333/RAGOps.git
 cd RAGOps
 
-# 2. Set up Python virtual environment
+# 2. Create and activate virtual environment
 python -m venv .venv
 # On Windows (PowerShell):
 .venv\Scripts\Activate.ps1
 # On Linux / macOS:
 source .venv/bin/activate
 
-# 3. Install backend dependencies
+# 3. Install dependencies
 pip install --upgrade pip
 pip install -r requirements.txt
 pip install -r requirements-dev.txt
@@ -516,7 +588,7 @@ cp .env.example .env
 # 5. Ingest initial knowledge base
 ragops ingest data/raw --version v1
 
-# 6. One-Command Dev Launcher (Backend + React UI)
+# 6. Launch development servers
 # On Windows:
 .\start_dev.bat
 # Or CLI:
@@ -528,47 +600,25 @@ ragops dev
 
 ---
 
-## 7. Default Test Credentials (Demo Accounts for Local Testing Only)
+## 8. Default Development Credentials
 
 > [!WARNING]
-> **Demo Accounts for Local Testing Only**: The pre-seeded credentials below (`admin`, `test1`, `test2`) are provided exclusively for local sandbox evaluation and developer testing. In shared or production-facing environments, change default credentials immediately and configure API secrets via environment variables.
+> **Development Sandbox Accounts**: The credentials below are pre-seeded exclusively for local evaluation, integration testing, and RBAC boundary simulation. In staging and production environments, configure authentication secrets via environment variables and update default passwords immediately.
 
-| Username | Default Password | Role | Access Level |
+| Username | Default Password | Role | Access Scope |
 |---|---|---|---|
-| **`admin`** | `admin123` | **ADMIN** | Full administrative access to the 6-tab Observability Dashboard, billing calculator, all user chat audits, trace logs, document catalog, and training dataset exports. |
-| **`test1`** | `test123` | **USER** | Standard user account (HR, workplace policies, and corporate architecture questions). |
+| **`admin`** | `admin123` | **ADMIN** | Full administrative access to the 6-tab Observability Dashboard, billing telemetry, all user chat audits, trace logs, document catalog, and training dataset exports. |
+| **`test1`** | `test123` | **USER** | Standard user account (HR, workplace policies, and corporate architecture documents). |
 | **`test2`** | `test223` | **USER** | Technical user account (infrastructure, Kubernetes, and developer documentation). |
 
-*Use the **Account Switcher** button in the Web UI navigation bar to instantly simulate queries as any user.*
-
----
-
-## 8. Web Console & Observability Walkthrough
-
-### 💬 Search & Chat Console (`/`)
-* **Typewriter Flow**: Smooth ~18ms token animation, auto-scroll, skip typing button, and instant rendering.
-* **Multi-Session Sidebar**: Create new chats, switch between previous conversations, and delete sessions.
-* **Grounded Citations & Chunk Modal**: Every response lists verified corporate sources. Clicking any citation opens the **ChunkModal** displaying the exact raw context snippet, page number, and similarity match percentage.
-* **Interactive Live URL Crawler**: Click the URL icon to crawl any corporate website on demand, preview extracted intelligence (plants, clients, executive team), edit facts inline, and embed directly into ChromaDB.
-* **Feedback Loop**: Record **Accurate** 👍 or **Inaccurate** 👎 ratings to feed real-world telemetry into the continuous improvement pipeline.
-
----
-
-### 📈 Enterprise Observability & Intelligence Dashboard (`/dashboard`)
-
-Access restricted to administrators:
-1. **Overview & Billing**: Real-time token usage, budget progress bar, latency metrics, and fine-tuning dataset JSON exporter.
-2. **User Directory & Chat History (Master-Detail Side-by-Side)**: Interactive session list with turn counts, risk badges, prompt previews, and complete side-by-side conversation streams.
-3. **Distributed Request Tracing & Retrieval Inspector**: Compact space-saving cards (~65px) displaying Trace IDs, latency badges, token spend, and click-to-expand multi-hop latency waterfalls.
-4. **Frequent Questions & Risk Radar**: Semantic clustering of high-frequency user inquiries, POSH/compliance violations, and employee/customer churn signals.
-5. **Company Knowledge Hub & Autonomous Profile**: Multi-company corporate profile viewer, candidate review queue (approve, edit, reject facts), and transactional outbox event stream.
-6. **Document Catalog & Semantic Cache Engine**: Document inventory auto-categorized by type (Policy, Code, Governance, Manual), disk reconciliation (`/api/v1/catalog/sync`), and live Redis semantic cache performance telemetry.
+*Use the **Account Switcher** button in the Web UI navigation bar to instantly simulate queries as any user role.*
 
 ---
 
 ## 9. Complete REST API Reference
 
 ### Authentication & RBAC
+
 | Method | Endpoint | Description |
 |---|---|---|
 | `POST` | `/api/v1/auth/login` | Authenticate user; returns username, role, and profile |
@@ -576,6 +626,7 @@ Access restricted to administrators:
 | `GET` | `/api/v1/auth/me` | Fetch active authenticated user profile |
 
 ### Querying, Sessions & Ingestion
+
 | Method | Endpoint | Description |
 |---|---|---|
 | `POST` | `/api/v1/query` | Submit multi-turn query with conversational memory, reranking, and semantic cache |
@@ -586,6 +637,7 @@ Access restricted to administrators:
 | `GET` | `/api/v1/documents/count` | Total count of indexed vector chunks |
 
 ### Document Catalog & Semantic Cache
+
 | Method | Endpoint | Description |
 |---|---|---|
 | `GET` | `/api/v1/catalog` | List all cataloged documents with classifications and chunk counts |
@@ -598,6 +650,7 @@ Access restricted to administrators:
 | `POST` | `/api/v1/cache/clear` | Purge semantic cache entries |
 
 ### Autonomous Corporate Intelligence
+
 | Method | Endpoint | Description |
 |---|---|---|
 | `GET` | `/api/v1/company/profile` | Retrieve verified corporate profile for active organization |
@@ -614,6 +667,7 @@ Access restricted to administrators:
 | `POST` | `/api/v1/company/universal/analyze` | Multi-page crawl, gap-filling AI search, and fact extraction |
 
 ### Observability, Admin & Telemetry
+
 | Method | Endpoint | Description |
 |---|---|---|
 | `GET` | `/api/v1/admin/analytics` | Aggregated telemetry, user count, frequent queries, risk counts, and engine info |
@@ -632,12 +686,12 @@ Access restricted to administrators:
 
 ## 10. CLI Reference
 
-RAGOps provides a unified command-line tool `ragops`:
+RAGOps provides a unified command-line interface `ragops`:
 
 | Command | Usage | Description |
 |---|---|---|
-| `ragops doctor` | `ragops doctor` | Full diagnostic inspection of LLM providers (Ollama, Groq), database, cache, and vector store with remediation hints |
-| `ragops mcp` | `ragops mcp` | Launch the FastMCP Model Context Protocol server over stdio for Claude Desktop, Cursor, or Continue |
+| `ragops doctor` | `ragops doctor` | Diagnostic inspection of LLM providers (Ollama, Groq), database, cache, and vector store with remediation steps |
+| `ragops mcp` | `ragops mcp` | Launch FastMCP Model Context Protocol server over stdio for Claude Desktop, Cursor, or Continue |
 | `ragops dev` | `ragops dev` | Launch unified local development stack (FastAPI backend on :8000 + React UI on :5173) |
 | `ragops ingest` | `ragops ingest <path> [--version <v>]` | Ingest PDF, HTML, or Markdown files into ChromaDB |
 | `ragops query` | `ragops query "<question>" [--top-k 5]` | Ask questions from the terminal with latency attribution and citations |
@@ -647,9 +701,9 @@ RAGOps provides a unified command-line tool `ragops`:
 
 ---
 
-## 11. Configuration & Environment Variables Reference
+## 11. Configuration & Environment Variables
 
-Configure these settings in `.env` (refer to `.env.example` for starter template):
+Configure these settings in `.env` (refer to `.env.example` for the complete template):
 
 | Variable | Default Value | Description |
 |---|---|---|
@@ -662,9 +716,9 @@ Configure these settings in `.env` (refer to `.env.example` for starter template
 | `GROQ_API_KEY` | *(empty)* | Cloud Groq API key from [console.groq.com](https://console.groq.com) |
 | `GROQ_MODEL` | `openai/gpt-oss-120b` | Groq model name (validated against Groq `/models` endpoint at runtime) |
 | `HYBRID_SEARCH` | `false` | Enable BM25 sparse keyword + dense vector Reciprocal Rank Fusion (RRF) |
-| `DATABASE_URL` | `sqlite+aiosqlite:///./data/ragops.db` | PostgreSQL (`postgresql://...`) or SQLite URL |
+| `DATABASE_URL` | `sqlite+aiosqlite:///./data/ragops.db` | PostgreSQL (`postgresql+asyncpg://...`) or SQLite URL |
 | `REDIS_URL` | `redis://127.0.0.1:6379/0` | Redis / Memurai connection string for semantic cache |
-| `REDIS_ENABLED` | `true` | Enable Redis multi-tier caching (falls back to memory/DB if offline) |
+| `REDIS_ENABLED` | `true` | Enable Redis multi-tier caching (gracefully falls back if offline) |
 | `CACHE_SIMILARITY_THRESHOLD` | `0.90` | Cosine similarity threshold for semantic cache hits ($\ge 0.90$) |
 | `CHROMA_PERSIST_DIR` | `./data/chroma` | Directory for persistent ChromaDB vector storage |
 | `EMBEDDING_MODEL` | `all-MiniLM-L6-v2` | Sentence-Transformers embedding model (384 dimensions) |
@@ -672,48 +726,32 @@ Configure these settings in `.env` (refer to `.env.example` for starter template
 
 ---
 
-## 12. Troubleshooting Guide
+## 12. Production Operations & Troubleshooting
 
-### 1. `ragops doctor` Diagnostic Command
-Run `ragops doctor` at any time to inspect your system's components:
+### 1. Diagnostic Health Check (`ragops doctor`)
+Run `ragops doctor` at any time to inspect your system's operational health:
 ```bash
 ragops doctor
 ```
-This prints the health status of Ollama, Groq, ChromaDB, SQLite/PostgreSQL, and Redis with exact remediation steps.
+This tests connectivity to Ollama, Groq Cloud, ChromaDB, SQLite/PostgreSQL, and Redis, providing actionable remediation commands if any component is degraded.
 
-### 2. Windows CMD Popup Windows During Startup
-RAGOps automatically executes background utility checks (`sc.exe`, `net.exe`, `ollama.exe`) using Win32 flag `CREATE_NO_WINDOW = 0x08000000`, preventing annoying black CMD window flashes.
+### 2. Windows Daemon Management & Silent Startup
+RAGOps automatically executes background utility calls (`sc.exe start Memurai`, `net start Memurai`, `ollama.exe serve`) using the Win32 flag `CREATE_NO_WINDOW = 0x08000000`, preventing CMD window popups on application launch.
 
-### 3. Ollama is Installed but Not Running
+### 3. Server Auto-Reload Loop Prevention
+Uvicorn is explicitly configured with `reload_dirs=["src/ragops"]` and `reload_excludes=["*.log", "*.db", "*.sqlite3*", "data/*", "react/*", ".git/*"]`, permanently resolving reload loops caused by SQLite WAL writes from ChromaDB.
+
+### 4. Running Fully Offline
+To run in an air-gapped or offline environment:
 ```bash
-ollama serve
-```
-RAGOps also attempts to auto-launch `ollama serve` silently in the background during backend startup if `LLM_PROVIDER=auto`.
-
-### 4. Ollama Target Model Missing
-```bash
-ollama pull llama3.2:3b
-```
-Or set `OLLAMA_AUTO_PULL=true` in `.env` to allow RAGOps to pull missing models automatically.
-
-### 5. Running Fully Offline (No Internet & No API Keys)
-```bash
-# 1. Start Ollama and pull local model
+# Pull model while online once
 ollama pull llama3.2:3b
 
-# 2. In .env set:
+# In .env set:
 LLM_PROVIDER=ollama
 ```
 
-### 6. Port Conflicts
-- **Port 8000 (Backend API)**: Run with a different port using `ragops serve --port 8080`.
-- **Port 5432 (PostgreSQL)**: If local PostgreSQL is not running, RAGOps automatically fails over to embedded SQLite (`data/ragops.db`) without crashing.
-
----
-
-## 13. Automated Quality Gate CI/CD & Testing
-
-### Benchmark Evaluation Workflow
+### 5. Automated CI/CD Regression Quality Gate
 ```bash
 # Execute evaluation suite against golden dataset with quality gate enforcement
 python scripts/run_evaluation.py \
@@ -722,41 +760,30 @@ python scripts/run_evaluation.py \
   --fail-on-gate
 ```
 
-**Quality Gate Criteria:**
+**Quality Gate Thresholds:**
 - **Retrieval Recall@5**: $\ge 0.85$
 - **Faithfulness (Groundedness)**: $\ge 0.90$
 - **Answer Relevance**: $\ge 0.85$
 - **Tail Latency (P95)**: $\le 3000\text{ ms}$
 - **Maximum Allowed Regression vs. Production Baseline**: $< 5\%$
 
-### Running Tests
+### 6. Executing Unit Tests
 ```bash
-# Run unit tests (all 88 unit tests passing)
+# Run complete test suite (all unit tests passing)
 pytest tests/unit/ -q
 ```
 
 ---
 
-## 14. Resume Bullet Points & Portfolio Placement
+## 13. Security & Hardening Policy
 
-For resumes, LinkedIn, and portfolios, format achievements using the Google XYZ Formula (*Accomplished [X], as measured by [Y], by doing [Z]*):
-
-### LaTeX Resume Snippet
-```latex
-\project{RAGOps -- Production RAG Platform with Observability}
-{FastAPI, Redis, ChromaDB, Docker (Link)}{2026}
-\begin{itemize}
-  \item Architected an enterprise Retrieval-Augmented Generation (RAG) platform with ChromaDB dense vector search and cross-encoder reranking, achieving \textbf{94.3\% retrieval recall} and \textbf{89\% hallucination abstention} on golden benchmarks.
-  \item Engineered a multi-tier \textbf{Redis semantic vector cache} executing sub-2ms exact matches and $\geq$90\% semantic relevance hits, eliminating redundant LLM API calls and drastically cutting token expenses.
-  \item Constructed an autonomous web crawler, PostgreSQL-backed RBAC with multi-turn chat sessions, and an interactive React 19 observability console featuring distributed OpenTelemetry request tracing.
-\end{itemize}
-```
-
-### ATS-Optimized Keywords
-`RAG (Retrieval-Augmented Generation)` • `LLMOps` • `FastAPI` • `ChromaDB` • `Redis Semantic Cache` • `Cross-Encoder Reranking` • `Sentence-Transformers` • `OpenTelemetry` • `Prometheus` • `Grafana` • `Jaeger` • `PostgreSQL` • `React 19` • `Docker` • `CI/CD Quality Gates` • `Wilson 95% Confidence Intervals` • `Model Context Protocol (MCP)` • `Ollama` • `Groq`
+1. **Least-Privilege Containerization**: Production Docker containers execute under unprivileged user contexts (`appuser:appgroup`).
+2. **Path-Traversal Protections**: Ingestion and catalog APIs strictly validate file paths against canonical base directories, preventing directory traversal attacks.
+3. **Database Security**: Authentication uses individual random 32-character salts per user with SHA-256 password hashing.
+4. **Data Sanitization**: PII, credentials, and API tokens are automatically masked in trace logs and telemetry databases.
 
 ---
 
-## 15. License
+## 14. License
 
-Licensed under the [MIT License](LICENSE).
+RAGOps is open-source software licensed under the [MIT License](LICENSE).
