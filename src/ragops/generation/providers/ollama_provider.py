@@ -75,8 +75,12 @@ class OllamaProvider(LLMProvider):
         try:
             creationflags = 0
             if sys.platform == "win32":
-                # DETACHED_PROCESS = 0x00000008, CREATE_NEW_PROCESS_GROUP = 0x00000200
-                creationflags = subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP
+                # DETACHED_PROCESS = 0x00000008, CREATE_NEW_PROCESS_GROUP = 0x00000200, CREATE_NO_WINDOW = 0x08000000
+                creationflags = (
+                    subprocess.DETACHED_PROCESS
+                    | subprocess.CREATE_NEW_PROCESS_GROUP
+                    | getattr(subprocess, "CREATE_NO_WINDOW", 0x08000000)
+                )
 
             self._server_process = subprocess.Popen(
                 ["ollama", "serve"],

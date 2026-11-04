@@ -259,6 +259,8 @@ def serve(host: str, port: int, reload: bool):
         host=host,
         port=port,
         reload=reload,
+        reload_dirs=["src/ragops"] if reload else None,
+        reload_excludes=["*.log", "*.db", "*.sqlite3*", "data/*", "react/*", ".git/*"] if reload else None,
     )
 
 
@@ -288,10 +290,12 @@ def dev(host: str, port: int, no_browser: bool):
     if react_dir.exists() and (react_dir / "package.json").exists():
         console.print("[dim]Starting React Vite dashboard...[/dim]")
         try:
+            creationflags = getattr(subprocess, "CREATE_NO_WINDOW", 0x08000000) if sys.platform == "win32" else 0
             react_proc = subprocess.Popen(
                 ["npm.cmd" if sys.platform == "win32" else "npm", "run", "dev"],
                 cwd=str(react_dir),
                 shell=(sys.platform == "win32"),
+                creationflags=creationflags,
             )
         except Exception as e:
             console.print(f"[yellow]Could not launch React automatically: {e}[/yellow]")
@@ -308,7 +312,14 @@ def dev(host: str, port: int, no_browser: bool):
         if settings.redis.enabled:
             ensure_redis_running(settings.redis.url)
 
-        uvicorn.run("ragops.api.app:app", host=host, port=port, reload=True)
+        uvicorn.run(
+            "ragops.api.app:app",
+            host=host,
+            port=port,
+            reload=True,
+            reload_dirs=["src/ragops"],
+            reload_excludes=["*.log", "*.db", "*.sqlite3*", "data/*", "react/*", ".git/*"],
+        )
     finally:
         if react_proc and react_proc.poll() is None:
             console.print("[dim]Stopping React dev server...[/dim]")

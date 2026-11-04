@@ -74,6 +74,9 @@ def ensure_redis_running(redis_url: str | None = None, timeout_secs: float = 3.0
     started_trigger = False
 
     if sys.platform == "win32":
+        # Windows flag to suppress black console popup windows
+        no_window_flag = getattr(subprocess, "CREATE_NO_WINDOW", 0x08000000)
+
         # Strategy A: Windows Service 'Memurai'
         try:
             res = subprocess.run(
@@ -81,6 +84,7 @@ def ensure_redis_running(redis_url: str | None = None, timeout_secs: float = 3.0
                 capture_output=True,
                 text=True,
                 timeout=5,
+                creationflags=no_window_flag,
             )
             out = (res.stdout or "").lower()
             if res.returncode == 0 or "already running" in out:
@@ -95,6 +99,7 @@ def ensure_redis_running(redis_url: str | None = None, timeout_secs: float = 3.0
                     capture_output=True,
                     text=True,
                     timeout=5,
+                    creationflags=no_window_flag,
                 )
                 if res2.returncode == 0 or "already started" in (res2.stdout or "").lower():
                     started_trigger = True
